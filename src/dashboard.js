@@ -386,7 +386,7 @@ function startDashboard(client) {
     }
   );
 
-  app.listen(port, "127.0.0.1", () => {
+  app.listen(port, "0.0.0.0", () => {
     console.log(`Dashboard running on http://localhost:${port}`);
     console.log(
       `Tip: always use the same host (localhost OR 127.0.0.1) so cookies don't break.`

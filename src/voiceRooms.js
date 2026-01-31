@@ -12,7 +12,7 @@ function getEmptyMinutes() {
 }
 
 function getCreateChannelName() {
-  return (process.env.CREATE_VC_NAME || "create a private vc").toLowerCase();
+  return (process.env.CREATE_VC_NAME || "Open private").toLowerCase();
 }
 
 async function onVoiceStateUpdate(oldState, newState, client) {

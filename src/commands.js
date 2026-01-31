@@ -2,8 +2,15 @@
 const { PermissionsBitField } = require("discord.js");
 const { get, run, all } = require("./db");
 const { xpIntoLevel, levelFromXp } = require("./xp");
+const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "";
 
-function isAdmin(member) {
+function isBotManager(member) {
+  return member?.id === BOT_MANAGER_ID;
+}
+
+function isAdminOrManager(member) {
+  if (!member) return false;
+  if (isBotManager(member)) return true;
   return member.permissions.has(PermissionsBitField.Flags.Administrator);
 }
 
@@ -25,6 +32,8 @@ async function setUserXp(guildId, userId, xp) {
 function normalizeName(s) {
   return (s || "").trim().toLowerCase();
 }
+
+
 
 // Match MEE6 username to exactly one guild member (safe mode: no guessing)
 async function findUniqueMemberMatch(guild, mee6Name) {
@@ -73,13 +82,47 @@ async function handleCommands(message) {
     );
   }
 
+  // !leaderboard [page]
+if (cmd === "leaderboard" || cmd === "lb") {
+  const page = Math.max(1, parseInt(args[0] || "1", 10) || 1);
+  const perPage = 10;
+  const offset = (page - 1) * perPage;
+
+  const rows = await all(
+    `SELECT user_id, xp, level
+     FROM user_xp
+     WHERE guild_id = ?
+     ORDER BY xp DESC
+     LIMIT ? OFFSET ?`,
+    [guildId, perPage, offset]
+  );
+
+  if (!rows.length) {
+    return message.reply("No leaderboard data yet.");
+  }
+
+  // Try to resolve usernames
+  await message.guild.members.fetch().catch(() => {});
+  const lines = rows.map((r, i) => {
+    const rank = offset + i + 1;
+    const member = message.guild.members.cache.get(r.user_id);
+    const name = member ? member.user.username : `Unknown (${r.user_id})`;
+    return `${rank}. **${name}** — Level ${r.level} (${r.xp} XP)`;
+  });
+
+  return message.reply(
+    `🏆 **Leaderboard (Page ${page})**\n` + lines.join("\n")
+  );
+}
+
   // =========================
   // ADMIN: !claim-all (one-time migration)
   // =========================
   if (cmd === "claim-all") {
-    if (!message.member || !isAdmin(message.member)) {
+    if (!message.member || !isAdminOrManager(message.member)) {
       return message.reply("Admin only.");
     }
+
 
     const guild = message.guild;
 
@@ -183,9 +226,10 @@ async function handleCommands(message) {
     const member = message.member;
     if (!member) return;
 
-    if (!isAdmin(member) && member.id !== room.owner_id) {
-      return message.reply("Only the VC owner or admins can use these commands.");
+    if (!isAdminOrManager(member) && member.id !== room.owner_id) {
+      return message.reply("Only the VC owner, bot manager, or admins can use these commands.");
     }
+
 
     const voiceChannel = await message.guild.channels
       .fetch(room.voice_id)

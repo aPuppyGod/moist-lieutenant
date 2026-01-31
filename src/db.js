@@ -32,7 +32,39 @@ function all(sql, params = []) {
 }
 
 async function initDb() {
+  // guild_settings
+  try {
+    await run(`ALTER TABLE guild_settings ADD COLUMN level_up_channel_id TEXT`);
+  } catch (_) {}
+
+  try {
+    await run(
+      `ALTER TABLE guild_settings ADD COLUMN level_up_message TEXT DEFAULT '🎉 {user} leveled up to **Level {level}**!'`
+    );
+  } catch (_) {}
+  
   // XP / levels
+    await run(`
+    CREATE TABLE IF NOT EXISTS guild_settings (
+      guild_id TEXT PRIMARY KEY,
+      message_xp_min INTEGER NOT NULL DEFAULT 15,
+      message_xp_max INTEGER NOT NULL DEFAULT 25,
+      message_cooldown_seconds INTEGER NOT NULL DEFAULT 60,
+      reaction_xp INTEGER NOT NULL DEFAULT 3,
+      reaction_cooldown_seconds INTEGER NOT NULL DEFAULT 30,
+      voice_xp_per_minute INTEGER NOT NULL DEFAULT 5
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS level_roles (
+      guild_id TEXT NOT NULL,
+      level INTEGER NOT NULL,
+      role_id TEXT NOT NULL,
+      PRIMARY KEY (guild_id, level)
+    )
+  `);
+
   await run(`
     CREATE TABLE IF NOT EXISTS user_xp (
       guild_id TEXT NOT NULL,

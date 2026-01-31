@@ -11,19 +11,36 @@ const { initDb, get, run } = require("./db");
 const { levelFromXp } = require("./xp");
 const { handleCommands } = require("./commands");
 const { onVoiceStateUpdate, cleanupPrivateRooms } = require("./voiceRooms");
+const { getGuildSettings } = require("./settings");
+const { startDashboard } = require("./dashboard");
 
-if (!process.env.DISCORD_TOKEN) {
-  console.error("DISCORD_TOKEN missing. Check your .env file (local only).");
-  process.exit(1);
-}
+// ─────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────
 
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+function formatLevelUpMessage(template, { user, level, xp }) {
+  return String(
+    template ||
+      "🎉 Congratumalations {user}! you just advanced to the next **Lop Level {level}**! 🍪✨"
+  )
+    .replaceAll("{user}", user)
+    .replaceAll("{level}", String(level))
+    .replaceAll("{xp}", String(xp));
+}
+
+// ─────────────────────────────────────────────────────
+// XP Helpers
+// ─────────────────────────────────────────────────────
+
 async function ensureUserRow(guildId, userId) {
   await run(
-    `INSERT OR IGNORE INTO user_xp (guild_id, user_id, xp, level) VALUES (?, ?, 0, 0)`,
+    `INSERT OR IGNORE INTO user_xp 
+     (guild_id, user_id, xp, level, last_message_xp_at, last_reaction_xp_at)
+     VALUES (?, ?, 0, 0, 0, 0)`,
     [guildId, userId]
   );
 }
@@ -44,8 +61,16 @@ async function addXp(guildId, userId, amount) {
     [newXp, newLevel, guildId, userId]
   );
 
-  return { oldLevel: row.level, newLevel, newXp };
+  return {
+    oldLevel: row.level,
+    newLevel,
+    newXp
+  };
 }
+
+// ─────────────────────────────────────────────────────
+// Client
+// ─────────────────────────────────────────────────────
 
 const client = new Client({
   intents: [
@@ -59,31 +84,42 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+// ─────────────────────────────────────────────────────
+// Ready
+// ─────────────────────────────────────────────────────
+
 client.once(Events.ClientReady, async () => {
   await initDb();
   console.log(`Logged in as ${client.user.tag}`);
 
-  // Cleanup loop for private rooms
+  startDashboard(client);
+
+  // Cleanup private VCs
   setInterval(() => {
     cleanupPrivateRooms(client).catch(() => {});
-  }, 30 * 1000);
+  }, 30_000);
 
-  // Voice XP loop (every minute)
+  // Voice XP every minute
   setInterval(async () => {
     const voiceXp = parseInt(process.env.VOICE_XP_PER_MINUTE || "5", 10);
 
     for (const [, guild] of client.guilds.cache) {
       await guild.members.fetch().catch(() => {});
+
       for (const [, member] of guild.members.cache) {
         if (member.user.bot) continue;
         if (!member.voice?.channelId) continue;
+
         await addXp(guild.id, member.id, voiceXp).catch(() => {});
       }
     }
-  }, 60 * 1000);
+  }, 60_000);
 });
 
-// Message XP + commands
+// ─────────────────────────────────────────────────────
+// Message XP + Commands
+// ─────────────────────────────────────────────────────
+
 client.on(Events.MessageCreate, async (message) => {
   await handleCommands(message);
 
@@ -100,7 +136,7 @@ client.on(Events.MessageCreate, async (message) => {
   await ensureUserRow(guildId, userId);
 
   const row = await get(
-    `SELECT last_message_xp_at, level FROM user_xp WHERE guild_id=? AND user_id=?`,
+    `SELECT last_message_xp_at FROM user_xp WHERE guild_id=? AND user_id=?`,
     [guildId, userId]
   );
 
@@ -115,14 +151,36 @@ client.on(Events.MessageCreate, async (message) => {
     [now, guildId, userId]
   );
 
+  // ── Level-up announcement ──
   if (res.newLevel > res.oldLevel) {
-    message.channel.send(
-      `${message.author} leveled up to **${res.newLevel}**!`
-    );
+    const settings = await getGuildSettings(guildId);
+
+    const text = formatLevelUpMessage(settings.level_up_message, {
+      user: `${message.author}`,
+      level: res.newLevel,
+      xp: res.newXp
+    });
+
+    let targetChannel = message.channel;
+
+    if (settings.level_up_channel_id) {
+      const ch = await message.guild.channels
+        .fetch(settings.level_up_channel_id)
+        .catch(() => null);
+
+      if (ch && ch.isTextBased && ch.isTextBased()) {
+        targetChannel = ch;
+      }
+    }
+
+    await targetChannel.send(text).catch(() => {});
   }
 });
 
+// ─────────────────────────────────────────────────────
 // Reaction XP
+// ─────────────────────────────────────────────────────
+
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (user.bot) return;
 
@@ -150,16 +208,22 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (now - row.last_reaction_xp_at < cooldownMs) return;
 
   await addXp(guildId, userId, gained);
-
   await run(
     `UPDATE user_xp SET last_reaction_xp_at=? WHERE guild_id=? AND user_id=?`,
     [now, guildId, userId]
   );
 });
 
+// ─────────────────────────────────────────────────────
 // Private VC system
+// ─────────────────────────────────────────────────────
+
 client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
   await onVoiceStateUpdate(oldState, newState, client);
 });
+
+// ─────────────────────────────────────────────────────
+// Login
+// ─────────────────────────────────────────────────────
 
 client.login(process.env.DISCORD_TOKEN);

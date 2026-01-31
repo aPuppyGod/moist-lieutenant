@@ -8,7 +8,7 @@ async function onVoiceStateUpdate(oldState, newState, client) {
   if (!guild) return;
 
   const createName = (process.env.CREATE_VC_NAME || "create a private vc").toLowerCase();
-  const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "10", 10);
+  const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "5", 5);
 
   // 1) If user joined the "create" channel, create a private VC + text channel and move them
   if (!oldState.channelId && newState.channelId) {
@@ -113,7 +113,7 @@ async function onVoiceStateUpdate(oldState, newState, client) {
 }
 
 async function cleanupPrivateRooms(client) {
-  const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "10", 10);
+  const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "5", 5);
   const threshold = minutesToMs(emptyMinutes);
 
   const rooms = await all(`SELECT guild_id, voice_id, text_id, empty_since FROM private_rooms`, []);

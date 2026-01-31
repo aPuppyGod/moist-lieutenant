@@ -13,6 +13,7 @@ function assertEntry(e) {
 
   const file = path.join(__dirname, "..", "data", "mee6_snapshot.json");
   const json = JSON.parse(fs.readFileSync(file, "utf8"));
+  const level = levelFromXp(entry.xp);
 
   const guildId = json.guildId;
   const entries = json.entries || [];

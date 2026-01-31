@@ -263,47 +263,57 @@ async function cmdImportMee6(message) {
     return message.reply("❌ You don't have permission to do this.");
   }
 
-  const guildId = message.guild.id;
-
   if (!fs.existsSync(SNAPSHOT_FILE)) {
-    return message.reply("❌ `data/mee6_snapshot.json` not found on the server.");
+    return message.reply("❌ mee6_snapshot.json not found.");
   }
 
-  let data;
+  let raw;
   try {
-    data = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8"));
-  } catch (e) {
+    raw = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8"));
+  } catch {
     return message.reply("❌ Snapshot JSON is invalid.");
   }
 
-  if (!Array.isArray(data)) {
-    return message.reply("❌ Snapshot must be a JSON array.");
+  // ✅ ACCEPT YOUR FORMAT
+  let entries;
+  if (Array.isArray(raw)) {
+    entries = raw;
+  } else if (Array.isArray(raw.entries)) {
+    entries = raw.entries;
+  } else {
+    return message.reply("❌ Snapshot must be an array or { entries: [...] }");
   }
 
-  // Clear existing snapshot rows for this guild (so re-import is clean)
-  await run(`DELETE FROM mee6_snapshot WHERE guild_id=?`, [guildId]);
+  // Clear old snapshot rows
+  await run(`DELETE FROM mee6_snapshot WHERE guild_id=?`, [
+    message.guild.id
+  ]);
 
   let inserted = 0;
-  for (const row of data) {
-    // Accept either {username,xp,level} OR {snapshot_username,snapshot_xp,snapshot_level}
-    const username = row.username ?? row.snapshot_username;
-    const xp = row.xp ?? row.snapshot_xp;
-    const lvl = row.level ?? row.snapshot_level ?? 0;
 
-    if (!username) continue;
-    if (!Number.isFinite(Number(xp))) continue;
+  for (const e of entries) {
+    const username = e.username ?? e.name;
+    const xp = Number(e.xp);
+    const level = Number(e.level ?? 0);
+
+    if (!username || !Number.isFinite(xp)) continue;
 
     await run(
-      `INSERT OR REPLACE INTO mee6_snapshot (guild_id, snapshot_username, snapshot_xp, snapshot_level)
+      `INSERT INTO mee6_snapshot
+       (guild_id, snapshot_username, snapshot_xp, snapshot_level)
        VALUES (?, ?, ?, ?)`,
-      [guildId, String(username), Number(xp), Number(lvl)]
+      [message.guild.id, username, xp, level]
     );
 
     inserted++;
   }
 
-  return message.channel.send(
-    `✅ Imported **${inserted}** snapshot rows into the database.\n` +
+  if (inserted === 0) {
+    return message.reply("⚠️ Snapshot loaded, but no valid rows were found.");
+  }
+
+  await message.channel.send(
+    `✅ Imported **${inserted}** MEE6 snapshot rows.\n` +
     `Next: run \`!claim-all\` to apply XP to members.`
   );
 }

@@ -1,17 +1,21 @@
 // src/commands.js
-// Prefix commands for Lop Bot (XP + MEE6 import + Private VC controls)
+// Lop Bot - commands (XP + MEE6 import/migration + Private VC controls)
+
+const fs = require("fs");
+const path = require("path");
 
 const { get, all, run } = require("./db");
 const { levelFromXp, progressFromTotalXp } = require("./xp");
-const { getGuildSettings } = require("./settings");
 
 // ====== CONFIG ======
 const PREFIX = "!";
 const MANAGER_ID = "900758140499398676"; // you (manager override)
 
-// If you want to permanently disable claim-all after first run, keep this true.
-// (It will still allow the manager to re-run if you manually re-enable in DB by deleting the flag.)
+// Optional one-time lock for claim-all
 const LOCK_CLAIM_ALL_AFTER_RUN = true;
+
+// Snapshot file used for Render import
+const SNAPSHOT_FILE = path.join(__dirname, "..", "data", "mee6_snapshot.json");
 
 // ====== PERMS ======
 function isManager(userId) {
@@ -32,7 +36,7 @@ function hasModPerms(member) {
     member.permissions?.has?.("ModerateMembers") ||
     member.permissions?.has?.("ManageGuild") ||
     member.permissions?.has?.("Administrator")
-  );
+  ) || false;
 }
 
 // ====== UTIL ======
@@ -63,6 +67,16 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function normalizeName(s) {
+  return String(s || "").trim().toLowerCase();
+}
+
+function bestDisplayName(member) {
+  const u = member.user;
+  return member.displayName || u.globalName || u.username || "";
+}
+
+// ====== DB helpers ======
 async function ensureUserRow(guildId, userId) {
   await run(
     `INSERT OR IGNORE INTO user_xp (guild_id, user_id, xp, level, last_message_xp_at, last_reaction_xp_at)
@@ -113,36 +127,8 @@ async function getUserRow(guildId, userId) {
   );
 }
 
-function normalizeName(s) {
-  return String(s || "").trim().toLowerCase();
-}
-
-function bestDisplayName(member) {
-  // nickname/displayName is best for matching, but we’ll also check username/globalName
-  const u = member.user;
-  return (
-    member.displayName ||
-    u.globalName ||
-    u.username ||
-    ""
-  );
-}
-
-// ====== PRIVATE VC HELPERS ======
-async function getRoomByTextChannel(guildId, textChannelId) {
-  return await get(
-    `SELECT * FROM private_voice_rooms WHERE guild_id=? AND text_channel_id=?`,
-    [guildId, textChannelId]
-  );
-}
-
-async function fetchVoiceChannel(guild, channelId) {
-  return await guild.channels.fetch(channelId).catch(() => null);
-}
-
-// ====== CLAIM-ALL LOCK FLAG (stored in guild_settings) ======
+// ====== Claim-all lock flag stored in guild_settings ======
 async function ensureClaimFlagColumn() {
-  // harmless if already exists; ignore errors
   try {
     await run(`ALTER TABLE guild_settings ADD COLUMN claim_all_done INTEGER DEFAULT 0`);
   } catch (_) {}
@@ -160,13 +146,44 @@ async function setClaimAllDone(guildId, done) {
   await run(`UPDATE guild_settings SET claim_all_done=? WHERE guild_id=?`, [done ? 1 : 0, guildId]);
 }
 
+// ====== PRIVATE VC HELPERS ======
+async function getRoomByTextChannel(guildId, textChannelId) {
+  return await get(
+    `SELECT * FROM private_voice_rooms WHERE guild_id=? AND text_channel_id=?`,
+    [guildId, textChannelId]
+  );
+}
+
+async function fetchVoiceChannel(guild, channelId) {
+  return await guild.channels.fetch(channelId).catch(() => null);
+}
+
 // ====== COMMANDS ======
+async function cmdHelp(message) {
+  const lines = [
+    `**Lop Bot Commands**`,
+    `• \`!rank [@user]\` — show rank info`,
+    `• \`!leaderboard [page]\` — XP leaderboard`,
+    ``,
+    `**Admin / Manager**`,
+    `• \`!import-mee6\` — import \`data/mee6_snapshot.json\` into DB`,
+    `• \`!claim-all\` — apply imported XP to members (one-time)`,
+    `• \`!xp set @user <totalXP>\``,
+    `• \`!xp add @user <amount>\``,
+    `• \`!recalc-levels\` — recompute levels from XP`,
+    ``,
+    `**Private VC (ONLY in the temp VC text channel)**`,
+    `• \`!voice-limit <num>\``,
+    `• \`!voice-lock\` / \`!voice-unlock\``,
+    `• \`!voice-rename "new name"\``,
+    `• \`!voice-ban @user\``
+  ];
+  await message.channel.send(lines.join("\n"));
+}
+
 async function cmdRank(message, args) {
   const guildId = message.guild.id;
-
-  const target =
-    message.mentions.users.first() ||
-    message.author;
+  const target = message.mentions.users.first() || message.author;
 
   const row = await getUserRow(guildId, target.id);
   const pos = await getRankPosition(guildId, target.id);
@@ -193,20 +210,15 @@ async function cmdLeaderboard(message, args) {
     [guildId, perPage, offset]
   );
 
-  if (!rows.length) {
-    return message.channel.send("No leaderboard data yet.");
-  }
+  if (!rows.length) return message.channel.send("No leaderboard data yet.");
 
-  // Resolve users to names
   const lines = [];
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i];
     const member = await message.guild.members.fetch(r.user_id).catch(() => null);
     const name = member ? bestDisplayName(member) : `User ${r.user_id}`;
     const lvl = levelFromXp(r.xp);
-    lines.push(
-      `${offset + i + 1}. **${name}** — Level **${lvl}** (${r.xp} XP)`
-    );
+    lines.push(`${offset + i + 1}. **${name}** — Level **${lvl}** (${r.xp} XP)`);
   }
 
   await message.channel.send(`🏆 **Leaderboard (Page ${page})**\n` + lines.join("\n"));
@@ -239,10 +251,13 @@ async function cmdXp(message, args) {
     return message.channel.send(`✅ Set ${user} to **${res.xp} XP** (Level **${res.level}**).`);
   } else {
     const res = await addUserXp(guildId, user.id, amount);
-    return message.channel.send(`✅ Added **${amount} XP** to ${user}. Total: **${res.newXp}** (Level **${res.newLevel}**).`);
+    return message.channel.send(
+      `✅ Added **${amount} XP** to ${user}. Total: **${res.newXp}** (Level **${res.newLevel}**).`
+    );
   }
 }
 
+// ----- Render import: snapshot json -> mee6_snapshot table -----
 async function cmdImportMee6(message) {
   if (!hasAdminPerms(message.member)) {
     return message.reply("❌ You don't have permission to do this.");
@@ -250,48 +265,46 @@ async function cmdImportMee6(message) {
 
   const guildId = message.guild.id;
 
-  const fs = require("fs");
-  const path = require("path");
-  const snapshotPath = path.join(__dirname, "..", "data", "mee6_snapshot.json");
-
-  if (!fs.existsSync(snapshotPath)) {
-    return message.reply("❌ `data/mee6_snapshot.json` not found on server.");
+  if (!fs.existsSync(SNAPSHOT_FILE)) {
+    return message.reply("❌ `data/mee6_snapshot.json` not found on the server.");
   }
 
   let data;
   try {
-    data = JSON.parse(fs.readFileSync(snapshotPath, "utf8"));
+    data = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8"));
   } catch (e) {
     return message.reply("❌ Snapshot JSON is invalid.");
   }
 
   if (!Array.isArray(data)) {
-    return message.reply("❌ Snapshot must be an array.");
+    return message.reply("❌ Snapshot must be a JSON array.");
   }
 
-  let inserted = 0;
+  // Clear existing snapshot rows for this guild (so re-import is clean)
+  await run(`DELETE FROM mee6_snapshot WHERE guild_id=?`, [guildId]);
 
+  let inserted = 0;
   for (const row of data) {
-    if (!row.username || typeof row.xp !== "number") continue;
+    // Accept either {username,xp,level} OR {snapshot_username,snapshot_xp,snapshot_level}
+    const username = row.username ?? row.snapshot_username;
+    const xp = row.xp ?? row.snapshot_xp;
+    const lvl = row.level ?? row.snapshot_level ?? 0;
+
+    if (!username) continue;
+    if (!Number.isFinite(Number(xp))) continue;
 
     await run(
-      `INSERT OR REPLACE INTO mee6_snapshot
-       (guild_id, snapshot_username, snapshot_xp, snapshot_level)
+      `INSERT OR REPLACE INTO mee6_snapshot (guild_id, snapshot_username, snapshot_xp, snapshot_level)
        VALUES (?, ?, ?, ?)`,
-      [
-        guildId,
-        String(row.username),
-        Number(row.xp),
-        Number(row.level || 0)
-      ]
+      [guildId, String(username), Number(xp), Number(lvl)]
     );
 
     inserted++;
   }
 
-  await message.channel.send(
-    `✅ Imported **${inserted}** MEE6 rows.\n` +
-    `Next step: run \`!claim-all\` to apply XP to members.`
+  return message.channel.send(
+    `✅ Imported **${inserted}** snapshot rows into the database.\n` +
+    `Next: run \`!claim-all\` to apply XP to members.`
   );
 }
 
@@ -310,7 +323,6 @@ async function cmdClaimAll(message) {
     }
   }
 
-  // Make sure we have all members cached for matching
   await message.guild.members.fetch().catch(() => {});
 
   const snapshots = await all(
@@ -320,14 +332,13 @@ async function cmdClaimAll(message) {
   );
 
   if (!snapshots.length) {
-    return message.reply("No MEE6 snapshot found in the database.");
+    return message.reply("No MEE6 snapshot found in DB. Run `!import-mee6` first.");
   }
 
   let matched = 0;
   let skipped = 0;
   let already = 0;
 
-  // Build lookup maps for quick matching
   const members = Array.from(message.guild.members.cache.values()).filter((m) => !m.user.bot);
 
   const byUsername = new Map();
@@ -340,22 +351,14 @@ async function cmdClaimAll(message) {
     const dn = normalizeName(m.displayName);
     const gn = normalizeName(u.globalName);
 
-    if (un) {
-      if (!byUsername.has(un)) byUsername.set(un, []);
-      byUsername.get(un).push(m);
-    }
-    if (dn) {
-      if (!byDisplay.has(dn)) byDisplay.set(dn, []);
-      byDisplay.get(dn).push(m);
-    }
-    if (gn) {
-      if (!byGlobal.has(gn)) byGlobal.set(gn, []);
-      byGlobal.get(gn).push(m);
-    }
+    if (un) (byUsername.get(un) ?? byUsername.set(un, []).get(un)).push(m);
+    if (dn) (byDisplay.get(dn) ?? byDisplay.set(dn, []).get(dn)).push(m);
+    if (gn) (byGlobal.get(gn) ?? byGlobal.set(gn, []).get(gn)).push(m);
   }
 
   await message.channel.send(
-    `⏳ Starting \`!claim-all\`... This will match snapshot usernames to current members by name.\n` +
+    `⏳ Starting \`!claim-all\`...\n` +
+    `This matches snapshot usernames to members by username/globalName/nickname.\n` +
     `If a name matches multiple people or nobody, it will be skipped.`
   );
 
@@ -367,9 +370,10 @@ async function cmdClaimAll(message) {
 
     const key = normalizeName(s.snapshot_username);
     const candidates =
-      (byUsername.get(key) || []).concat(byGlobal.get(key) || []).concat(byDisplay.get(key) || []);
+      (byUsername.get(key) || [])
+        .concat(byGlobal.get(key) || [])
+        .concat(byDisplay.get(key) || []);
 
-    // Deduplicate candidates
     const uniq = new Map();
     for (const c of candidates) uniq.set(c.id, c);
     const list = Array.from(uniq.values());
@@ -381,10 +385,8 @@ async function cmdClaimAll(message) {
 
     const member = list[0];
 
-    // Assign XP and recompute level from XP (MEE6 curve)
     await setUserXp(guildId, member.id, Number(s.snapshot_xp));
 
-    // Mark claimed
     await run(
       `UPDATE mee6_snapshot SET claimed_user_id=?, claimed_at=? WHERE guild_id=? AND snapshot_username=?`,
       [member.id, Date.now(), guildId, s.snapshot_username]
@@ -402,7 +404,8 @@ async function cmdClaimAll(message) {
     `• Matched & applied: **${matched}**\n` +
     `• Skipped (no/ambiguous match): **${skipped}**\n` +
     `• Already claimed rows: **${already}**\n\n` +
-    `Tip: If some were skipped, rename nicknames to match snapshot usernames and run again (manager can rerun).`
+    `Tip: If some were skipped, temporarily set nicknames to match snapshot usernames and run again.\n` +
+    `(Manager can rerun even if locked.)`
   );
 }
 
@@ -419,41 +422,23 @@ async function cmdRecalcLevels(message) {
     await run(`UPDATE user_xp SET level=? WHERE guild_id=? AND user_id=?`, [lvl, guildId, r.user_id]);
   }
 
-  await message.channel.send(`✅ Recalculated levels for **${rows.length}** users using the MEE6 curve.`);
-}
-
-async function cmdHelp(message) {
-  const lines = [
-    `**Lop Bot Commands**`,
-    `• \`!rank [@user]\` — show rank card info`,
-    `• \`!leaderboard [page]\` — top XP leaderboard`,
-    ``,
-    `**Admin / Manager**`,
-    `• \`!claim-all\` — apply MEE6 snapshot XP to matching members (one-time)`,
-    `• \`!xp set @user <totalXP>\` — set XP`,
-    `• \`!xp add @user <amount>\` — add XP`,
-    `• \`!recalc-levels\` — recompute levels from XP (MEE6 curve)`,
-    ``,
-    `**Private VC (in the temp VC text channel only)**`,
-    `• \`!voice-limit <num>\``,
-    `• \`!voice-lock\` / \`!voice-unlock\``,
-    `• \`!voice-rename "new name"\``,
-    `• \`!voice-ban @user\``
-  ];
-
-  await message.channel.send(lines.join("\n"));
+  await message.channel.send(`✅ Recalculated levels for **${rows.length}** users.`);
 }
 
 // ====== PRIVATE VC COMMANDS ======
 async function ensureRoomCommandContext(message) {
   const guildId = message.guild.id;
-  const room = await getRoomByTextChannel(guildId, message.channel.id);
-  if (!room) return { ok: false, room: null, error: "This command can only be used in the private VC text channel." };
 
-  // Permission: owner OR admin/mod OR manager
+  const room = await getRoomByTextChannel(guildId, message.channel.id);
+  if (!room) {
+    return { ok: false, room: null, error: "This command can only be used in the private VC text channel." };
+  }
+
   const isOwner = message.author.id === room.owner_id;
   const can = isOwner || hasAdminPerms(message.member) || hasModPerms(message.member);
-  if (!can) return { ok: false, room, error: "Only the room owner or staff can use this here." };
+  if (!can) {
+    return { ok: false, room, error: "Only the room owner, admins, or the manager can use this here." };
+  }
 
   const voiceChannel = await fetchVoiceChannel(message.guild, room.voice_channel_id);
   if (!voiceChannel) return { ok: false, room, error: "Voice channel no longer exists." };
@@ -512,7 +497,6 @@ async function cmdVoiceBan(message) {
 
   await ctx.voiceChannel.permissionOverwrites.edit(target.id, { Connect: false }).catch(() => null);
 
-  // If they are currently inside, boot them out
   if (target.voice?.channelId === ctx.voiceChannel.id) {
     await target.voice.disconnect().catch(() => null);
   }
@@ -522,42 +506,43 @@ async function cmdVoiceBan(message) {
 
 // ====== MAIN HANDLER ======
 async function handleCommands(message) {
-  if (!message.guild) return;
-  if (message.author.bot) return;
-  if (cmd === "import-mee6") return await cmdImportMee6(message);
-
-  const content = message.content || "";
-  if (!content.startsWith(PREFIX)) return;
-
-  const raw = content.slice(PREFIX.length).trim();
-  if (!raw) return;
-
-  const args = parseArgs(raw);
-  const cmd = (args.shift() || "").toLowerCase();
-
   try {
+    if (!message.guild) return;
+    if (message.author.bot) return;
+
+    const content = message.content || "";
+    if (!content.startsWith(PREFIX)) return;
+
+    const raw = content.slice(PREFIX.length).trim();
+    if (!raw) return;
+
+    const args = parseArgs(raw);
+
+    // ✅ IMPORTANT FIX: define cmd BEFORE any checks
+    const cmd = (args.shift() || "").toLowerCase();
+    if (!cmd) return;
+
     if (cmd === "help" || cmd === "commands") return await cmdHelp(message);
 
     if (cmd === "rank") return await cmdRank(message, args);
     if (cmd === "leaderboard" || cmd === "lb") return await cmdLeaderboard(message, args);
 
-    // Admin/manager
+    // Admin/manager tools
     if (cmd === "xp") return await cmdXp(message, args);
+    if (cmd === "import-mee6") return await cmdImportMee6(message);
     if (cmd === "claim-all" || cmd === "claimall") return await cmdClaimAll(message);
     if (cmd === "recalc-levels" || cmd === "recalclevels") return await cmdRecalcLevels(message);
 
-    // Private VC commands (must be used in the temp text channel)
+    // Private VC commands
     if (cmd === "voice-limit") return await cmdVoiceLimit(message, args);
     if (cmd === "voice-lock") return await cmdVoiceLock(message);
     if (cmd === "voice-unlock") return await cmdVoiceUnlock(message);
     if (cmd === "voice-rename") return await cmdVoiceRename(message, args);
     if (cmd === "voice-ban") return await cmdVoiceBan(message);
 
-    // Unknown command: ignore (or you can reply)
-    return;
+    return; // unknown command: ignore
   } catch (e) {
-    console.error("Command error:", cmd, e);
-    return message.reply("❌ Something went wrong running that command.");
+    console.error("handleCommands error:", e);
   }
 }
 

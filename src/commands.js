@@ -240,12 +240,26 @@ async function cmdClaimAll(message) {
     }
   }
 
-  await message.guild.members.fetch();
-  const snapshots = await all(
-    `SELECT snapshot_username, snapshot_xp, claimed_user_id
-     FROM mee6_snapshot WHERE guild_id=?`,
-    [message.guild.id]
-  );
+  // Fetch only currently cached members first
+const members = message.guild.members.cache.filter(m => !m.user.bot);
+
+// If cache is empty (Render cold start), fetch in chunks
+if (members.size === 0) {
+  let lastId;
+  while (true) {
+    const batch = await message.guild.members.fetch({
+      limit: 1000,
+      after: lastId
+    }).catch(() => null);
+
+    if (!batch || batch.size === 0) break;
+
+    lastId = batch.last().id;
+
+    // IMPORTANT: wait to avoid rate limits
+    await new Promise(r => setTimeout(r, 1200));
+  }
+}
 
   const members = message.guild.members.cache.filter(m => !m.user.bot);
 

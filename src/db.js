@@ -81,6 +81,11 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN level_up_message TEXT`);
   } catch (_) {}
 
+  // Optional: one-time claim-all lock flag (if commands.js uses it)
+  try {
+    await run(`ALTER TABLE guild_settings ADD COLUMN claim_all_done INTEGER DEFAULT 0`);
+  } catch (_) {}
+
   // ─────────────────────────────────────────────
   // Level roles table (dashboard feature)
   // ─────────────────────────────────────────────
@@ -108,20 +113,32 @@ async function initDb() {
     )
   `);
 
+  // Backwards-compat: add columns if DB existed before claim tracking
+  try { await run(`ALTER TABLE mee6_snapshot ADD COLUMN claimed_user_id TEXT`); } catch (_) {}
+  try { await run(`ALTER TABLE mee6_snapshot ADD COLUMN claimed_at INTEGER`); } catch (_) {}
+
   // ─────────────────────────────────────────────
   // Private voice rooms
   // ─────────────────────────────────────────────
+  // We keep created_at/last_active_at for future dashboard/stats,
+  // and also add empty_since for the auto-delete behaviour.
   await run(`
     CREATE TABLE IF NOT EXISTS private_voice_rooms (
       guild_id TEXT NOT NULL,
       owner_id TEXT NOT NULL,
       voice_channel_id TEXT NOT NULL,
       text_channel_id TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      last_active_at INTEGER NOT NULL,
+      created_at INTEGER DEFAULT 0,
+      last_active_at INTEGER DEFAULT 0,
+      empty_since INTEGER DEFAULT NULL,
       PRIMARY KEY (guild_id, voice_channel_id)
     )
   `);
+
+  // Backwards-compat: upgrade older schemas
+  try { await run(`ALTER TABLE private_voice_rooms ADD COLUMN created_at INTEGER DEFAULT 0`); } catch (_) {}
+  try { await run(`ALTER TABLE private_voice_rooms ADD COLUMN last_active_at INTEGER DEFAULT 0`); } catch (_) {}
+  try { await run(`ALTER TABLE private_voice_rooms ADD COLUMN empty_since INTEGER DEFAULT NULL`); } catch (_) {}
 }
 
 module.exports = {

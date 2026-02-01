@@ -6,93 +6,94 @@ function minutesToMs(m) {
   return m * 60 * 1000;
 }
 
-function getEmptyMinutes() {
-  // ✅ radix must be 10
-  return parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "5", 10);
-}
-
-function getCreateChannelName() {
-  return (process.env.CREATE_VC_NAME || "Open private").toLowerCase();
-}
-
 async function onVoiceStateUpdate(oldState, newState, client) {
   const guild = newState.guild || oldState.guild;
   if (!guild) return;
 
-  const createName = getCreateChannelName();
-  const emptyMinutes = getEmptyMinutes();
+  const createName = (process.env.CREATE_VC_NAME || "create a private vc").toLowerCase();
+  const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "5", 10);
+  const now = Date.now();
 
-  // 1) User joined a voice channel (from no channel -> some channel)
+  // ─────────────────────────────────────────────
+  // 1) User joined a VC: if it's the "create" VC, create private VC + paired text channel
+  // ─────────────────────────────────────────────
   if (!oldState.channelId && newState.channelId) {
     const joined = newState.channel;
-    if (joined && joined.name && joined.name.toLowerCase() === createName) {
+    if (joined && joined.name.toLowerCase() === createName) {
       const owner = newState.member;
       if (!owner) return;
 
-      // Choose category: env override > same parent as create channel > none
+      // Pick category: env > create-channel parent > none
       const categoryId = process.env.PRIVATE_VC_CATEGORY_ID || joined.parentId || null;
 
       const baseName = `${owner.user.username}'s VC`.slice(0, 90);
+
+      // Voice channel permissions
+      const voiceOverwrites = [
+        {
+          id: guild.roles.everyone.id,
+          allow: [PermissionsBitField.Flags.ViewChannel],
+          // by default allow connect; lock command can disable Connect later
+        },
+        {
+          id: owner.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.Connect,
+            PermissionsBitField.Flags.Speak
+          ]
+        }
+      ];
 
       // Create voice channel
       const voiceChannel = await guild.channels.create({
         name: baseName,
         type: ChannelType.GuildVoice,
         parent: categoryId || undefined,
-        permissionOverwrites: [
-          // Hide from everyone by default; owner can view/connect/speak.
-          // If you want everyone to see but not join, change ViewChannel to allow for everyone.
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.Connect],
-          },
-          {
-            id: owner.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.Connect,
-              PermissionsBitField.Flags.Speak,
-              PermissionsBitField.Flags.Stream,
-            ],
-          },
-        ],
+        permissionOverwrites: voiceOverwrites
       });
 
-      // Create paired text channel for commands
+      // Paired text channel permissions (private)
+      const textOverwrites = [
+        {
+          id: guild.roles.everyone.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        {
+          id: owner.id,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory
+          ]
+        }
+      ];
+
       const textChannel = await guild.channels.create({
         name: `${owner.user.username}-vc-commands`.slice(0, 90),
         type: ChannelType.GuildText,
         parent: categoryId || undefined,
-        permissionOverwrites: [
-          {
-            id: guild.roles.everyone.id,
-            deny: [PermissionsBitField.Flags.ViewChannel],
-          },
-          {
-            id: owner.id,
-            allow: [
-              PermissionsBitField.Flags.ViewChannel,
-              PermissionsBitField.Flags.SendMessages,
-              PermissionsBitField.Flags.ReadMessageHistory,
-            ],
-          },
-        ],
+        permissionOverwrites: textOverwrites
       });
 
-      // Store in DB (✅ correct table/column names)
+      // Save to DB (THIS was failing before)
       await run(
         `INSERT OR REPLACE INTO private_voice_rooms
-         (guild_id, owner_id, voice_channel_id, text_channel_id, empty_since)
-         VALUES (?, ?, ?, ?, NULL)`,
-        [guild.id, owner.id, voiceChannel.id, textChannel.id]
+         (guild_id, owner_id, voice_channel_id, text_channel_id, created_at, last_active_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [guild.id, owner.id, voiceChannel.id, textChannel.id, now, now]
       );
 
-      // Move user into the VC
-      await owner.voice.setChannel(voiceChannel).catch(() => {});
+      // Move the user into their new VC
+      // NOTE: bot must have "Move Members" permission in that category/server
+      await owner.voice.setChannel(voiceChannel).catch((e) => {
+        console.error("Failed to move member into private VC:", e);
+      });
 
+      // Send command list message
       await textChannel.send(
         `This channel controls **${voiceChannel.name}**.\n` +
-          `Commands (owner/admin/manager only) — **ONLY here**:\n` +
+          `Commands (owner/admin/manager only):\n` +
           `• \`!voice-limit <0-99>\`\n` +
           `• \`!voice-lock\` / \`!voice-unlock\`\n` +
           `• \`!voice-rename <name>\`\n` +
@@ -104,9 +105,11 @@ async function onVoiceStateUpdate(oldState, newState, client) {
     }
   }
 
-  // 2) Mark empty/active state for cleanup
+  // ─────────────────────────────────────────────
+  // 2) Track activity for private rooms
+  // ─────────────────────────────────────────────
 
-  // Someone left a voice channel (or switched channels)
+  // If someone left a channel, and it becomes empty: mark last_active_at to "now" and let cleanup handle it
   if (oldState.channelId && oldState.channelId !== newState.channelId) {
     const room = await get(
       `SELECT voice_channel_id FROM private_voice_rooms WHERE guild_id=? AND voice_channel_id=?`,
@@ -117,14 +120,14 @@ async function onVoiceStateUpdate(oldState, newState, client) {
       const ch = oldState.channel;
       if (ch && ch.members.size === 0) {
         await run(
-          `UPDATE private_voice_rooms SET empty_since=? WHERE guild_id=? AND voice_channel_id=?`,
-          [Date.now(), guild.id, ch.id]
+          `UPDATE private_voice_rooms SET last_active_at=? WHERE guild_id=? AND voice_channel_id=?`,
+          [now, guild.id, ch.id]
         );
       }
     }
   }
 
-  // Someone joined a voice channel (or switched into it)
+  // If someone joined a private VC: update last_active_at
   if (newState.channelId) {
     const room = await get(
       `SELECT voice_channel_id FROM private_voice_rooms WHERE guild_id=? AND voice_channel_id=?`,
@@ -133,44 +136,48 @@ async function onVoiceStateUpdate(oldState, newState, client) {
 
     if (room) {
       await run(
-        `UPDATE private_voice_rooms SET empty_since=NULL WHERE guild_id=? AND voice_channel_id=?`,
-        [guild.id, newState.channelId]
+        `UPDATE private_voice_rooms SET last_active_at=? WHERE guild_id=? AND voice_channel_id=?`,
+        [now, guild.id, newState.channelId]
       );
     }
   }
 }
 
 async function cleanupPrivateRooms(client) {
-  const emptyMinutes = getEmptyMinutes();
+  const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "5", 10);
   const threshold = minutesToMs(emptyMinutes);
   const now = Date.now();
 
   const rooms = await all(
-    `SELECT guild_id, voice_channel_id, text_channel_id, empty_since
+    `SELECT guild_id, voice_channel_id, text_channel_id, last_active_at
      FROM private_voice_rooms`,
     []
   );
 
   for (const r of rooms) {
-    if (!r.empty_since) continue;
-    if (now - r.empty_since < threshold) continue;
-
     const guild = await client.guilds.fetch(r.guild_id).catch(() => null);
     if (!guild) continue;
 
     const voice = await guild.channels.fetch(r.voice_channel_id).catch(() => null);
     const text = await guild.channels.fetch(r.text_channel_id).catch(() => null);
 
-    // Double-check still empty
-    if (voice && voice.members && voice.members.size > 0) {
+    // If voice channel is gone, clean DB + text (if exists)
+    if (!voice) {
+      if (text) await text.delete("Orphaned private VC text channel").catch(() => {});
       await run(
-        `UPDATE private_voice_rooms SET empty_since=NULL WHERE guild_id=? AND voice_channel_id=?`,
+        `DELETE FROM private_voice_rooms WHERE guild_id=? AND voice_channel_id=?`,
         [r.guild_id, r.voice_channel_id]
       );
       continue;
     }
 
-    if (voice) await voice.delete("Temp private VC expired").catch(() => {});
+    // Only delete if empty AND has been empty/inactive long enough
+    const isEmpty = voice.members?.size === 0;
+    if (!isEmpty) continue;
+
+    if (now - (r.last_active_at || now) < threshold) continue;
+
+    await voice.delete("Temp private VC expired").catch(() => {});
     if (text) await text.delete("Temp private VC expired").catch(() => {});
 
     await run(

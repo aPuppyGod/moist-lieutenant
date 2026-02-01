@@ -129,6 +129,8 @@ client.on(Events.MessageCreate, async (message) => {
 
   if (!message.guild || message.author.bot) return;
 
+  console.log("[MSG]", message.guild?.id, message.channel?.id, message.author?.tag, message.content);
+
   const guildId = message.guild.id;
   const userId = message.author.id;
 

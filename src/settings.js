@@ -6,7 +6,8 @@ const DEFAULT_LEVEL_UP_MESSAGE =
 
 async function getGuildSettings(guildId) {
   await run(
-    `INSERT OR IGNORE INTO guild_settings (guild_id) VALUES (?)`,
+    `INSERT INTO guild_settings (guild_id) VALUES (?)
+ ON CONFLICT (guild_id) DO NOTHING`,
     [guildId]
   );
 

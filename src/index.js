@@ -39,12 +39,12 @@ function formatLevelUpMessage(template, { user, level, xp }) {
 
 async function ensureUserRow(guildId, userId) {
   await run(
-    `INSERT OR IGNORE INTO user_xp 
-     (guild_id, user_id, xp, level, last_message_xp_at, last_reaction_xp_at)
-     VALUES (?, ?, 0, 0, 0, 0)`,
-    [guildId, userId]
-  );
-}
+  `INSERT INTO user_xp
+   (guild_id, user_id, xp, level, last_message_xp_at, last_reaction_xp_at)
+   VALUES (?, ?, 0, 0, 0, 0)
+   ON CONFLICT (guild_id, user_id) DO NOTHING`,
+  [guildId, userId]
+);
 
 async function addXp(guildId, userId, amount) {
   await ensureUserRow(guildId, userId);

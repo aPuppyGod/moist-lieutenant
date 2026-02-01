@@ -114,9 +114,15 @@ async function onVoiceStateUpdate(oldState, newState, client) {
 
       // Save to DB
       await run(
-        `INSERT OR REPLACE INTO private_voice_rooms
+        `INSERT INTO private_voice_rooms
          (guild_id, owner_id, voice_channel_id, text_channel_id, created_at, last_active_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (guild_id, voice_channel_id)
+         DO UPDATE SET
+           owner_id = EXCLUDED.owner_id,
+           text_channel_id = EXCLUDED.text_channel_id,
+           created_at = EXCLUDED.created_at,
+           last_active_at = EXCLUDED.last_active_at`,
         [guild.id, owner.id, voiceChannel.id, textChannel.id, now, now]
       );
 

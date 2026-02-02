@@ -127,6 +127,9 @@ async function cmdHelp(message) {
     "• `!xp add @user <amount>`",
     "• `!xp set @user <amount>`",
     "• `!recalc-levels`",
+    "• `!sync-roles`",
+    "• `!import-mee6`",
+    "• `!claim-all [force]`",
   ];
 
   await message.reply(lines.join("\n")).catch(() => {});
@@ -529,11 +532,12 @@ async function cmdClaimAll(message) {
 
   const LOCK_CLAIM_ALL_AFTER_RUN = true;
   const guildId = message.guild.id;
+  const force = message.content.toLowerCase().includes("force");
 
-  if (LOCK_CLAIM_ALL_AFTER_RUN) {
+  if (LOCK_CLAIM_ALL_AFTER_RUN && !force) {
     const done = await get(`SELECT claim_all_done FROM guild_settings WHERE guild_id=?`, [guildId]);
     if (done && done.claim_all_done === 1) {
-      await message.reply("❌ claim-all already used.").catch(() => {});
+      await message.reply("❌ claim-all already used. Use `!claim-all force` to override.").catch(() => {});
       return;
     }
   }

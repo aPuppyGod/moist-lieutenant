@@ -116,6 +116,7 @@ async function cmdHelp(message) {
     "**Levels**",
     "• `!rank [@user]` — show XP + level",
     "• `!leaderboard [page]` / `!lb [page]` — show top XP",
+    "• `!shame @user` — shame a user",
     "",
     "**Private VC (only inside the VC’s paired commands channel)**",
     "• `!voice-limit <0-99>`",
@@ -200,6 +201,18 @@ async function cmdLeaderboard(message, args) {
   }
 
   await message.reply(`**Leaderboard (page ${page})**\n` + lines.join("\n")).catch(() => {});
+}
+
+async function cmdShame(message, args) {
+  if (!message.guild) return;
+
+  const target = pickUserFromMention(message);
+  if (!target) {
+    await message.reply("Usage: `!shame @user`").catch(() => {});
+    return;
+  }
+
+  await message.reply(`SHAME ${target} SHAME ON YOU!`).catch(() => {});
 }
 
 async function cmdXp(message, args) {
@@ -616,6 +629,11 @@ async function handleCommands(message) {
 
   if (cmd === "leaderboard" || cmd === "lb") {
     await cmdLeaderboard(message, args);
+    return true;
+  }
+
+  if (cmd === "shame") {
+    await cmdShame(message, args);
     return true;
   }
 

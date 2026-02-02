@@ -201,13 +201,16 @@ client.on(Events.MessageCreate, async (message) => {
     await message.react('🐢').catch(() => {});
   }
   if (content.includes('goodnight') || content.includes('good night')) {
-    await message.react(':eepy:').catch(() => {});
+    await message.react('<:eepy:1374218096209821757>').catch(() => {});
   }
   if (content.includes('good morning') || content.includes('goodmorning')) {
-    await message.react(':happi:').catch(() => {});
+    await message.react('<:happi:1377138319049232384>').catch(() => {});
   }
   if (content.includes('bean')) {
     await message.react(':Cheesecake:').catch(() => {});
+  }
+  if (content.includes('mido') || content.includes('midory') || content.includes('midoryi') || content.includes('seka') || content.includes('midoryiseka') || content.includes('lop') || content.includes('loppy') || content.includes('loptube') || content.includes('antoine')) {
+    await message.react('🦝').catch(() => {});
   }
 
   const guildId = message.guild.id;

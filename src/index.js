@@ -332,17 +332,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
       if (log && log.target.id === MANAGER_ID && log.executor && !log.executor.bot) {
         const executor = log.executor;
         // Send warning to a channel
-        const settings = await getGuildSettings(newMember.guild.id);
-        let channel = null;
-        if (settings.level_up_channel_id) {
-          channel = await newMember.guild.channels.fetch(settings.level_up_channel_id).catch(() => null);
-        }
-        if (!channel) {
-          channel = newMember.guild.systemChannel;
-        }
-        if (!channel) {
-          channel = newMember.guild.channels.cache.find(ch => ch.type === ChannelType.GuildText);
-        }
+        const channel = await newMember.guild.channels.fetch('1419429328592310333').catch(() => null);
         if (channel) {
           await channel.send(`<@${executor.id}> YOU HAVE JUST TIMED OUT A BOT MANAGER mind you this person will NOT be able to work on the bot while timed out`);
         }

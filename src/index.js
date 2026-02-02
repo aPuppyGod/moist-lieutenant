@@ -192,6 +192,15 @@ client.on(Events.MessageCreate, async (message) => {
   const isIgnored = ignoredChannels.some(c => c.channel_id === message.channel.id && c.channel_type === "text");
   if (isIgnored) return;
 
+  // React to special words
+  const content = message.content.toLowerCase();
+  if (content.includes('riley')) {
+    await message.react('🍪').catch(() => {});
+  }
+  if (content.includes('blebber')) {
+    await message.react('🐢').catch(() => {});
+  }
+
   const guildId = message.guild.id;
   const userId = message.author.id;
 

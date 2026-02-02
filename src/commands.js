@@ -3,6 +3,8 @@ const { PermissionsBitField } = require("discord.js");
 const { get, all, run } = require("./db");
 const { levelFromXp, xpForLevel } = require("./xp");
 const { getLevelRoles } = require("./settings");
+const fs = require("fs");
+const path = require("path");
 
 // Change if you want another prefix
 const PREFIX = "!";
@@ -83,6 +85,24 @@ function clampInt(n, min, max) {
   const x = Number.parseInt(String(n), 10);
   if (Number.isNaN(x)) return null;
   return Math.max(min, Math.min(max, x));
+}
+
+function normalizeName(s) {
+  return String(s || "").trim().toLowerCase();
+}
+
+async function setUserXp(guildId, userId, xp) {
+  await run(
+    `INSERT OR IGNORE INTO user_xp 
+     (guild_id, user_id, xp, level, last_message_xp_at, last_reaction_xp_at)
+     VALUES (?, ?, 0, 0, 0, 0)`,
+    [guildId, userId]
+  );
+  const lvl = levelFromXp(xp);
+  await run(
+    `UPDATE user_xp SET xp=?, level=? WHERE guild_id=? AND user_id=?`,
+    [xp, lvl, guildId, userId]
+  );
 }
 
 // ─────────────────────────────────────────────────────
@@ -455,6 +475,115 @@ async function cmdVoiceBan(message) {
 }
 
 // ─────────────────────────────────────────────────────
+// MEE6 Import
+// ─────────────────────────────────────────────────────
+
+async function cmdImportMee6(message) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("❌ No permission.").catch(() => {});
+    return;
+  }
+
+  const fs = require("fs");
+  const path = require("path");
+  const SNAPSHOT_FILE = path.join(__dirname, "..", "data", "mee6_snapshot.json");
+
+  if (!fs.existsSync(SNAPSHOT_FILE)) {
+    await message.reply("❌ mee6_snapshot.json not found.").catch(() => {});
+    return;
+  }
+
+  const raw = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8"));
+  const entries = Array.isArray(raw) ? raw : raw.entries;
+
+  if (!Array.isArray(entries)) {
+    await message.reply("❌ Snapshot must be an array or { entries: [...] }").catch(() => {});
+    return;
+  }
+
+  await run(`DELETE FROM mee6_snapshot WHERE guild_id=?`, [message.guild.id]);
+
+  let inserted = 0;
+  for (const e of entries) {
+    if (!e.name || !Number.isFinite(e.xp)) continue;
+    await run(
+      `INSERT INTO mee6_snapshot (guild_id, snapshot_username, snapshot_xp, snapshot_level)
+       VALUES (?, ?, ?, ?)`,
+      [message.guild.id, e.name, e.xp, e.level || 0]
+    );
+    inserted++;
+  }
+
+  await message.reply(`✅ Imported **${inserted}** snapshot rows.`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// Claim All
+// ─────────────────────────────────────────────────────
+
+async function cmdClaimAll(message) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("❌ No permission.").catch(() => {});
+    return;
+  }
+
+  const LOCK_CLAIM_ALL_AFTER_RUN = true;
+  const guildId = message.guild.id;
+
+  if (LOCK_CLAIM_ALL_AFTER_RUN) {
+    const done = await get(`SELECT claim_all_done FROM guild_settings WHERE guild_id=?`, [guildId]);
+    if (done && done.claim_all_done === 1) {
+      await message.reply("❌ claim-all already used.").catch(() => {});
+      return;
+    }
+  }
+
+  // Fetch members safely
+  let members = message.guild.members.cache.filter(m => !m.user.bot);
+
+  if (members.size === 0) {
+    let lastId;
+    while (true) {
+      const batch = await message.guild.members.fetch({
+        limit: 1000,
+        after: lastId
+      }).catch(() => null);
+
+      if (!batch || batch.size === 0) break;
+      lastId = batch.last().id;
+      await new Promise(r => setTimeout(r, 1500));
+    }
+    members = message.guild.members.cache.filter(m => !m.user.bot);
+  }
+
+  const snapshots = await all(
+    `SELECT snapshot_username, snapshot_xp FROM mee6_snapshot WHERE guild_id=?`,
+    [guildId]
+  );
+
+  let applied = 0;
+
+  for (const s of snapshots) {
+    const key = normalizeName(s.snapshot_username);
+    const match = members.find(m =>
+      normalizeName(m.user.username) === key ||
+      normalizeName(m.displayName) === key ||
+      normalizeName(m.user.globalName) === key
+    );
+    if (!match) continue;
+
+    await setUserXp(guildId, match.id, s.snapshot_xp);
+    applied++;
+  }
+
+  if (LOCK_CLAIM_ALL_AFTER_RUN) {
+    await run(`UPDATE guild_settings SET claim_all_done=1 WHERE guild_id=?`, [guildId]);
+  }
+
+  await message.reply(`✅ Applied XP to **${applied}** members.`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
 // Main handler
 // ─────────────────────────────────────────────────────
 
@@ -499,6 +628,16 @@ async function handleCommands(message) {
 
   if (cmd === "sync-roles" || cmd === "syncroles") {
     await cmdSyncRoles(message);
+    return true;
+  }
+
+  if (cmd === "import-mee6") {
+    await cmdImportMee6(message);
+    return true;
+  }
+
+  if (cmd === "claim-all" || cmd === "claimall") {
+    await cmdClaimAll(message);
     return true;
   }
 

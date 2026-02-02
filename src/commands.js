@@ -571,11 +571,27 @@ async function cmdRemoveBirthdayChannel(message) {
     return;
   }
 
+  // Get current settings to find the channel
+  const { getBirthdaySettings, updateBirthdaySettings } = require("./settings");
+  const settings = await getBirthdaySettings(message.guild.id);
+
+  // Delete the channel if it exists
+  if (settings.birthday_channel_id) {
+    try {
+      const channel = await message.guild.channels.fetch(settings.birthday_channel_id).catch(() => null);
+      if (channel) {
+        await channel.delete("Birthday channel removed by admin command");
+      }
+    } catch (error) {
+      console.error("Failed to delete birthday channel:", error);
+      // Continue anyway to clear the setting
+    }
+  }
+
   // Clear the birthday channel setting
-  const { updateBirthdaySettings } = require("./settings");
   await updateBirthdaySettings(message.guild.id, { birthday_channel_id: null });
 
-  await message.reply("✅ Birthday channel has been removed. Birthday messages will no longer be sent.").catch(() => {});
+  await message.reply("✅ Birthday channel has been deleted and removed. Birthday messages will no longer be sent.").catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────

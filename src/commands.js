@@ -117,6 +117,9 @@ async function cmdHelp(message) {
     "• `!rank [@user]` — show XP + level",
     "• `!leaderboard [page]` / `!lb [page]` — show top XP",
     "• `!shame @user` — shame a user",
+    "• `!cookie-give @user` — give a cookie",
+    "• `!steal-cookie @user` — steal a cookie",
+    "• `!riley` — turtle and cookie",
     "",
     "**Private VC (only inside the VC’s paired commands channel)**",
     "• `!voice-limit <0-99>`",
@@ -213,6 +216,36 @@ async function cmdShame(message, args) {
   }
 
   await message.reply(`SHAME ${target} SHAME ON YOU!`).catch(() => {});
+}
+
+async function cmdCookieGive(message, args) {
+  if (!message.guild) return;
+
+  const target = pickUserFromMention(message);
+  if (!target) {
+    await message.reply("Usage: `!cookie-give @user`").catch(() => {});
+    return;
+  }
+
+  await message.reply(`You gave a cookie to ${target}! 🍪`).catch(() => {});
+}
+
+async function cmdStealCookie(message, args) {
+  if (!message.guild) return;
+
+  const target = pickUserFromMention(message);
+  if (!target) {
+    await message.reply("Usage: `!steal-cookie @user`").catch(() => {});
+    return;
+  }
+
+  await message.reply(`You stole a cookie from ${target}! 🍪`).catch(() => {});
+}
+
+async function cmdRiley(message) {
+  if (!message.guild) return;
+
+  await message.reply("🐢🍪").catch(() => {});
 }
 
 async function cmdXp(message, args) {
@@ -634,6 +667,21 @@ async function handleCommands(message) {
 
   if (cmd === "shame") {
     await cmdShame(message, args);
+    return true;
+  }
+
+  if (cmd === "cookie-give") {
+    await cmdCookieGive(message, args);
+    return true;
+  }
+
+  if (cmd === "steal-cookie") {
+    await cmdStealCookie(message, args);
+    return true;
+  }
+
+  if (cmd === "riley") {
+    await cmdRiley(message);
     return true;
   }
 

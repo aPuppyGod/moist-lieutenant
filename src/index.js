@@ -4,7 +4,9 @@ const {
   Client,
   GatewayIntentBits,
   Partials,
-  Events
+  Events,
+  AuditLogEvent,
+  ChannelType
 } = require("discord.js");
 
 const { initDb, get, run } = require("./db");
@@ -229,6 +231,47 @@ client.on(Events.VoiceStateUpdate, (oldState, newState) => {
   onVoiceStateUpdate(oldState, newState, client).catch((err) => {
     console.error("VoiceStateUpdate handler error:", err);
   });
+});
+
+// ─────────────────────────────────────────────────────
+// Timeout Warning for Manager
+// ─────────────────────────────────────────────────────
+
+client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
+  const MANAGER_ID = "900758140499398676"; // From commands.js
+  if (newMember.id !== MANAGER_ID) return;
+
+  // Check if timed out
+  if (!oldMember.communicationDisabledUntil && newMember.communicationDisabledUntil) {
+    // Manager got timed out
+    try {
+      const auditLogs = await newMember.guild.fetchAuditLogs({
+        type: AuditLogEvent.MemberUpdate,
+        limit: 1
+      });
+      const log = auditLogs.entries.first();
+      if (log && log.target.id === MANAGER_ID && log.executor && !log.executor.bot) {
+        const executor = log.executor;
+        // Send warning to a channel
+        const settings = await getGuildSettings(newMember.guild.id);
+        let channel = null;
+        if (settings.level_up_channel_id) {
+          channel = await newMember.guild.channels.fetch(settings.level_up_channel_id).catch(() => null);
+        }
+        if (!channel) {
+          channel = newMember.guild.systemChannel;
+        }
+        if (!channel) {
+          channel = newMember.guild.channels.cache.find(ch => ch.type === ChannelType.GuildText);
+        }
+        if (channel) {
+          await channel.send(`<@${executor.id}> YOU HAVE JUST TIMED OUT A BOT MANAGER mind you this person will NOT be able to work on the bot while timed out`);
+        }
+      }
+    } catch (err) {
+      console.error("Error handling manager timeout:", err);
+    }
+  }
 });
 
 // ─────────────────────────────────────────────────────

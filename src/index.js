@@ -209,7 +209,7 @@ client.on(Events.MessageCreate, async (message) => {
   if (content.includes('bean')) {
     await message.react(':Cheesecake:').catch(() => {});
   }
-  if (content.includes('mido') || content.includes('midory') || content.includes('midoryi') || content.includes('seka') || content.includes('midoryiseka') || content.includes('lop') || content.includes('loppy') || content.includes('loptube') || content.includes('antoine')) {
+  if (content.includes('mido') || content.includes('midory') || content.includes('midoryi') || content.includes('seka') || content.includes('midoryiseka') || content.includes('lop') || content.includes('loppy') || content.includes('loptube') || content.includes('antoine') || content.includes('løp') || content.includes('löp')) {
     await message.react('🦝').catch(() => {});
   }
 

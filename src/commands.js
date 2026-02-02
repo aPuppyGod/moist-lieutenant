@@ -1,8 +1,9 @@
 // src/commands.js
-const { PermissionsBitField } = require("discord.js");
+const { PermissionsBitField, ChannelType } = require("discord.js");
 const { get, all, run } = require("./db");
 const { levelFromXp, xpForLevel } = require("./xp");
 const { getLevelRoles } = require("./settings");
+const { getBirthdaySettings, setUserBirthday, getUserBirthday } = require("./settings");
 const fs = require("fs");
 const path = require("path");
 
@@ -478,6 +479,82 @@ async function cmdVoiceBan(message) {
 }
 
 // ─────────────────────────────────────────────────────
+// Birthday Commands
+// ─────────────────────────────────────────────────────
+
+async function cmdRememberBirthday(message, args) {
+  if (!message.guild) return;
+
+  const dateStr = args.join(" ").trim();
+  if (!dateStr) {
+    await message.reply("Usage: `!remember-birthday MM/DD` (e.g., `!remember-birthday 12/25`)").catch(() => {});
+    return;
+  }
+
+  const match = dateStr.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!match) {
+    await message.reply("Invalid format. Use MM/DD (e.g., 12/25 for December 25th)").catch(() => {});
+    return;
+  }
+
+  const month = parseInt(match[1], 10);
+  const day = parseInt(match[2], 10);
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    await message.reply("Invalid date. Month must be 1-12, day must be 1-31.").catch(() => {});
+    return;
+  }
+
+  // Basic validation for days in month (not perfect but good enough)
+  const maxDays = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  if (day > maxDays) {
+    await message.reply(`Invalid day for month ${month}. Maximum is ${maxDays}.`).catch(() => {});
+    return;
+  }
+
+  await setUserBirthday(message.guild.id, message.author.id, month, day);
+  await message.reply(`✅ Your birthday has been set to ${month}/${day}!`).catch(() => {});
+}
+
+async function cmdSetupBirthday(message, args) {
+  if (!message.guild) return;
+
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("❌ No permission. Only admins/managers can set up birthday channels.").catch(() => {});
+    return;
+  }
+
+  const channelName = args.join("-").toLowerCase().replace(/[^a-z0-9-]/g, "");
+  if (!channelName || channelName.length < 3) {
+    await message.reply("Usage: `!setup-birthday <channel-name>` (e.g., `!setup-birthday birthdays`)").catch(() => {});
+    return;
+  }
+
+  // Create the channel
+  const channel = await message.guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    topic: "🎉 Birthday wishes and celebrations! 🎂",
+    permissionOverwrites: [
+      {
+        id: message.guild.roles.everyone.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory
+        ]
+      }
+    ]
+  });
+
+  // Update settings
+  const { updateBirthdaySettings } = require("./settings");
+  await updateBirthdaySettings(message.guild.id, { birthday_channel_id: channel.id });
+
+  await message.reply(`✅ Birthday channel **#${channel.name}** has been created and set as the birthday channel!`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
 // MEE6 Import
 // ─────────────────────────────────────────────────────
 
@@ -642,6 +719,16 @@ async function handleCommands(message) {
 
   if (cmd === "claim-all" || cmd === "claimall") {
     await cmdClaimAll(message);
+    return true;
+  }
+
+  if (cmd === "remember-birthday") {
+    await cmdRememberBirthday(message, args);
+    return true;
+  }
+
+  if (cmd === "setup-birthday") {
+    await cmdSetupBirthday(message, args);
     return true;
   }
 

@@ -10,7 +10,9 @@ const {
   deleteLevelRole,
   getIgnoredChannels,
   addIgnoredChannel,
-  removeIgnoredChannel
+  removeIgnoredChannel,
+  getBirthdaySettings,
+  updateBirthdaySettings
 } = require("./settings");
 
 function mustBeLoggedIn(req, res, next) {
@@ -125,6 +127,7 @@ function startDashboard(client) {
     const settings = await getGuildSettings(guildId);
     const levelRoles = await getLevelRoles(guildId);
     const ignoredChannels = await getIgnoredChannels(guildId);
+    const birthdaySettings = await getBirthdaySettings(guildId);
 
     await guild.channels.fetch().catch(() => {});
     const textChannels = guild.channels.cache
@@ -226,6 +229,26 @@ function startDashboard(client) {
           </li>
         `).join("")}
       </ul>
+
+      <hr/>
+
+      <h3>Birthday Settings</h3>
+      <form method="post" action="/guild/${guildId}/birthday-settings">
+        <label>Birthday Channel 
+          <select name="birthday_channel_id">
+            <option value="">Select Channel</option>
+            ${textChannels.map((c) => `
+              <option value="${c.id}" ${birthdaySettings.birthday_channel_id === c.id ? 'selected' : ''}>
+                #${escapeHtml(c.name)}
+              </option>
+            `).join("")}
+          </select>
+        </label><br/><br/>
+        <label>Birthday Message<br/>
+          <textarea name="birthday_message" rows="3" cols="50">${escapeHtml(birthdaySettings.birthday_message)}</textarea>
+        </label><br/><br/>
+        <button type="submit">Save Birthday Settings</button>
+      </form>
     `);
   });
 
@@ -385,6 +408,20 @@ function startDashboard(client) {
       return res.redirect(`/guild/${guildId}`);
     } catch (e) {
       console.error("ignored-channels delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/birthday-settings", mustBeLoggedIn, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const birthdayChannelId = String(req.body.birthday_channel_id || "").trim();
+      const birthdayMessage = String(req.body.birthday_message || "").trim();
+
+      await updateBirthdaySettings(guildId, { birthday_channel_id: birthdayChannelId, birthday_message: birthdayMessage });
+      return res.redirect(`/guild/${guildId}`);
+    } catch (e) {
+      console.error("birthday-settings error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

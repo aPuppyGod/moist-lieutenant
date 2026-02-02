@@ -173,6 +173,45 @@ client.once(Events.ClientReady, async () => {
   }, 60_000);
 });
 
+  // Check birthdays daily at midnight
+  setInterval(async () => {
+    const now = new Date();
+    if (now.getHours() !== 0 || now.getMinutes() !== 0) return; // Only run at midnight
+
+    const month = now.getMonth() + 1; // JS months are 0-based
+    const day = now.getDate();
+
+    for (const [, guild] of client.guilds.cache) {
+      try {
+        const { getBirthdaySettings, getTodaysBirthdays } = require("./settings");
+        const settings = await getBirthdaySettings(guild.id);
+        const birthdays = await getTodaysBirthdays(guild.id, month, day);
+
+        if (!birthdays.length) continue;
+
+        let channel = null;
+        if (settings.birthday_channel_id) {
+          channel = await guild.channels.fetch(settings.birthday_channel_id).catch(() => null);
+        }
+        if (!channel) continue; // No channel set, skip
+
+        for (const birthday of birthdays) {
+          try {
+            const member = await guild.members.fetch(birthday.user_id).catch(() => null);
+            if (!member) continue;
+
+            const message = settings.birthday_message.replace(/{user}/g, member.toString());
+            await channel.send(message).catch(() => {});
+          } catch (e) {
+            console.error("Failed to send birthday message:", e);
+          }
+        }
+      } catch (e) {
+        console.error("Birthday check error:", e);
+      }
+    }
+  }, 60_000); // Check every minute, but only act at midnight
+
 // ─────────────────────────────────────────────────────
 // Message XP + Commands
 // ─────────────────────────────────────────────────────

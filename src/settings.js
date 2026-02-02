@@ -115,6 +115,63 @@ async function removeIgnoredChannel(guildId, channelId) {
   );
 }
 
+async function getBirthdaySettings(guildId) {
+  await run(
+    `INSERT INTO birthday_settings (guild_id) VALUES (?) ON CONFLICT (guild_id) DO NOTHING`,
+    [guildId]
+  );
+
+  const row = await get(
+    `SELECT * FROM birthday_settings WHERE guild_id=?`,
+    [guildId]
+  );
+
+  return {
+    guild_id: guildId,
+    birthday_channel_id: row?.birthday_channel_id || null,
+    birthday_message: row?.birthday_message || "🎉 Happy Birthday {user}! 🎂 Hope you have an amazing day! 🎈"
+  };
+}
+
+async function updateBirthdaySettings(guildId, updates) {
+  const allowed = new Set(["birthday_channel_id", "birthday_message"]);
+  const entries = Object.entries(updates).filter(([k]) => allowed.has(k));
+
+  if (entries.length === 0) return;
+
+  const setClause = entries.map(([k], i) => `${k} = $${i + 2}`).join(", ");
+  const values = entries.map(([, v]) => v);
+
+  await run(
+    `UPDATE birthday_settings SET ${setClause} WHERE guild_id = $1`,
+    [guildId, ...values]
+  );
+}
+
+async function setUserBirthday(guildId, userId, month, day) {
+  await run(
+    `INSERT INTO user_birthdays (guild_id, user_id, birth_month, birth_day)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (guild_id, user_id)
+     DO UPDATE SET birth_month = EXCLUDED.birth_month, birth_day = EXCLUDED.birth_day`,
+    [guildId, userId, month, day]
+  );
+}
+
+async function getUserBirthday(guildId, userId) {
+  return await get(
+    `SELECT birth_month, birth_day FROM user_birthdays WHERE guild_id=? AND user_id=?`,
+    [guildId, userId]
+  );
+}
+
+async function getTodaysBirthdays(guildId, month, day) {
+  return await all(
+    `SELECT user_id FROM user_birthdays WHERE guild_id=? AND birth_month=? AND birth_day=?`,
+    [guildId, month, day]
+  );
+}
+
 module.exports = {
   getGuildSettings,
   updateGuildSettings,
@@ -123,5 +180,10 @@ module.exports = {
   deleteLevelRole,
   getIgnoredChannels,
   addIgnoredChannel,
-  removeIgnoredChannel
+  removeIgnoredChannel,
+  getBirthdaySettings,
+  updateBirthdaySettings,
+  setUserBirthday,
+  getUserBirthday,
+  getTodaysBirthdays
 };

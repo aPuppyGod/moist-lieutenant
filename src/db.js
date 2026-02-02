@@ -32,6 +32,8 @@ const UPSERT_KEYS = {
   guild_settings: ["guild_id"],
   level_roles: ["guild_id", "level"],
   ignored_channels: ["guild_id", "channel_id"],
+  user_birthdays: ["guild_id", "user_id"],
+  birthday_settings: ["guild_id"],
   mee6_snapshot: ["guild_id", "snapshot_username"],
   private_voice_rooms: ["guild_id", "voice_channel_id"]
 };
@@ -182,6 +184,26 @@ async function initDb() {
       channel_id TEXT NOT NULL,
       channel_type TEXT NOT NULL,
       PRIMARY KEY (guild_id, channel_id)
+    )
+  `);
+
+  // Birthdays
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_birthdays (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      birth_month INTEGER NOT NULL,
+      birth_day INTEGER NOT NULL,
+      PRIMARY KEY (guild_id, user_id)
+    )
+  `);
+
+  // Birthday settings
+  await run(`
+    CREATE TABLE IF NOT EXISTS birthday_settings (
+      guild_id TEXT PRIMARY KEY,
+      birthday_channel_id TEXT DEFAULT NULL,
+      birthday_message TEXT DEFAULT '🎉 Happy Birthday {user}! 🎂 Hope you have an amazing day! 🎈'
     )
   `);
 

@@ -1,105 +1,3 @@
-  // Helper: get user and admin info for templates
-  function getTemplateOpts(req) {
-    const user = req.user || null;
-    let isAdmin = false;
-    if (user && typeof isAdminOrManagerDiscord === 'function' && req.app && req.app.locals && req.app.locals.client) {
-      isAdmin = isAdminOrManagerDiscord(user, req.app.locals.client);
-    } else if (user && typeof isAdminOrManagerDiscord === 'function') {
-      // fallback for direct calls
-      isAdmin = isAdminOrManagerDiscord(user, client);
-    }
-    return { user, isAdmin };
-  }
-  // Leaderboard page
-  app.get("/leaderboard", async (req, res) => {
-    // For now, use the first guild the bot is in
-    const guild = client.guilds.cache.first();
-    if (!guild) {
-      return res.send(htmlTemplate(`<h2>Leaderboard</h2><p>The bot is not in any servers.</p>`, { ...getTemplateOpts(req), active: "leaderboard" }));
-    }
-    // Fetch top 20 users by XP
-    const { all } = require("./db");
-    const rows = await all(
-      `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC LIMIT 20`,
-      [guild.id]
-    );
-    // Try to resolve usernames
-    await guild.members.fetch().catch(() => {});
-    const leaderboard = rows.map((r, i) => {
-      const member = guild.members.cache.get(r.user_id);
-      const name = member?.user?.tag || `<@${r.user_id}>`;
-      return `<tr><td>#${i+1}</td><td>${name}</td><td>${r.level}</td><td>${r.xp}</td></tr>`;
-    }).join("");
-    res.send(htmlTemplate(`
-      <h2>Leaderboard</h2>
-      <table>
-        <tr><th>Rank</th><th>User</th><th>Level</th><th>XP</th></tr>
-        ${leaderboard}
-      </table>
-    `, { ...getTemplateOpts(req), active: "leaderboard" }));
-  });
-// Helper: check if user is admin/manager in any guild the bot is in
-function isAdminOrManagerDiscord(user, client) {
-  if (!user || !user.id) return false;
-  for (const guild of client.guilds.cache.values()) {
-    const member = guild.members.cache.get(user.id);
-    if (member && (member.permissions.has("Administrator") || member.permissions.has("ManageGuild"))) {
-      return true;
-    }
-  }
-  // Bot manager override (set env var BOT_MANAGER_ID)
-  if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
-  return false;
-}
-
-// Middleware: require Discord login
-function requireDiscordLogin(req, res, next) {
-  if (req.isAuthenticated && req.isAuthenticated()) return next();
-  return res.redirect("/login");
-}
-
-// Middleware: require admin/manager
-function requireAdminOrManager(req, res, next) {
-  if (req.isAuthenticated && req.isAuthenticated() && isAdminOrManagerDiscord(req.user, client)) return next();
-  return res.status(403).send("You must be a Discord server admin or bot manager to access this page.");
-}
-const passport = require("passport");
-const DiscordStrategy = require("passport-discord").Strategy;
-// Discord OAuth2 config (set these in your environment)
-const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
-const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL || "http://localhost:3000/auth/discord/callback";
-
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
-
-passport.use(new DiscordStrategy({
-  clientID: DISCORD_CLIENT_ID,
-  clientSecret: DISCORD_CLIENT_SECRET,
-  callbackURL: DISCORD_CALLBACK_URL,
-  scope: ["identify", "guilds"]
-}, (accessToken, refreshToken, profile, done) => {
-  process.nextTick(() => done(null, profile));
-}));
-const express = require("express");
-const session = require("express-session");
-const { createCanvas, loadImage, registerFont } = require("canvas");
-const sharp = require("sharp");
-const path = require("path");
-const multer = require("multer");
-const upload = multer({ dest: "uploads/" });
-// In-memory store for user customizations (replace with DB in production)
-const userRankCardPrefs = {};
-const {
-  getGuildSettings,
-  updateGuildSettings,
-  getLevelRoles,
-  setLevelRole,
-  deleteLevelRole,
-  getIgnoredChannels,
-  addIgnoredChannel,
-  removeIgnoredChannel
-} = require("./settings");
 
 function htmlTemplate(content, opts = {}) {
   // opts: { user, isAdmin, active }
@@ -293,6 +191,73 @@ function isTextChannelLike(ch) {
 }
 
 function startDashboard(client) {
+    // Helper: get user and admin info for templates
+    function getTemplateOpts(req) {
+      const user = req.user || null;
+      let isAdmin = false;
+      if (user && typeof isAdminOrManagerDiscord === 'function' && req.app && req.app.locals && req.app.locals.client) {
+        isAdmin = isAdminOrManagerDiscord(user, req.app.locals.client);
+      } else if (user && typeof isAdminOrManagerDiscord === 'function') {
+        // fallback for direct calls
+        isAdmin = isAdminOrManagerDiscord(user, client);
+      }
+      return { user, isAdmin };
+    }
+
+    // Helper: check if user is admin/manager in any guild the bot is in
+    function isAdminOrManagerDiscord(user, client) {
+      if (!user || !user.id) return false;
+      for (const guild of client.guilds.cache.values()) {
+        const member = guild.members.cache.get(user.id);
+        if (member && (member.permissions.has("Administrator") || member.permissions.has("ManageGuild"))) {
+          return true;
+        }
+      }
+      // Bot manager override (set env var BOT_MANAGER_ID)
+      if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
+      return false;
+    }
+
+    // Middleware: require Discord login
+    function requireDiscordLogin(req, res, next) {
+      if (req.isAuthenticated && req.isAuthenticated()) return next();
+      return res.redirect("/login");
+    }
+
+    // Middleware: require admin/manager
+    function requireAdminOrManager(req, res, next) {
+      if (req.isAuthenticated && req.isAuthenticated() && isAdminOrManagerDiscord(req.user, client)) return next();
+      return res.status(403).send("You must be a Discord server admin or bot manager to access this page.");
+    }
+
+    // Leaderboard page
+    app.get("/leaderboard", async (req, res) => {
+      // For now, use the first guild the bot is in
+      const guild = client.guilds.cache.first();
+      if (!guild) {
+        return res.send(htmlTemplate(`<h2>Leaderboard</h2><p>The bot is not in any servers.</p>`, { ...getTemplateOpts(req), active: "leaderboard" }));
+      }
+      // Fetch top 20 users by XP
+      const { all } = require("./db");
+      const rows = await all(
+        `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC LIMIT 20`,
+        [guild.id]
+      );
+      // Try to resolve usernames
+      await guild.members.fetch().catch(() => {});
+      const leaderboard = rows.map((r, i) => {
+        const member = guild.members.cache.get(r.user_id);
+        const name = member?.user?.tag || `<@${r.user_id}>`;
+        return `<tr><td>#${i+1}</td><td>${name}</td><td>${r.level}</td><td>${r.xp}</td></tr>`;
+      }).join("");
+      res.send(htmlTemplate(`
+        <h2>Leaderboard</h2>
+        <table>
+          <tr><th>Rank</th><th>User</th><th>Level</th><th>XP</th></tr>
+          ${leaderboard}
+        </table>
+      `, { ...getTemplateOpts(req), active: "leaderboard" }));
+    });
   const app = express();
 
   // Sessions (must be before passport.session())

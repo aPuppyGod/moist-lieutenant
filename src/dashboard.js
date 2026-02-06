@@ -587,7 +587,9 @@ function startDashboard(client) {
     // Render customization form if logged in
     let formHtml = "";
     if (user) {
-      formHtml = `<form method="post" action="/lop/customize" enctype="multipart/form-data">
+      formHtml = `
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" />
+      <form id="customizeForm" method="post" action="/lop/customize" enctype="multipart/form-data">
         <div style="display:flex;flex-wrap:wrap;gap:18px;">
           <div><label>Background Color:<br><input type="color" name="bgcolor" value="${prefs.bgcolor || '#23272A'}" ${!isUnlocked('bgcolor') ? 'disabled' : ''}></label></div>
           <div><label>Gradient (comma colors):<br><input type="text" name="gradient" value="${prefs.gradient || ''}" placeholder="#23272A,#FFD700" ${!isUnlocked('gradient') ? 'disabled' : ''}></label></div>
@@ -597,10 +599,53 @@ function startDashboard(client) {
             <option value="ComicSansMS"${prefs.font==='ComicSansMS'?' selected':''}>Comic Sans MS</option>
             <option value="TimesNewRoman"${prefs.font==='TimesNewRoman'?' selected':''}>Times New Roman</option>
           </select></label></div>
-          <div><label>Background Image:<br><input type="file" name="bgimage" accept="image/*" ${!isUnlocked('bgimage') ? 'disabled' : ''}></label></div>
+          <div>
+            <label>Background Image:<br>
+              <input type="file" id="bgimageInput" name="bgimage" accept="image/*" ${!isUnlocked('bgimage') ? 'disabled' : ''}>
+            </label>
+            <div id="cropperContainer" style="margin-top:10px;display:none;">
+              <img id="cropperImage" style="max-width:100%;border-radius:8px;box-shadow:0 2px 8px #0002;" />
+            </div>
+            <input type="hidden" name="cropX" id="cropX">
+            <input type="hidden" name="cropY" id="cropY">
+            <input type="hidden" name="cropW" id="cropW">
+            <input type="hidden" name="cropH" id="cropH">
+          </div>
         </div>
         <button type="submit">Save Customization</button>
-      </form>`;
+      </form>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+      <script>
+        let cropper;
+        document.getElementById('bgimageInput').addEventListener('change', function(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = function(ev) {
+            const img = document.getElementById('cropperImage');
+            img.src = ev.target.result;
+            document.getElementById('cropperContainer').style.display = 'block';
+            if (cropper) cropper.destroy();
+            cropper = new Cropper(img, {
+              aspectRatio: 600/180,
+              viewMode: 1,
+              autoCropArea: 1,
+              movable: true,
+              zoomable: true,
+              rotatable: false,
+              scalable: false,
+              crop(event) {
+                document.getElementById('cropX').value = Math.round(event.detail.x);
+                document.getElementById('cropY').value = Math.round(event.detail.y);
+                document.getElementById('cropW').value = Math.round(event.detail.width);
+                document.getElementById('cropH').value = Math.round(event.detail.height);
+              }
+            });
+          };
+          reader.readAsDataURL(file);
+        });
+      </script>
+      `;
     }
     res.send(htmlTemplate(`
       <h2>Customize Your Rank Card</h2>
@@ -653,16 +698,24 @@ function startDashboard(client) {
     if (isUnlocked('gradient') && req.body.gradient) prefs.gradient = req.body.gradient;
     if (isUnlocked('font') && req.body.font) prefs.font = req.body.font;
     if (isUnlocked('bgimage') && req.file) {
-      // Crop/resize the uploaded image to fit the card size (600x180)
+      // Use crop parameters from client if provided
+      const sharp = require('sharp');
+      const cropX = parseInt(req.body.cropX) || 0;
+      const cropY = parseInt(req.body.cropY) || 0;
+      const cropW = parseInt(req.body.cropW) || 600;
+      const cropH = parseInt(req.body.cropH) || 180;
       const croppedPath = req.file.path + '_cropped.png';
-      sharp(req.file.path).resize(600, 180, { fit: 'cover' }).toFile(croppedPath, (err) => {
-        if (!err) {
-          prefs.bgimage = croppedPath;
-        } else {
-          prefs.bgimage = req.file.path; // fallback
-        }
-        res.redirect("/lop");
-      });
+      sharp(req.file.path)
+        .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
+        .resize(600, 180, { fit: 'cover' })
+        .toFile(croppedPath, (err) => {
+          if (!err) {
+            prefs.bgimage = croppedPath;
+          } else {
+            prefs.bgimage = req.file.path; // fallback
+          }
+          res.redirect("/lop");
+        });
       return;
     }
     res.redirect("/lop");

@@ -216,8 +216,8 @@ async function cmdRank(message, args) {
   // Always use PNG for Discord avatars (supported by node-canvas)
   let avatarURL = targetUser.displayAvatarURL({ format: "png", size: 128, dynamic: false });
   console.log("Rank card avatar URL:", avatarURL);
-  // If the URL is webp/gif, fallback to initials
-  if (avatarURL.endsWith('.webp') || avatarURL.endsWith('.gif')) {
+  // Only load if .png, otherwise fallback to initials
+  if (!avatarURL.endsWith('.png')) {
     ctx.save();
     ctx.beginPath();
     ctx.arc(90, 90, 60, 0, Math.PI * 2);
@@ -230,7 +230,7 @@ async function cmdRank(message, args) {
     const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
     ctx.fillText(initials, 80, 120);
     ctx.restore();
-    console.error("Avatar is webp/gif, fallback to initials for user:", targetUser.tag);
+    console.error("Avatar is not PNG, fallback to initials for user:", targetUser.tag);
   } else {
     try {
       const avatar = await loadImage(avatarURL);
@@ -243,44 +243,20 @@ async function cmdRank(message, args) {
       ctx.restore();
       avatarLoaded = true;
     } catch (e1) {
-      // Try direct fetch and buffer, using global fetch if available
-      try {
-        let fetchFn = (typeof fetch === 'function') ? fetch : null;
-        if (!fetchFn) {
-          fetchFn = require('node-fetch');
-        }
-        const res = await fetchFn(avatarURL);
-        console.log("Avatar fetch status:", res.status, res.headers ? res.headers.get('content-type') : '');
-        if (res.ok) {
-          const buffer = typeof res.buffer === 'function' ? await res.buffer() : Buffer.from(await res.arrayBuffer());
-          const avatar = await loadImage(buffer);
-          ctx.save();
-          ctx.beginPath();
-          ctx.arc(90, 90, 60, 0, Math.PI * 2);
-          ctx.closePath();
-          ctx.clip();
-          ctx.drawImage(avatar, 30, 30, 120, 120);
-          ctx.restore();
-          avatarLoaded = true;
-        } else {
-          throw new Error('Fetch not ok');
-        }
-      } catch (e2) {
-        // fallback: draw a circle with initials
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(90, 90, 60, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.clip();
-        ctx.fillStyle = "#555";
-        ctx.fillRect(30, 30, 120, 120);
-        ctx.font = "bold 40px OpenSans";
-        ctx.fillStyle = "#fff";
-        const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
-        ctx.fillText(initials, 80, 120);
-        ctx.restore();
-        console.error("Avatar load failed for user:", targetUser.tag, e1, e2);
-      }
+      // fallback: draw a circle with initials
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(90, 90, 60, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle = "#555";
+      ctx.fillRect(30, 30, 120, 120);
+      ctx.font = "bold 40px OpenSans";
+      ctx.fillStyle = "#fff";
+      const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
+      ctx.fillText(initials, 80, 120);
+      ctx.restore();
+      console.error("Avatar load failed for user:", targetUser.tag, e1);
     }
   }
   // Calculate leaderboard rank

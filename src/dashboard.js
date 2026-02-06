@@ -234,14 +234,13 @@ function startDashboard(client) {
     // Helper: check if user is admin/manager in any guild the bot is in
     function isAdminOrManagerDiscord(user, client) {
       if (!user || !user.id) return false;
+      if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
       for (const guild of client.guilds.cache.values()) {
         const member = guild.members.cache.get(user.id);
         if (member && (member.permissions.has("Administrator") || member.permissions.has("ManageGuild"))) {
           return true;
         }
       }
-      // Bot manager override (set env var BOT_MANAGER_ID)
-      if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
       return false;
     }
 
@@ -368,10 +367,7 @@ function startDashboard(client) {
       if (prefs.bgimage && isUnlocked("bgimage")) {
         try {
           let imgPath = path.resolve(prefs.bgimage);
-          // Crop the image to fit the card using sharp
-          let croppedPath = imgPath + "_cropped.png";
-          await sharp(imgPath).resize(width, height, { fit: 'cover' }).toFile(croppedPath);
-          const img = await loadImage(croppedPath);
+          const img = await loadImage(imgPath);
           ctx.drawImage(img, 0, 0, width, height);
         } catch (e) {
           ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#23272A";

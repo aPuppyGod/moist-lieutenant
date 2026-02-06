@@ -1,3 +1,46 @@
+// Helper: check if user is admin/manager in any guild the bot is in
+function isAdminOrManagerDiscord(user, client) {
+  if (!user || !user.id) return false;
+  for (const guild of client.guilds.cache.values()) {
+    const member = guild.members.cache.get(user.id);
+    if (member && (member.permissions.has("Administrator") || member.permissions.has("ManageGuild"))) {
+      return true;
+    }
+  }
+  // Bot manager override (set env var BOT_MANAGER_ID)
+  if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
+  return false;
+}
+
+// Middleware: require Discord login
+function requireDiscordLogin(req, res, next) {
+  if (req.isAuthenticated && req.isAuthenticated()) return next();
+  return res.redirect("/login");
+}
+
+// Middleware: require admin/manager
+function requireAdminOrManager(req, res, next) {
+  if (req.isAuthenticated && req.isAuthenticated() && isAdminOrManagerDiscord(req.user, client)) return next();
+  return res.status(403).send("You must be a Discord server admin or bot manager to access this page.");
+}
+const passport = require("passport");
+const DiscordStrategy = require("passport-discord").Strategy;
+// Discord OAuth2 config (set these in your environment)
+const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL || "http://localhost:3000/auth/discord/callback";
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
+
+passport.use(new DiscordStrategy({
+  clientID: DISCORD_CLIENT_ID,
+  clientSecret: DISCORD_CLIENT_SECRET,
+  callbackURL: DISCORD_CALLBACK_URL,
+  scope: ["identify", "guilds"]
+}, (accessToken, refreshToken, profile, done) => {
+  process.nextTick(() => done(null, profile));
+}));
 const express = require("express");
 const session = require("express-session");
 const { createCanvas, loadImage, registerFont } = require("canvas");
@@ -104,27 +147,78 @@ function isTextChannelLike(ch) {
 }
 
 function startDashboard(client) {
+      // Passport session setup
+      app.use(passport.initialize());
+      app.use(passport.session());
+
+      // Discord OAuth2 login
+      app.get("/login", passport.authenticate("discord"));
+      app.get("/auth/discord", passport.authenticate("discord"));
+      app.get("/auth/discord/callback",
+        passport.authenticate("discord", { failureRedirect: "/login" }),
+        (req, res) => {
+          // Successful authentication, redirect home.
+          res.redirect("/");
+        }
+      );
+      app.get("/logout", (req, res) => {
+        req.logout(() => {
+          res.redirect("/");
+        });
+      });
     const app = express();
-    // Serve the user's customized rank card as an image
+    // Serve the user's customized rank card as an image, enforcing unlocks
     app.get("/lop/rankcard/image", async (req, res) => {
       const userKey = req.ip;
       const prefs = userRankCardPrefs[userKey] || {};
+      // TODO: Replace with real user ID and guild ID if available
+      const userId = req.user?.id || null;
+      const guildId = null; // If you have a way to get the user's guild, set it here
+      let userLevel = 1;
+      let unlocks = null;
+      if (guildId && userId) {
+        // Fetch user level and unlocks from DB
+        const { getCustomizationUnlocks, getCustomizationRequiredLevel } = require("./settings");
+        const { get } = require("./db");
+        unlocks = await getCustomizationUnlocks(guildId);
+        const row = await get(
+          `SELECT level FROM user_xp WHERE guild_id=? AND user_id=?`,
+          [guildId, userId]
+        );
+        userLevel = row?.level ?? 1;
+      } else {
+        // Fallback: use defaults
+        unlocks = {
+          bgimage: 10,
+          gradient: 5,
+          bgcolor: 1,
+          font: 3,
+          border: 7,
+          avatarframe: 15
+        };
+      }
+
       // Canvas setup
       const width = 600, height = 200;
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext("2d");
 
-      // Background: image > gradient > color > default
-      if (prefs.bgimage) {
+      // Helper to check if a feature is unlocked
+      function isUnlocked(opt) {
+        return userLevel >= (unlocks[opt] ?? 1);
+      }
+
+      // Background: image > gradient > color > default, but only if unlocked
+      if (prefs.bgimage && isUnlocked("bgimage")) {
         try {
           const imgPath = path.resolve(prefs.bgimage);
           const img = await loadImage(imgPath);
           ctx.drawImage(img, 0, 0, width, height);
         } catch (e) {
-          ctx.fillStyle = prefs.bgcolor || "#23272A";
+          ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#23272A";
           ctx.fillRect(0, 0, width, height);
         }
-      } else if (prefs.gradient) {
+      } else if (prefs.gradient && isUnlocked("gradient")) {
         const colors = prefs.gradient.split(",").map(s => s.trim()).filter(Boolean);
         if (colors.length > 1) {
           const grad = ctx.createLinearGradient(0, 0, width, height);
@@ -132,25 +226,27 @@ function startDashboard(client) {
           ctx.fillStyle = grad;
           ctx.fillRect(0, 0, width, height);
         } else {
-          ctx.fillStyle = prefs.bgcolor || "#23272A";
+          ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#23272A";
           ctx.fillRect(0, 0, width, height);
         }
       } else {
-        ctx.fillStyle = prefs.bgcolor || "#23272A";
+        ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#23272A";
         ctx.fillRect(0, 0, width, height);
       }
 
-      // Font
+      // Font (only if unlocked)
       let fontFamily = "OpenSans";
-      if (prefs.font === "Arial") fontFamily = "Arial";
-      if (prefs.font === "ComicSansMS") fontFamily = "Comic Sans MS";
-      if (prefs.font === "TimesNewRoman") fontFamily = "Times New Roman";
+      if (prefs.font && isUnlocked("font")) {
+        if (prefs.font === "Arial") fontFamily = "Arial";
+        if (prefs.font === "ComicSansMS") fontFamily = "Comic Sans MS";
+        if (prefs.font === "TimesNewRoman") fontFamily = "Times New Roman";
+      }
       ctx.font = `bold 28px ${fontFamily}`;
       ctx.fillStyle = "#fff";
       ctx.fillText("Your Name", 170, 70);
       ctx.font = `bold 22px ${fontFamily}`;
       ctx.fillStyle = "#FFD700";
-      ctx.fillText(`Level: 1`, 170, 110);
+      ctx.fillText(`Level: ${userLevel}`, 170, 110);
       ctx.font = `16px ${fontFamily}`;
       ctx.fillStyle = "#aaa";
       ctx.fillText(`XP: 0 / 100`, 170, 140);
@@ -258,13 +354,74 @@ function startDashboard(client) {
     return res.redirect("/");
   });
 
-  app.get("/", mustBeLoggedIn, async (_req, res) => {
+  // Public home page (optional: show info or redirect to /lop)
+  app.get("/", (req, res) => {
+    res.redirect("/lop");
+  });
+
+  // Public rank card customization UI (example, not full-featured)
+  app.get("/lop", async (req, res) => {
+    // TODO: Replace with real user ID and guild ID if available
+    const userId = req.user?.id || null;
+    const guildId = null; // If you have a way to get the user's guild, set it here
+    let userLevel = 1;
+    let unlocks = null;
+    if (guildId && userId) {
+      const { getCustomizationUnlocks } = require("./settings");
+      const { get } = require("./db");
+      unlocks = await getCustomizationUnlocks(guildId);
+      const row = await get(
+        `SELECT level FROM user_xp WHERE guild_id=? AND user_id=?`,
+        [guildId, userId]
+      );
+      userLevel = row?.level ?? 1;
+    } else {
+      unlocks = {
+        bgimage: 10,
+        gradient: 5,
+        bgcolor: 1,
+        font: 3,
+        border: 7,
+        avatarframe: 15
+      };
+    }
+    const customizationOptions = [
+      { key: "bgimage", label: "Custom Background Image" },
+      { key: "gradient", label: "Custom Gradient" },
+      { key: "bgcolor", label: "Custom Background Color" },
+      { key: "font", label: "Custom Font" },
+      { key: "border", label: "Custom Border" },
+      { key: "avatarframe", label: "Avatar Frame" }
+    ];
+    function isUnlocked(opt) {
+      return userLevel >= (unlocks[opt] ?? 1);
+    }
+    res.send(htmlTemplate(`
+      <h2>Customize Your Rank Card</h2>
+      <p>Your Level: <b>${userLevel}</b></p>
+      <table style="border-collapse:collapse;">
+        <tr><th style="text-align:left;">Feature</th><th style="text-align:left;">Status</th><th style="text-align:left;">Unlocks At</th></tr>
+        ${customizationOptions.map(opt => `
+          <tr>
+            <td>${escapeHtml(opt.label)}</td>
+            <td>${isUnlocked(opt.key) ? '<span style="color:green">Unlocked</span>' : '<span style="color:#b8860b">Locked</span>'}</td>
+            <td>Level ${unlocks[opt.key]}</td>
+          </tr>
+        `).join("")}
+      </table>
+      <p style="margin-top:20px;">(Customization form coming soon. Only unlocked features will be available for editing.)</p>
+      <img src="/lop/rankcard/image" alt="Rank Card Preview" style="margin-top:20px;border:1px solid #ccc;max-width:100%;" />
+    `));
+  });
+
+  // Admin dashboard (Discord admin/manager only)
+  app.get("/dashboard", requireDiscordLogin, requireAdminOrManager, async (req, res) => {
     const guilds = client.guilds.cache
       .map((g) => ({ id: g.id, name: g.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
-
     res.send(htmlTemplate(`
-      <h2>Dashboard</h2>
+      <h2>Bot Dashboard</h2>
+      <p>Logged in as: ${escapeHtml(req.user.username)}#${escapeHtml(req.user.discriminator)}</p>
       <p><a href="/logout">Logout</a></p>
       <h3>Servers</h3>
       <ul>
@@ -291,6 +448,18 @@ function startDashboard(client) {
       .map((c) => ({ id: c.id, name: c.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    // Customization unlocks UI
+    const { getCustomizationUnlocks } = require("./settings");
+    const unlocks = await getCustomizationUnlocks(guildId);
+    const customizationOptions = [
+      { key: "bgimage", label: "Custom Background Image" },
+      { key: "gradient", label: "Custom Gradient" },
+      { key: "bgcolor", label: "Custom Background Color" },
+      { key: "font", label: "Custom Font" },
+      { key: "border", label: "Custom Border" },
+      { key: "avatarframe", label: "Avatar Frame" }
+    ];
+
     res.send(htmlTemplate(`
       <h2>${escapeHtml(guild.name)}</h2>
       <p><a href="/">Back</a> | <a href="/logout">Logout</a></p>
@@ -306,6 +475,22 @@ function startDashboard(client) {
         <label>Reaction Cooldown Seconds <input name="reaction_cooldown_seconds" value="${escapeHtml(settings.reaction_cooldown_seconds)}" /></label><br/>
         <label>Voice XP Per Minute <input name="voice_xp_per_minute" value="${escapeHtml(settings.voice_xp_per_minute)}" /></label><br/><br/>
         <button type="submit">Save XP Settings</button>
+      </form>
+
+      <hr/>
+
+      <h3>Rank Card Customization Unlocks</h3>
+      <form method="post" action="/guild/${guildId}/customization-unlocks">
+        <table style="border-collapse:collapse;">
+          <tr><th style="text-align:left;">Feature</th><th style="text-align:left;">Required Level</th></tr>
+          ${customizationOptions.map(opt => `
+            <tr>
+              <td>${escapeHtml(opt.label)}</td>
+              <td><input type="number" min="1" max="1000" name="${opt.key}" value="${unlocks[opt.key] ?? 1}" style="width:60px" /></td>
+            </tr>
+          `).join("")}
+        </table>
+        <button type="submit">Save Customization Unlocks</button>
       </form>
 
       <hr/>
@@ -386,6 +571,28 @@ function startDashboard(client) {
         `).join("")}
       </ul>
     `));
+    // ─────────────────────────────────────────────
+    // Save customization unlocks
+    // ─────────────────────────────────────────────
+    app.post("/guild/:guildId/customization-unlocks", mustBeLoggedIn, async (req, res) => {
+      try {
+        const guildId = req.params.guildId;
+        const { setCustomizationUnlock } = require("./settings");
+        const customizationOptions = [
+          "bgimage", "gradient", "bgcolor", "font", "border", "avatarframe"
+        ];
+        for (const key of customizationOptions) {
+          const val = parseInt(req.body[key], 10);
+          if (Number.isInteger(val) && val > 0) {
+            await setCustomizationUnlock(guildId, key, val);
+          }
+        }
+        return res.redirect(`/guild/${guildId}`);
+      } catch (e) {
+        console.error("customization-unlocks save error:", e);
+        return res.status(500).send("Internal Server Error");
+      }
+    });
   });
 
   // ─────────────────────────────────────────────

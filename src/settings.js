@@ -123,5 +123,54 @@ module.exports = {
   deleteLevelRole,
   getIgnoredChannels,
   addIgnoredChannel,
-  removeIgnoredChannel
+  removeIgnoredChannel,
+
+  // Customization unlocks
+  getCustomizationUnlocks,
+  setCustomizationUnlock,
+  getCustomizationRequiredLevel
 };
+
+// ─────────────────────────────────────────────
+// Customization unlocks (per-guild, per-option required level)
+// ─────────────────────────────────────────────
+
+const DEFAULT_UNLOCKS = {
+  bgimage: 10,      // Custom background image
+  gradient: 5,      // Custom gradient
+  bgcolor: 1,       // Custom background color
+  font: 3,          // Custom font
+  border: 7,        // Custom border
+  avatarframe: 15   // Avatar frame
+};
+
+async function getCustomizationUnlocks(guildId) {
+  // Returns { option: required_level, ... } with defaults filled in
+  const rows = await all(
+    `SELECT option, required_level FROM customization_unlocks WHERE guild_id=?`,
+    [guildId]
+  );
+  const result = { ...DEFAULT_UNLOCKS };
+  for (const r of rows) {
+    result[r.option] = r.required_level;
+  }
+  return result;
+}
+
+async function setCustomizationUnlock(guildId, option, requiredLevel) {
+  await run(
+    `INSERT INTO customization_unlocks (guild_id, option, required_level)
+     VALUES (?, ?, ?)
+     ON CONFLICT (guild_id, option) DO UPDATE SET required_level=excluded.required_level`,
+    [guildId, option, requiredLevel]
+  );
+}
+
+async function getCustomizationRequiredLevel(guildId, option) {
+  const row = await get(
+    `SELECT required_level FROM customization_unlocks WHERE guild_id=? AND option=?`,
+    [guildId, option]
+  );
+  if (row && typeof row.required_level === 'number') return row.required_level;
+  return DEFAULT_UNLOCKS[option] ?? 1;
+}

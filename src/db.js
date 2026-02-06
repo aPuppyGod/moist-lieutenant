@@ -210,6 +210,16 @@ async function initDb() {
       PRIMARY KEY (guild_id, voice_channel_id)
     )
   `);
+
+  // Customization unlocks (per-guild, per-option required level)
+  await run(`
+    CREATE TABLE IF NOT EXISTS customization_unlocks (
+      guild_id TEXT NOT NULL,
+      option TEXT NOT NULL,
+      required_level INTEGER NOT NULL,
+      PRIMARY KEY (guild_id, option)
+    )
+  `);
 }
 
 module.exports = {

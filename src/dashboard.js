@@ -147,26 +147,26 @@ function isTextChannelLike(ch) {
 }
 
 function startDashboard(client) {
-      // Passport session setup
-      app.use(passport.initialize());
-      app.use(passport.session());
+  const app = express();
+  // Passport session setup
+  app.use(passport.initialize());
+  app.use(passport.session());
 
-      // Discord OAuth2 login
-      app.get("/login", passport.authenticate("discord"));
-      app.get("/auth/discord", passport.authenticate("discord"));
-      app.get("/auth/discord/callback",
-        passport.authenticate("discord", { failureRedirect: "/login" }),
-        (req, res) => {
-          // Successful authentication, redirect home.
-          res.redirect("/");
-        }
-      );
-      app.get("/logout", (req, res) => {
-        req.logout(() => {
-          res.redirect("/");
-        });
-      });
-    const app = express();
+  // Discord OAuth2 login
+  app.get("/login", passport.authenticate("discord"));
+  app.get("/auth/discord", passport.authenticate("discord"));
+  app.get("/auth/discord/callback",
+    passport.authenticate("discord", { failureRedirect: "/login" }),
+    (req, res) => {
+      // Successful authentication, redirect home.
+      res.redirect("/");
+    }
+  );
+  app.get("/logout", (req, res) => {
+    req.logout(() => {
+      res.redirect("/");
+    });
+  });
     // Serve the user's customized rank card as an image, enforcing unlocks
     app.get("/lop/rankcard/image", async (req, res) => {
       const userKey = req.ip;

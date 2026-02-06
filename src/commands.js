@@ -1,7 +1,8 @@
 // src/commands.js
-const { PermissionsBitField, ChannelType } = require("discord.js");
+const { PermissionsBitField, ChannelType, AttachmentBuilder, EmbedBuilder } = require("discord.js");
 const { get, all, run } = require("./db");
-const { levelFromXp, xpForLevel } = require("./xp");
+const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
+const { createCanvas, loadImage } = require("canvas");
 const { getLevelRoles } = require("./settings");
 const fs = require("fs");
 const path = require("path");
@@ -176,58 +177,89 @@ async function cmdHelp(message) {
 async function cmdRank(message, args) {
   if (!message.guild) return;
 
-  // Use smart picker for !rank
-  const arg = args[0] || "";
-  let pick;
-  if (arg) {
-    pick = await pickUserSmart(message, arg);
-    if (!pick) {
-      await message.reply("User not found. Usage: `!rank <user>`").catch(() => {});
-      return;
-    }
-    if (pick.ambiguous) {
+  // Use smart picker for !rank <user>
+  let targetUser = message.mentions.users.first() || message.author;
+  if (args[0]) {
+    const pick = await pickUserSmart(message, args[0]);
+    if (pick && !pick.ambiguous) targetUser = pick.member.user;
+    if (pick && pick.ambiguous) {
       await message.reply(`Multiple users match: ${pick.matches.join(", ")}. Please be more specific or use their ID/username.`).catch(() => {});
       return;
     }
   }
-  const member = pick ? pick.member : message.guild.members.cache.get(message.author.id);
-  const user = member.user;
 
   const row = await get(
     `SELECT xp, level FROM user_xp WHERE guild_id=? AND user_id=?`,
-    [message.guild.id, user.id]
+    [message.guild.id, targetUser.id]
   );
 
   const xp = row?.xp ?? 0;
   const level = row?.level ?? 0;
-  const nextXp = typeof xpForLevel === "function" ? xpForLevel(level + 1) : xp + 1000;
-  const remaining = Math.max(0, nextXp - xp);
+  const xpStart = totalXpForLevel(level);
+  const xpNext = xpStart + xpToNextLevel(level);
+  const xpIntoLevel = xp - xpStart;
+  const xpToNext = xpNext - xp;
 
-  // Find rank
-  const leaderboard = await all(
-    `SELECT user_id, xp FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
-    [message.guild.id]
-  );
-  const rank = leaderboard.findIndex(r => r.user_id === user.id) + 1;
+  // Rank card image
+  const width = 600, height = 180;
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext("2d");
 
-  // Avatar
-  let avatarUrl;
+  // Background
+  ctx.fillStyle = "#23272A";
+  ctx.fillRect(0, 0, width, height);
+
+  // Profile pic
+  let avatarURL = targetUser.displayAvatarURL({ format: "png", size: 128 });
   try {
-    avatarUrl = user.displayAvatarURL({ format: 'png', size: 128 });
+    const avatar = await loadImage(avatarURL);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(90, 90, 60, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(avatar, 30, 30, 120, 120);
+    ctx.restore();
   } catch (e) {
-    avatarUrl = user.avatarURL || user.defaultAvatarURL || null;
+    // fallback: no avatar
   }
-  const { generateRankCard } = require('./rankCard');
-  const buffer = await generateRankCard({
-    avatarUrl,
-    username: user.username,
-    rank,
-    level,
-    currentXP: xp,
-    xpToNextLevel: nextXp
-  });
 
-  await message.reply({ files: [{ attachment: buffer, name: 'rank_card.png' }] }).catch(() => {});
+  // Name
+  ctx.font = "bold 28px Arial";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(targetUser.tag, 170, 70);
+
+  // Level
+  ctx.font = "bold 22px Arial";
+  ctx.fillStyle = "#FFD700";
+  ctx.fillText(`Level: ${level}`, 170, 110);
+
+  // XP
+  ctx.font = "16px Arial";
+  ctx.fillStyle = "#aaa";
+  ctx.fillText(`XP: ${xp} / ${xpNext} (+${xpToNext} to next)`, 170, 140);
+
+  // Progress bar
+  const barX = 170, barY = 150, barW = 380, barH = 20;
+  ctx.fillStyle = "#444";
+  ctx.fillRect(barX, barY, barW, barH);
+  const progress = Math.max(0, Math.min(1, (xp - xpStart) / (xpNext - xpStart)));
+  ctx.fillStyle = "#43B581";
+  ctx.fillRect(barX, barY, barW * progress, barH);
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(barX, barY, barW, barH);
+
+  // Attach and embed
+  const buffer = canvas.toBuffer();
+  const attachment = new AttachmentBuilder(buffer, { name: "rank.png" });
+  const embed = new EmbedBuilder()
+    .setTitle(`${targetUser.tag}'s Rank Card`)
+    .setColor(0x43B581)
+    .setImage("attachment://rank.png")
+    .setDescription(`Level: **${level}**\nXP: **${xp}**\nXP to next: **${xpToNext}**`);
+
+  await message.reply({ embeds: [embed], files: [attachment] }).catch(() => {});
 }
 
 async function cmdLeaderboard(message, args) {

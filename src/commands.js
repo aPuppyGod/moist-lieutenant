@@ -224,18 +224,16 @@ async function cmdRank(message, args) {
     // fallback: no avatar
   }
 
-  // Name
-  ctx.font = "bold 28px Arial";
+  // Use a basic font that works everywhere
+  ctx.font = "bold 28px sans-serif";
   ctx.fillStyle = "#fff";
   ctx.fillText(targetUser.tag, 170, 70);
 
-  // Level
-  ctx.font = "bold 22px Arial";
+  ctx.font = "bold 22px sans-serif";
   ctx.fillStyle = "#FFD700";
   ctx.fillText(`Level: ${level}`, 170, 110);
 
-  // XP
-  ctx.font = "16px Arial";
+  ctx.font = "16px sans-serif";
   ctx.fillStyle = "#aaa";
   ctx.fillText(`XP: ${xp} / ${xpNext} (+${xpToNext} to next)`, 170, 140);
 
@@ -250,16 +248,15 @@ async function cmdRank(message, args) {
   ctx.lineWidth = 2;
   ctx.strokeRect(barX, barY, barW, barH);
 
-  // Attach and embed
+  // Progress bar text
+  ctx.font = "bold 16px sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(`${xpIntoLevel} / ${xpToNextLevel(level)} XP this level`, barX + 10, barY + 16);
+
+  // Attach only (no embed)
   const buffer = canvas.toBuffer();
   const attachment = new AttachmentBuilder(buffer, { name: "rank.png" });
-  const embed = new EmbedBuilder()
-    .setTitle(`${targetUser.tag}'s Rank Card`)
-    .setColor(0x43B581)
-    .setImage("attachment://rank.png")
-    .setDescription(`Level: **${level}**\nXP: **${xp}**\nXP to next: **${xpToNext}**`);
-
-  await message.reply({ embeds: [embed], files: [attachment] }).catch(() => {});
+  await message.reply({ files: [attachment] }).catch(() => {});
 }
 
 async function cmdLeaderboard(message, args) {

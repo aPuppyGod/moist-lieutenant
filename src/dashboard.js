@@ -115,6 +115,7 @@ app.post("/lop/rankcard/customize", upload.single("bgimage"), async (req, res) =
         </div>
       `));
     });
+const {
   getGuildSettings,
   updateGuildSettings,
   getLevelRoles,

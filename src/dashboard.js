@@ -1,3 +1,4 @@
+const express = require("express");
 const { createCanvas, loadImage, registerFont } = require("canvas");
 const sharp = require("sharp");
 const path = require("path");

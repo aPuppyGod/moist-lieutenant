@@ -148,7 +148,26 @@ function isTextChannelLike(ch) {
 
 function startDashboard(client) {
   const app = express();
-  // Passport session setup
+
+  // Sessions (must be before passport.session())
+  app.set("trust proxy", 1);
+  app.use(
+    session({
+      name: "lop_dashboard_session",
+      secret: process.env.DASHBOARD_SESSION_SECRET || "change-me",
+      resave: false,
+      saveUninitialized: false,
+      rolling: true,
+      cookie: {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: false, // set true only when behind HTTPS and configured correctly
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      }
+    })
+  );
+
+  // Passport session setup (must be after session)
   app.use(passport.initialize());
   app.use(passport.session());
 

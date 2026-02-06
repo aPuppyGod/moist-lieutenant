@@ -426,7 +426,6 @@ function startDashboard(client) {
         };
         fontFamily = fontMap[prefs.font] || "'Open Sans',sans-serif";
       }
-      }
       // Draw profile pic (circle)
       ctx.save();
       ctx.beginPath();

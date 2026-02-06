@@ -9,106 +9,112 @@ const userRankCardPrefs = {};
 app.post("/lop/rankcard/customize", upload.single("bgimage"), async (req, res) => {
   // For demo: use IP as user key (replace with real user ID if you add auth)
   const userKey = req.ip;
-  const { bgcolor, gradient, font } = req.body;
-  let bgimage = null;
-  if (req.file) {
-    bgimage = req.file.path;
-  }
-  userRankCardPrefs[userKey] = { bgcolor, gradient, font, bgimage };
-  res.send(htmlTemplate(`
-    <h2>Rank Card Customization Saved!</h2>
-    <div><a href="/lop">Back to Leaderboard</a> | <a href="/lop/rankcard">View Rank Card</a></div>
-    <pre>${JSON.stringify(userRankCardPrefs[userKey], null, 2)}</pre>
-    <div style="margin-top:32px;text-align:center;color:#aaa;font-size:12px;">
-      <a href="/admin">Admin Login</a> (for server managers only)
-    </div>
-  `));
-});
-// ─────────────────────────────────────────────
-// Public Lop-Bot page: leaderboard + rank card customization
-// ─────────────────────────────────────────────
-app.get("/lop", async (req, res) => {
-  // Fetch leaderboard (top 10)
-  const guild = client.guilds.cache.first();
-  let leaderboard = [];
-  if (guild) {
-    leaderboard = await require("./db").all(
-      `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC LIMIT 10`,
-      [guild.id]
-    );
-  }
+  const upload = multer({ dest: "uploads/" });
+  // In-memory store for user customizations (replace with DB in production)
+  const userRankCardPrefs = {};
 
-  // Simple HTML UI scaffold
-  res.send(htmlTemplate(`
-    <h2>Lop-Bot Leaderboard</h2>
-    <div style="margin-bottom:24px">
-      <a href="/lop">Leaderboard</a> |
-      <a href="/lop/rankcard">Your Rank Card</a> |
-      <a href="/admin">Admin</a>
-    </div>
-    <table style="width:100%;max-width:600px;margin:auto;border-collapse:collapse;">
-      <tr style="background:#eee;"><th>Rank</th><th>User</th><th>Level</th><th>XP</th></tr>
-      ${leaderboard.map((r, i) => `
-        <tr style="background:${i%2?'#f9f9f9':'#fff'};">
-          <td style="text-align:center;">#${i+1}</td>
-          <td><span id="user-${r.user_id}">${r.user_id}</span></td>
-          <td style="text-align:center;">${r.level}</td>
-          <td style="text-align:center;">${r.xp}</td>
-        </tr>
-      `).join("")}
-    </table>
-    <div style="margin-top:32px;text-align:center;color:#888;font-size:14px;">
-      <b>Customize your rank card:</b> <a href="/lop/rankcard">View & Customize</a>
-    </div>
-    <div style="margin-top:32px;text-align:center;color:#aaa;font-size:12px;">
-      <b>Note:</b> This page does not show admin settings.<br>
-      <a href="/admin">Admin Login</a> (for server managers only)
-    </div>
-  `));
-});
+  function startDashboard(client) {
+    const app = express();
 
-// Rank card view/customization page (UI scaffold)
-app.get("/lop/rankcard", async (req, res) => {
-  // For demo: use IP as user key (replace with real user ID if you add auth)
-  const userKey = req.ip;
-  const prefs = userRankCardPrefs[userKey] || {};
-  res.send(htmlTemplate(`
-    <h2>Your Lop-Bot Rank Card</h2>
-    <div style="margin-bottom:24px">
-      <a href="/lop">Leaderboard</a> |
-      <a href="/lop/rankcard">Your Rank Card</a> |
-      <a href="/admin">Admin</a>
-    </div>
-    <div style="max-width:600px;margin:auto;">
-      <img src="/lop/rankcard/image" alt="Rank Card Preview" style="width:100%;max-width:500px;border-radius:16px;box-shadow:0 2px 12px #0002;" />
-      <form method="post" action="/lop/rankcard/customize" enctype="multipart/form-data" style="margin-top:24px;">
-        <label>Background Color: <input type="color" name="bgcolor" value="${prefs.bgcolor || '#23272A'}" /></label><br><br>
-        <label>Gradient Colors: <input type="text" name="gradient" value="${prefs.gradient || ''}" placeholder="e.g. #23272A,#43B581" /></label><br><br>
-        <label>Background Image: <input type="file" name="bgimage" accept="image/*" /></label><br><br>
-        <label>Font: <select name="font">
-          <option value="OpenSans" ${prefs.font === 'OpenSans' ? 'selected' : ''}>Open Sans</option>
-          <option value="Arial" ${prefs.font === 'Arial' ? 'selected' : ''}>Arial</option>
-          <option value="ComicSansMS" ${prefs.font === 'ComicSansMS' ? 'selected' : ''}>Comic Sans MS</option>
-          <option value="TimesNewRoman" ${prefs.font === 'TimesNewRoman' ? 'selected' : ''}>Times New Roman</option>
-        </select></label><br><br>
-        <button type="submit">Save Customization</button>
-      </form>
-      <div style="margin-top:24px;">
-        <b>Your saved customization:</b>
-        <pre>${JSON.stringify(prefs, null, 2)}</pre>
-      </div>
-    </div>
-    <div style="margin-top:32px;text-align:center;color:#aaa;font-size:12px;">
-      <b>Note:</b> This page does not show admin settings.<br>
-      <a href="/admin">Admin Login</a> (for server managers only)
-    </div>
-  `));
-});
-// src/dashboard.js
-const express = require("express");
-const session = require("express-session");
+    // Handle rank card customization POST (save settings)
+    app.post("/lop/rankcard/customize", upload.single("bgimage"), async (req, res) => {
+      // For demo: use IP as user key (replace with real user ID if you add auth)
+      const userKey = req.ip;
+      const { bgcolor, gradient, font } = req.body;
+      let bgimage = null;
+      if (req.file) {
+        bgimage = req.file.path;
+      }
+      userRankCardPrefs[userKey] = { bgcolor, gradient, font, bgimage };
+      res.send(htmlTemplate(`
+        <h2>Rank Card Customization Saved!</h2>
+        <div><a href="/lop">Back to Leaderboard</a> | <a href="/lop/rankcard">View Rank Card</a></div>
+        <pre>${JSON.stringify(userRankCardPrefs[userKey], null, 2)}</pre>
+        <div style="margin-top:32px;text-align:center;color:#aaa;font-size:12px;">
+          <a href="/admin">Admin Login</a> (for server managers only)
+        </div>
+      `));
+    });
 
-const {
+    // ─────────────────────────────────────────────
+    // Public Lop-Bot page: leaderboard + rank card customization
+    // ─────────────────────────────────────────────
+    app.get("/lop", async (req, res) => {
+      // Fetch leaderboard (top 10)
+      const guild = client.guilds.cache.first();
+      let leaderboard = [];
+      if (guild) {
+        leaderboard = await require("./db").all(
+          `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC LIMIT 10`,
+          [guild.id]
+        );
+      }
+      // Simple HTML UI scaffold
+      res.send(htmlTemplate(`
+        <h2>Lop-Bot Leaderboard</h2>
+        <div style="margin-bottom:24px">
+          <a href="/lop">Leaderboard</a> |
+          <a href="/lop/rankcard">Your Rank Card</a> |
+          <a href="/admin">Admin</a>
+        </div>
+        <table style="width:100%;max-width:600px;margin:auto;border-collapse:collapse;">
+          <tr style="background:#eee;"><th>Rank</th><th>User</th><th>Level</th><th>XP</th></tr>
+          ${leaderboard.map((r, i) => `
+            <tr style="background:${i%2?'#f9f9f9':'#fff'};">
+              <td style="text-align:center;">#${i+1}</td>
+              <td><span id="user-${r.user_id}">${r.user_id}</span></td>
+              <td style="text-align:center;">${r.level}</td>
+              <td style="text-align:center;">${r.xp}</td>
+            </tr>
+          `).join("")}
+        </table>
+        <div style="margin-top:32px;text-align:center;color:#888;font-size:14px;">
+          <b>Customize your rank card:</b> <a href="/lop/rankcard">View & Customize</a>
+        </div>
+        <div style="margin-top:32px;text-align:center;color:#aaa;font-size:12px;">
+          <b>Note:</b> This page does not show admin settings.<br>
+          <a href="/admin">Admin Login</a> (for server managers only)
+        </div>
+      `));
+    });
+
+    // Rank card view/customization page (UI scaffold)
+    app.get("/lop/rankcard", async (req, res) => {
+      // For demo: use IP as user key (replace with real user ID if you add auth)
+      const userKey = req.ip;
+      const prefs = userRankCardPrefs[userKey] || {};
+      res.send(htmlTemplate(`
+        <h2>Your Lop-Bot Rank Card</h2>
+        <div style="margin-bottom:24px">
+          <a href="/lop">Leaderboard</a> |
+          <a href="/lop/rankcard">Your Rank Card</a> |
+          <a href="/admin">Admin</a>
+        </div>
+        <div style="max-width:600px;margin:auto;">
+          <img src="/lop/rankcard/image" alt="Rank Card Preview" style="width:100%;max-width:500px;border-radius:16px;box-shadow:0 2px 12px #0002;" />
+          <form method="post" action="/lop/rankcard/customize" enctype="multipart/form-data" style="margin-top:24px;">
+            <label>Background Color: <input type="color" name="bgcolor" value="${prefs.bgcolor || '#23272A'}" /></label><br><br>
+            <label>Gradient Colors: <input type="text" name="gradient" value="${prefs.gradient || ''}" placeholder="e.g. #23272A,#43B581" /></label><br><br>
+            <label>Background Image: <input type="file" name="bgimage" accept="image/*" /></label><br><br>
+            <label>Font: <select name="font">
+              <option value="OpenSans" ${prefs.font === 'OpenSans' ? 'selected' : ''}>Open Sans</option>
+              <option value="Arial" ${prefs.font === 'Arial' ? 'selected' : ''}>Arial</option>
+              <option value="ComicSansMS" ${prefs.font === 'ComicSansMS' ? 'selected' : ''}>Comic Sans MS</option>
+              <option value="TimesNewRoman" ${prefs.font === 'TimesNewRoman' ? 'selected' : ''}>Times New Roman</option>
+            </select></label><br><br>
+            <button type="submit">Save Customization</button>
+          </form>
+          <div style="margin-top:24px;">
+            <b>Your saved customization:</b>
+            <pre>${JSON.stringify(prefs, null, 2)}</pre>
+          </div>
+        </div>
+        <div style="margin-top:32px;text-align:center;color:#aaa;font-size:12px;">
+          <b>Note:</b> This page does not show admin settings.<br>
+          <a href="/admin">Admin Login</a> (for server managers only)
+        </div>
+      `));
+    });
   getGuildSettings,
   updateGuildSettings,
   getLevelRoles,

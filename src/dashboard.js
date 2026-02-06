@@ -1,13 +1,9 @@
 
-
 const express = require("express");
 const session = require("express-session");
 const passport = require("passport");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
-const express = require("express");
-const session = require("express-session");
-const passport = require("passport");
 
 function htmlTemplate(content, opts = {}) {
   // opts: { user, isAdmin, active }

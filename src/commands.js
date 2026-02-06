@@ -817,19 +817,20 @@ async function cmdClaimAll(message) {
 // ─────────────────────────────────────────────────────
 
 async function handleCommands(message) {
-    // Lop-Bot public site command
-    if (cmd === "lop-bot" || cmd === "lopbot") {
-      // You can change this URL to your actual public site URL
-      const publicUrl = process.env.LOPBOT_PUBLIC_URL || "https://lop-bot.example.com/lop";
-      await message.reply(`View the Lop-Bot leaderboard and customize your rank card here: ${publicUrl}`).catch(() => {});
-      return true;
-    }
   if (!message || !message.content) return false;
 
   const parsed = parseCommand(message.content);
   if (!parsed) return false;
 
   const { cmd, args } = parsed;
+
+  // Lop-Bot public site command
+  if (cmd === "lop-bot" || cmd === "lopbot") {
+    // You can change this URL to your actual public site URL
+    const publicUrl = process.env.LOPBOT_PUBLIC_URL || "https://lop-bot.example.com/lop";
+    await message.reply(`View the Lop-Bot leaderboard and customize your rank card here: ${publicUrl}`).catch(() => {});
+    return true;
+  }
 
   // Debug log so you can see the handler is firing
   console.log("[CMD]", cmd, args.join(" "));

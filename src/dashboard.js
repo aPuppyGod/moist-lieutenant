@@ -191,6 +191,7 @@ function isTextChannelLike(ch) {
 }
 
 function startDashboard(client) {
+    const app = express();
     // Helper: get user and admin info for templates
     function getTemplateOpts(req) {
       const user = req.user || null;

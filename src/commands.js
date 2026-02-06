@@ -213,23 +213,26 @@ async function cmdRank(message, args) {
 
   // Profile pic
   let avatarLoaded = false;
-  let avatarURL = targetUser.displayAvatarURL({ format: "png", size: 128 });
+  // Always use PNG for Discord avatars (supported by node-canvas)
+  let avatarURL = targetUser.displayAvatarURL({ format: "png", size: 128, dynamic: false });
   console.log("Rank card avatar URL:", avatarURL);
-  try {
-    const avatar = await loadImage(avatarURL);
+  // If the URL is webp/gif, fallback to initials
+  if (avatarURL.endsWith('.webp') || avatarURL.endsWith('.gif')) {
     ctx.save();
     ctx.beginPath();
     ctx.arc(90, 90, 60, 0, Math.PI * 2);
     ctx.closePath();
     ctx.clip();
-    ctx.drawImage(avatar, 30, 30, 120, 120);
+    ctx.fillStyle = "#555";
+    ctx.fillRect(30, 30, 120, 120);
+    ctx.font = "bold 40px OpenSans";
+    ctx.fillStyle = "#fff";
+    const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
+    ctx.fillText(initials, 80, 120);
     ctx.restore();
-    avatarLoaded = true;
-  } catch (e1) {
-    // Try JPEG fallback
+    console.error("Avatar is webp/gif, fallback to initials for user:", targetUser.tag);
+  } else {
     try {
-      avatarURL = targetUser.displayAvatarURL({ format: "jpg", size: 128 });
-      console.log("Rank card avatar JPEG fallback URL:", avatarURL);
       const avatar = await loadImage(avatarURL);
       ctx.save();
       ctx.beginPath();
@@ -239,7 +242,7 @@ async function cmdRank(message, args) {
       ctx.drawImage(avatar, 30, 30, 120, 120);
       ctx.restore();
       avatarLoaded = true;
-    } catch (e2) {
+    } catch (e1) {
       // Try direct fetch and buffer
       try {
         const fetch = require('node-fetch');
@@ -255,8 +258,10 @@ async function cmdRank(message, args) {
           ctx.drawImage(avatar, 30, 30, 120, 120);
           ctx.restore();
           avatarLoaded = true;
+        } else {
+          throw new Error('Fetch not ok');
         }
-      } catch (e3) {
+      } catch (e2) {
         // fallback: draw a circle with initials
         ctx.save();
         ctx.beginPath();
@@ -270,7 +275,7 @@ async function cmdRank(message, args) {
         const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
         ctx.fillText(initials, 80, 120);
         ctx.restore();
-        console.error("Avatar load failed for user:", targetUser.tag, e1, e2, e3);
+        console.error("Avatar load failed for user:", targetUser.tag, e1, e2);
       }
     }
   }

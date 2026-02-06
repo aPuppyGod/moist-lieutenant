@@ -5,6 +5,8 @@ const passport = require("passport");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
 
+const userRankCardPrefs = {};
+
 function htmlTemplate(content, opts = {}) {
   // opts: { user, isAdmin, active }
   const user = opts.user;

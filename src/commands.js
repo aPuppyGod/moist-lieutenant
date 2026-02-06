@@ -212,8 +212,8 @@ async function cmdRank(message, args) {
   ctx.fillRect(0, 0, width, height);
 
   // Profile pic
-  let avatarURL = targetUser.displayAvatarURL({ format: "png", size: 128 });
   let avatarLoaded = false;
+  let avatarURL = targetUser.displayAvatarURL({ format: "png", size: 128 });
   try {
     const avatar = await loadImage(avatarURL);
     ctx.save();
@@ -224,20 +224,46 @@ async function cmdRank(message, args) {
     ctx.drawImage(avatar, 30, 30, 120, 120);
     ctx.restore();
     avatarLoaded = true;
+  } catch (e1) {
+    // Try JPEG fallback
+    try {
+      avatarURL = targetUser.displayAvatarURL({ format: "jpg", size: 128 });
+      const avatar = await loadImage(avatarURL);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(90, 90, 60, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(avatar, 30, 30, 120, 120);
+      ctx.restore();
+      avatarLoaded = true;
+    } catch (e2) {
+      // fallback: draw a circle with initials
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(90, 90, 60, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.fillStyle = "#555";
+      ctx.fillRect(30, 30, 120, 120);
+      ctx.font = "bold 40px OpenSans";
+      ctx.fillStyle = "#fff";
+      const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
+      ctx.fillText(initials, 80, 120);
+      ctx.restore();
+      console.error("Avatar load failed for user:", targetUser.tag, e1, e2);
+    }
+  }
+  // Calculate leaderboard rank
+  let rank = null;
+  try {
+    const leaderboard = await all(
+      `SELECT user_id FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
+      [message.guild.id]
+    );
+    rank = leaderboard.findIndex(row => row.user_id === targetUser.id) + 1;
   } catch (e) {
-    // fallback: draw a circle with initials
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(90, 90, 60, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    ctx.fillStyle = "#555";
-    ctx.fillRect(30, 30, 120, 120);
-    ctx.font = "bold 40px OpenSans";
-    ctx.fillStyle = "#fff";
-    const initials = targetUser.username ? targetUser.username[0].toUpperCase() : "?";
-    ctx.fillText(initials, 80, 120);
-    ctx.restore();
+    rank = null;
   }
 
   // Use bundled font
@@ -249,12 +275,16 @@ async function cmdRank(message, args) {
   ctx.fillStyle = "#FFD700";
   ctx.fillText(`Level: ${level}`, 170, 110);
 
+  ctx.font = "bold 22px OpenSans";
+  ctx.fillStyle = "#43B581";
+  if (rank && rank > 0) ctx.fillText(`Rank: #${rank}`, 170, 135);
+
   ctx.font = "16px OpenSans";
   ctx.fillStyle = "#aaa";
-  ctx.fillText(`XP: ${xp} / ${xpNext} (+${xpToNext} to next)`, 170, 140);
+  ctx.fillText(`XP: ${xp} / ${xpNext} (+${xpToNext} to next)`, 170, 160);
 
   // Progress bar
-  const barX = 170, barY = 150, barW = 380, barH = 20;
+  const barX = 170, barY = 175, barW = 380, barH = 20;
   ctx.fillStyle = "#444";
   ctx.fillRect(barX, barY, barW, barH);
   const progress = Math.max(0, Math.min(1, (xp - xpStart) / (xpNext - xpStart)));

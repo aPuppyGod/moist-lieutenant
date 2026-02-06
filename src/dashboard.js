@@ -259,7 +259,6 @@ function startDashboard(client) {
         </table>
       `, { ...getTemplateOpts(req), active: "leaderboard" }));
     });
-  const app = express();
 
   // Sessions (must be before passport.session())
   app.set("trust proxy", 1);

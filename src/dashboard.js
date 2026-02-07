@@ -1175,6 +1175,6 @@ function startDashboard(client) {
   app.listen(port, "0.0.0.0", () => {
     console.log(`Dashboard running on port ${port}`);
   });
-}
+// ...existing code...
 
 module.exports = { startDashboard };

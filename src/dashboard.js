@@ -828,10 +828,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     if (keys.length > 0) {
       const fields = keys.join(', ');
       const values = keys.map(k => update[k]);
-      await run(
-        `INSERT OR REPLACE INTO user_rankcard_customizations (guild_id, user_id, ${fields}) VALUES (?, ?, ${keys.map(() => '?').join(', ')})`,
-        [guildId, userId, ...values]
-      );
+        // Use PostgreSQL upsert
+        const updateAssignments = keys.map((k, i) => `${k} = EXCLUDED.${k}`).join(', ');
+        await run(
+          `INSERT INTO user_rankcard_customizations (guild_id, user_id, ${fields}) VALUES ($1, $2, ${keys.map((_, i) => `$${i+3}`).join(', ')})
+          ON CONFLICT (guild_id, user_id) DO UPDATE SET ${updateAssignments}`,
+          [guildId, userId, ...values]
+        );
     }
     res.redirect("/lop");
   } catch (e) {

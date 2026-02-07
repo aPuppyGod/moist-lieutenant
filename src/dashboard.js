@@ -756,48 +756,56 @@ function startDashboard(client) {
     // Only allow unlocked features
     const guild = client.guilds.cache.first();
     const guildId = guild?.id || null;
-    let userLevel = 1;
-    if (guildId && userId) {
-      // In production, fetch from DB
-      // For now, just use 1
-      // TODO: fetch real level if needed
-    }
-    const unlocks = {
-      bgimage: 10,
-      gradient: 5,
-      bgcolor: 1,
-      font: 3,
-      border: 7,
-      avatarframe: 15
-    };
-    function isUnlocked(opt) {
-      return userLevel >= (unlocks[opt] ?? 1);
-    }
-    // Save prefs in memory (replace with DB in production)
-    if (!userRankCardPrefs[userId]) userRankCardPrefs[userId] = {};
-    const prefs = userRankCardPrefs[userId];
-    const sharp = require('sharp');
-    if (isUnlocked('bgcolor') && req.body.bgcolor) userRankCardPrefs[userId].bgcolor = req.body.bgcolor;
-    if (isUnlocked('gradient') && req.body.gradient) userRankCardPrefs[userId].gradient = req.body.gradient;
-    if (isUnlocked('font') && req.body.font) userRankCardPrefs[userId].font = req.body.font;
-    if (isUnlocked('bgimage') && req.file) {
-      // Use crop parameters from client if provided
+    const { get } = require("./db");
+    (async () => {
+      let userLevel = 1;
+      if (guildId && userId) {
+        try {
+          const row = await get(
+            `SELECT level FROM user_xp WHERE guild_id=? AND user_id=?`,
+            [guildId, userId]
+          );
+          userLevel = row?.level ?? 1;
+        } catch (e) {
+          userLevel = 1;
+        }
+      }
+      const unlocks = {
+        bgimage: 10,
+        gradient: 5,
+        bgcolor: 1,
+        font: 3,
+        border: 7,
+        avatarframe: 15
+      };
+      function isUnlocked(opt) {
+        return userLevel >= (unlocks[opt] ?? 1);
+      }
+      // Save prefs in memory (replace with DB in production)
+      if (!userRankCardPrefs[userId]) userRankCardPrefs[userId] = {};
+      const prefs = userRankCardPrefs[userId];
       const sharp = require('sharp');
-      const cropX = parseInt(req.body.cropX) || 0;
-      const cropY = parseInt(req.body.cropY) || 0;
-      const cropW = parseInt(req.body.cropW) || 600;
-      const cropH = parseInt(req.body.cropH) || 180;
-      const croppedPath = req.file.path + '_cropped.png';
-      sharp(req.file.path)
-        .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
-        .resize(600, 180, { fit: 'cover' })
-        .toFile(croppedPath, (err) => {
-          userRankCardPrefs[userId].bgimage = !err ? croppedPath : req.file.path;
-          res.redirect("/lop");
-        });
-      return;
-    }
-    res.redirect("/lop");
+      if (isUnlocked('bgcolor') && req.body.bgcolor) userRankCardPrefs[userId].bgcolor = req.body.bgcolor;
+      if (isUnlocked('gradient') && req.body.gradient) userRankCardPrefs[userId].gradient = req.body.gradient;
+      if (isUnlocked('font') && req.body.font) userRankCardPrefs[userId].font = req.body.font;
+      if (isUnlocked('bgimage') && req.file) {
+        // Use crop parameters from client if provided
+        const cropX = parseInt(req.body.cropX) || 0;
+        const cropY = parseInt(req.body.cropY) || 0;
+        const cropW = parseInt(req.body.cropW) || 600;
+        const cropH = parseInt(req.body.cropH) || 180;
+        const croppedPath = req.file.path + '_cropped.png';
+        sharp(req.file.path)
+          .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
+          .resize(600, 180, { fit: 'cover' })
+          .toFile(croppedPath, (err) => {
+            userRankCardPrefs[userId].bgimage = !err ? croppedPath : req.file.path;
+            res.redirect("/lop");
+          });
+        return;
+      }
+      res.redirect("/lop");
+    })();
   });
 
   // Admin dashboard (Discord admin/manager only)

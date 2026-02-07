@@ -181,9 +181,13 @@ async function cmdRank(message, args) {
 
   // Use smart picker for !rank <user>
   let targetUser = message.mentions.users.first() || message.author;
+  let targetMember = message.mentions.members?.first() || message.member;
   if (args[0]) {
     const pick = await pickUserSmart(message, args[0]);
-    if (pick && !pick.ambiguous) targetUser = pick.member.user;
+    if (pick && !pick.ambiguous) {
+      targetUser = pick.member.user;
+      targetMember = pick.member;
+    }
     if (pick && pick.ambiguous) {
       await message.reply(`Multiple users match: ${pick.matches.join(", ")}. Please be more specific or use their ID/username.`).catch(() => {});
       return;
@@ -290,10 +294,25 @@ async function cmdRank(message, args) {
     rank = null;
   }
 
-  // Use bundled font
-  ctx.font = "bold 28px OpenSans";
-  ctx.fillStyle = "#fff";
-  ctx.fillText(targetUser.tag, 170, 70);
+  // Load user prefs if available
+  let prefs = {};
+  try {
+    prefs = require("../src/dashboard.js").userRankCardPrefs?.[targetUser.id] || {};
+  } catch {}
+  // Font family
+  let fontFamily = prefs.font || "OpenSans";
+  let fontColor = prefs.fontcolor || "#fff";
+  // Nickname or username
+  let displayName = targetMember?.displayName || targetUser.username;
+  // Check if displayName is renderable in font (basic check: all chars in ASCII or fallback)
+  function isRenderable(str, font) {
+    // For simplicity, fallback if non-ASCII and font is not OpenSans
+    return font === "OpenSans" || /^[\x00-\x7F]*$/.test(str);
+  }
+  if (!isRenderable(displayName, fontFamily)) displayName = targetUser.username;
+  ctx.font = `bold 28px ${fontFamily}`;
+  ctx.fillStyle = fontColor;
+  ctx.fillText(displayName, 170, 70);
 
   ctx.font = "bold 22px OpenSans";
   ctx.fillStyle = "#FFD700";

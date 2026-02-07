@@ -200,7 +200,9 @@ function htmlTemplate(content, opts = {}) {
 }
 
 function mustBeLoggedIn(req, res, next) {
-  if (req.session && req.session.ok) return next();
+  if (req.isAuthenticated && req.isAuthenticated()) return next();
+  // Store original URL for redirect after login
+  if (req.session) req.session.returnTo = req.originalUrl;
   return res.redirect("/login");
 }
 
@@ -313,8 +315,10 @@ function startDashboard(client) {
   app.get("/auth/discord/callback",
     passport.authenticate("discord", { failureRedirect: "/login" }),
     (req, res) => {
-      // Successful authentication, redirect home.
-      res.redirect("/");
+      // Redirect to original URL if present, else home
+      const redirectTo = req.session?.returnTo || "/";
+      if (req.session) delete req.session.returnTo;
+      res.redirect(redirectTo);
     }
   );
   app.get("/logout", (req, res) => {
@@ -630,6 +634,7 @@ function startDashboard(client) {
             <input type="text" name="gradient" id="gradientInput" value="${prefs.gradient || ''}" placeholder="#23272A,#FFD700" ${!isUnlocked('gradient') ? 'disabled' : ''} style="margin-left:8px;width:120px;">
           </label></div>
           <div><label>Font:<br><select name="font" id="fontSelect" ${!isUnlocked('font') ? 'disabled' : ''}>
+                      <div><label>Font Color:<br><input type="color" name="fontcolor" value="${prefs.fontcolor || '#ffffff'}" ${!isUnlocked('font') ? 'disabled' : ''}></label></div>
             <option value="OpenSans" style="font-family:'Open Sans',sans-serif;"${prefs.font==='OpenSans'?' selected':''}>Open Sans</option>
             <option value="Arial" style="font-family:Arial;"${prefs.font==='Arial'?' selected':''}>Arial</option>
             <option value="ComicSansMS" style="font-family:'Comic Sans MS',cursive;"${prefs.font==='ComicSansMS'?' selected':''}>Comic Sans MS</option>
@@ -788,6 +793,7 @@ function startDashboard(client) {
       if (isUnlocked('bgcolor') && req.body.bgcolor) userRankCardPrefs[userId].bgcolor = req.body.bgcolor;
       if (isUnlocked('gradient') && req.body.gradient) userRankCardPrefs[userId].gradient = req.body.gradient;
       if (isUnlocked('font') && req.body.font) userRankCardPrefs[userId].font = req.body.font;
+      if (isUnlocked('font') && req.body.fontcolor) userRankCardPrefs[userId].fontcolor = req.body.fontcolor;
       if (isUnlocked('bgimage') && req.file) {
         // Use crop parameters from client if provided
         const cropX = parseInt(req.body.cropX) || 0;

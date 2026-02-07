@@ -771,7 +771,6 @@ function startDashboard(client) {
   });
 
   // Handle customization form POST
-  app.post("/lop/customize", upload.single("bgimage"), (req, res) => {
 app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   try {
     const user = req.user;

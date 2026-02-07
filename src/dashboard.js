@@ -1185,5 +1185,6 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   app.listen(port, "0.0.0.0", () => {
     console.log(`Dashboard running on port ${port}`);
   });
+}
 
 module.exports = { startDashboard };

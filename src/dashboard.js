@@ -214,7 +214,7 @@ function escapeHtml(s) {
 }
 
 const { getGuildSettings, getLevelRoles, getIgnoredChannels } = require("./settings");
-const { isTextChannelLike } = require("./db");
+const { ChannelType } = require("discord.js");
 
 function startDashboard(client) {
     const app = express();
@@ -842,7 +842,7 @@ function startDashboard(client) {
 
     await guild.channels.fetch().catch(() => {});
     const textChannels = guild.channels.cache
-      .filter((c) => isTextChannelLike(c))
+      .filter((c) => c.type === ChannelType.GuildText || c.type === ChannelType.GuildAnnouncement)
       .map((c) => ({ id: c.id, name: c.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
 

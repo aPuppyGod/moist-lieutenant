@@ -792,7 +792,7 @@ function startDashboard(client) {
         .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
         .resize(600, 180, { fit: 'cover' })
         .toFile(croppedPath, (err) => {
-          prefs.bgimage = !err ? croppedPath : req.file.path;
+          userRankCardPrefs[userId].bgimage = !err ? croppedPath : req.file.path;
           res.redirect("/lop");
         });
       return;

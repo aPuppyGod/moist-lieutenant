@@ -17,7 +17,16 @@ if (!DATABASE_URL) {
 // but leaving this as "auto" is safest.
 const pool = new Pool({
   connectionString: DATABASE_URL,
-  ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined
+  ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined,
+  keepAlive: true,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  max: 10
+});
+
+// 👇 ADD THIS BLOCK RIGHT HERE
+pool.on("error", (err) => {
+  console.error("[db] Unexpected PG pool error:", err);
 });
 
 // ─────────────────────────────────────────────

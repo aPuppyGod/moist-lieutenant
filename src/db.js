@@ -284,10 +284,11 @@ async function initDb() {
   `);
 
   console.log("[db] ✓ All database tables initialized successfully");
-} catch (err) {
-  console.error("[db] ✗ Failed to initialize database:");
-  console.error(err);
-  throw err;
+  } catch (err) {
+    console.error("[db] ✗ Failed to initialize database:");
+    console.error(err);
+    throw err;
+  }
 }
 
 module.exports = {

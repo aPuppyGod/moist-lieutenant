@@ -206,14 +206,37 @@ async function cmdRank(message, args) {
   const xpIntoLevel = xp - xpStart;
   const xpToNext = xpNext - xp;
 
+  // Load user prefs FIRST (before creating canvas)
+  let prefs = {};
+  try {
+    prefs = await get(
+      `SELECT * FROM user_rankcard_customizations WHERE guild_id = ? AND user_id = ?`,
+      [message.guild.id, targetUser.id]
+    ) || {};
+  } catch {}
+
   // Rank card image
   const width = 600, height = 180;
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
-  // Background
-  ctx.fillStyle = "#23272A";
-  ctx.fillRect(0, 0, width, height);
+  // Background - use custom image if available, otherwise solid color
+  let bgLoaded = false;
+  if (prefs.bgimage) {
+    try {
+      const bgImage = await loadImage(prefs.bgimage);
+      ctx.drawImage(bgImage, 0, 0, width, height);
+      bgLoaded = true;
+      console.log("[rank] Custom background image loaded:", prefs.bgimage);
+    } catch (bgErr) {
+      console.error("[rank] Failed to load custom background image:", prefs.bgimage, bgErr);
+      // Fall back to solid color
+    }
+  }
+  if (!bgLoaded) {
+    ctx.fillStyle = "#23272A";
+    ctx.fillRect(0, 0, width, height);
+  }
 
   // Profile pic
   let avatarLoaded = false;
@@ -294,15 +317,6 @@ async function cmdRank(message, args) {
     rank = null;
   }
 
-  // Load user prefs if available
-  let prefs = {};
-  try {
-    // Load prefs from DB
-    prefs = await get(
-      `SELECT * FROM user_rankcard_customizations WHERE guild_id = ? AND user_id = ?`,
-      [message.guild.id, targetUser.id]
-    ) || {};
-  } catch {}
   // Font family
   let fontFamily = prefs.font || "OpenSans";
   let fontColor = prefs.fontcolor || "#fff";

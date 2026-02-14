@@ -524,6 +524,7 @@ const { ChannelType } = require("discord.js");
 
 function startDashboard(client) {
     const app = express();
+    app.locals.client = client;
     // Helper: get user and admin info for templates
     function getTemplateOpts(req) {
       const user = req.user || null;
@@ -569,10 +570,10 @@ function startDashboard(client) {
       if (!guild) {
         return res.send(htmlTemplate(`<h2>Leaderboard</h2><p>The bot is not in any servers.</p>`, { ...getTemplateOpts(req), active: "leaderboard" }));
       }
-      // Fetch top 20 users by XP
+      // Fetch all users by XP
       const { all } = require("./db");
       const rows = await all(
-        `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC LIMIT 20`,
+        `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
         [guild.id]
       );
       // Try to resolve usernames
@@ -581,8 +582,8 @@ function startDashboard(client) {
         const member = guild.members.cache.get(r.user_id);
         const displayName = member?.nickname || member?.user?.username || `User ${r.user_id}`;
         const avatarUrl = member?.user?.displayAvatarURL({ extension: 'png', size: 64 }) || '';
-        const badge = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : '';
-        const medalColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : 'transparent';
+        const badge = i === 0 ? '👑 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : '';
+        const medalColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#71faf9';
         return `
           <tr class="lb-row" style="background: linear-gradient(90deg, ${medalColor}15 0%, transparent 100%);">
             <td class="lb-rank" style="font-weight:700;color:${medalColor};">${badge} #${i+1}</td>
@@ -1841,7 +1842,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           Level-up Message (supports {user}, {level}, {xp})<br/>
           <input name="level_up_message"
                  value="${escapeHtml(settings.level_up_message || "")}"
-                 style="width:520px" />
+                 style="max-width:520px;width:100%;box-sizing:border-box;" />
         </label>
         <br/><br/>
 

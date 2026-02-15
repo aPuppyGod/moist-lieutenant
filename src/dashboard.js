@@ -805,33 +805,12 @@ function startDashboard(client) {
         if (req.query.avatarframe) prefs.avatarframe = req.query.avatarframe;
       }
       
-      // Check for preview image data (cropped image from frontend)
-      let previewImageData = null;
-      if (req.query.preview === 'true' && req.query.bgimagedata) {
-        try {
-          const decoded = decodeURIComponent(req.query.bgimagedata);
-          // Remove data:image/png;base64, prefix if present
-          const base64Data = decoded.replace(/^data:image\/\w+;base64,/, '');
-          previewImageData = Buffer.from(base64Data, 'base64');
-        } catch (e) {
-          console.error('Failed to decode preview image data:', e);
-        }
-      }
-      
       // Canvas size unified with Discord bot: 600x180
       const width = 600, height = 180;
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext("2d");
-      // Background: preview image > saved image > gradient > color > default
-      if (previewImageData) {
-        try {
-          const img = await loadImage(previewImageData);
-          ctx.drawImage(img, 0, 0, width, height);
-        } catch (e) {
-          ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#1a2a2a";
-          ctx.fillRect(0, 0, width, height);
-        }
-      } else if (prefs.bgimage && isUnlocked("bgimage")) {
+      // Background: saved image > gradient > color > default
+      if (prefs.bgimage && isUnlocked("bgimage")) {
         try {
           let imgPath = path.resolve(prefs.bgimage);
           const img = await loadImage(imgPath);
@@ -1751,34 +1730,51 @@ function startDashboard(client) {
         function confirmCrop() {
           if (!cropper) return;
           
-          // Get the cropped canvas
-          const canvas = cropper.getCroppedCanvas({
-            width: 600,
-            height: 180,
-            imageSmoothingQuality: 'high'
-          });
-          
-          // Store the cropped image data
-          croppedImageData = canvas.toDataURL('image/png');
-          
-          // Update preview with cropped image
-          updatePreviewWithCroppedImage(croppedImageData);
-          
-          // Show confirmation message
-          document.getElementById('cropPreviewText').style.display = 'block';
-          
-          // Destroy cropper UI
-          if (cropper) {
-            cropper.destroy();
-            cropper = null;
+          try {
+            // Get the cropped canvas
+            const canvas = cropper.getCroppedCanvas({
+              width: 600,
+              height: 180,
+              imageSmoothingQuality: 'high'
+            });
+            
+            // Convert canvas to blob and create a file
+            canvas.toBlob(function(blob) {
+              // Create a file from the blob
+              const file = new File([blob], 'cropped-background.png', { type: 'image/png' });
+              
+              // Set the file in the file input
+              const dataTransfer = new DataTransfer();
+              dataTransfer.items.add(file);
+              document.getElementById('bgimageInput').files = dataTransfer.files;
+              
+              // Store binary data for preview
+              const reader = new FileReader();
+              reader.onload = function(e) {
+                croppedImageData = e.target.result;
+                
+                // Show confirmation message
+                document.getElementById('cropPreviewText').style.display = 'block';
+                
+                // Destroy cropper UI
+                if (cropper) {
+                  cropper.destroy();
+                  cropper = null;
+                }
+                
+                // Show the cropped result
+                const img = document.getElementById('cropperImage');
+                img.src = croppedImageData;
+                img.style.maxWidth = '100%';
+                img.style.border = '2px solid #71faf9';
+                img.style.borderRadius = '6px';
+              };
+              reader.readAsDataURL(blob);
+            }, 'image/png');
+          } catch (e) {
+            console.error('Error confirming crop:', e);
+            alert('Failed to crop image. Please try again.');
           }
-          
-          // Show the cropped result
-          const img = document.getElementById('cropperImage');
-          img.src = croppedImageData;
-          img.style.maxWidth = '100%';
-          img.style.border = '2px solid #71faf9';
-          img.style.borderRadius = '6px';
         }
         
         // Gradient color pickers
@@ -1904,12 +1900,7 @@ function startDashboard(client) {
           const avatarframe = form.querySelector('[name="avatarframe"]:checked')?.value;
           if (avatarframe) params.set('avatarframe', avatarframe);
           
-          // If there's a confirmed cropped image, include it
-          if (croppedImageData) {
-            params.set('bgimagedata', encodeURIComponent(croppedImageData));
-          }
-          
-          // Update preview image
+            // Update preview image
           const previewImg = document.getElementById('rankcardPreview');
           if (previewImg) {
             previewImg.src = '/lop/rankcard/image?' + params.toString();
@@ -1949,28 +1940,7 @@ function startDashboard(client) {
             });
           }
           
-          // Handle form submission with cropped image
-          form.addEventListener('submit', function(e) {
-            if (croppedImageData) {
-              // Convert base64 to blob
-              const base64Data = croppedImageData.split(',')[1];
-              const byteString = atob(base64Data);
-              const ab = new ArrayBuffer(byteString.length);
-              const ia = new Uint8Array(ab);
-              for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i);
-              }
-              const blob = new Blob([ab], { type: 'image/png' });
-              
-              // Create a new file from the blob
-              const file = new File([blob], 'cropped-background.png', { type: 'image/png' });
-              
-              // Create a new DataTransfer to set the file
-              const dataTransfer = new DataTransfer();
-              dataTransfer.items.add(file);
-              document.getElementById('bgimageInput').files = dataTransfer.files;
-            }
-          });
+
         }, 100);
       </script>
       `;

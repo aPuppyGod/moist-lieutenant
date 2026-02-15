@@ -2241,15 +2241,102 @@ function startDashboard(client) {
           });
         }
         
+        // localStorage persistence
+        const STORAGE_KEY = 'lop_rankcard_draft_' + (window.location.hostname || 'local');
+        
+        function saveFormToLocalStorage() {
+          const form = document.getElementById('customizeForm');
+          if (!form) return;
+          
+          const draft = {
+            bgcolor: form.querySelector('[name="bgcolor"]')?.value || '',
+            gradient: form.querySelector('[name="gradient"]')?.value || '',
+            font: form.querySelector('[name="font"]')?.value || '',
+            fontcolor: form.querySelector('[name="fontcolor"]')?.value || '',
+            avatarborder: form.querySelector('[name="avatarborder"]')?.value || '',
+            avatarbordercolor: form.querySelector('[name="avatarbordercolor"]')?.value || '',
+            borderglow: form.querySelector('[name="borderglow"]')?.value || '',
+            avatarframe: form.querySelector('[name="avatarframe"]:checked')?.value || '',
+            timestamp: Date.now()
+          };
+          
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+        }
+        
+        function loadFormFromLocalStorage() {
+          try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (!stored) return;
+            
+            const draft = JSON.parse(stored);
+            const form = document.getElementById('customizeForm');
+            if (!form) return;
+            
+            // Restore form values
+            if (draft.bgcolor) {
+              const bgcolorInput = form.querySelector('[name="bgcolor"]');
+              if (bgcolorInput) bgcolorInput.value = draft.bgcolor;
+            }
+            if (draft.gradient) {
+              form.querySelector('[name="gradient"]').value = draft.gradient;
+              const parts = draft.gradient.split(',');
+              if (parts[0]) form.querySelector('#gradColor1').value = parts[0];
+              if (parts[1]) form.querySelector('#gradColor2').value = parts[1];
+            }
+            if (draft.font) {
+              const fontSelect = form.querySelector('[name="font"]');
+              if (fontSelect) fontSelect.value = draft.font;
+            }
+            if (draft.fontcolor) {
+              const fontcolorInput = form.querySelector('[name="fontcolor"]');
+              if (fontcolorInput) fontcolorInput.value = draft.fontcolor;
+            }
+            if (draft.avatarborder) {
+              const borderInput = form.querySelector('[name="avatarborder"]');
+              if (borderInput) borderInput.value = draft.avatarborder;
+            }
+            if (draft.avatarbordercolor) {
+              const borderColorInput = form.querySelector('[name="avatarbordercolor"]');
+              if (borderColorInput) borderColorInput.value = draft.avatarbordercolor;
+            }
+            if (draft.borderglow) {
+              const glowSelect = form.querySelector('[name="borderglow"]');
+              if (glowSelect) glowSelect.value = draft.borderglow;
+            }
+            if (draft.avatarframe) {
+              const frameRadio = form.querySelector('input[name="avatarframe"][value="' + draft.avatarframe + '"]');
+              if (frameRadio) frameRadio.checked = true;
+            }
+            
+            // Trigger preview update with restored values
+            updatePreview();
+          } catch (e) {
+            console.warn('Failed to load draft from localStorage:', e);
+          }
+        }
+        
+        function clearFormLocalStorage() {
+          localStorage.removeItem(STORAGE_KEY);
+        }
+        
         // Attach live preview listeners
         setTimeout(() => {
           const form = document.getElementById('customizeForm');
           if (!form) return;
           
+          // Load draft on page load
+          loadFormFromLocalStorage();
+          
           // Listen to all relevant inputs
           form.querySelectorAll('input[type="color"], select, input[type="number"], input[type="radio"]').forEach(input => {
-            input.addEventListener('change', updatePreview);
-            input.addEventListener('input', updatePreview);
+            input.addEventListener('change', function() {
+              saveFormToLocalStorage();
+              updatePreview();
+            });
+            input.addEventListener('input', function() {
+              saveFormToLocalStorage();
+              updatePreview();
+            });
           });
           
           // Ensure gradient pickers trigger preview update
@@ -2259,16 +2346,22 @@ function startDashboard(client) {
           if (gradColor1) {
             gradColor1.addEventListener('input', function() {
               updateGradientInput();
+              saveFormToLocalStorage();
               updatePreview();
             });
           }
           if (gradColor2) {
             gradColor2.addEventListener('input', function() {
               updateGradientInput();
+              saveFormToLocalStorage();
               updatePreview();
             });
           }
           
+          // Clear localStorage on successful form submit
+          form.addEventListener('submit', function() {
+            clearFormLocalStorage();
+          });
 
         }, 100);
       </script>

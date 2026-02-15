@@ -277,6 +277,7 @@ async function initDb() {
       gradient TEXT,
       bgimage TEXT,
       bgcolor TEXT,
+      bgmode TEXT,
       border TEXT,
       avatarframe TEXT,
       avatarborder INTEGER DEFAULT 3,
@@ -291,6 +292,7 @@ async function initDb() {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarborder INTEGER DEFAULT 3`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarbordercolor TEXT DEFAULT '#71faf9'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS borderglow TEXT DEFAULT 'none'`);
+    await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgmode TEXT`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

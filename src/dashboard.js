@@ -797,11 +797,25 @@ function startDashboard(client) {
         );
         if (dbPrefs) prefs = dbPrefs;
       } catch (e) {}
+      let resolvedBgMode = prefs.bgmode;
+      if (!resolvedBgMode) {
+        if (prefs.bgimage) resolvedBgMode = "image";
+        else if (prefs.gradient) resolvedBgMode = "gradient";
+        else resolvedBgMode = "color";
+      }
+      if (resolvedBgMode === "image" && !isUnlocked("bgimage")) {
+        resolvedBgMode = isUnlocked("gradient") && prefs.gradient ? "gradient" : "color";
+      }
+      if (resolvedBgMode === "gradient" && !isUnlocked("gradient")) {
+        resolvedBgMode = "color";
+      }
+      prefs.bgmode = resolvedBgMode;
       
       // Override with query params for live preview (if provided)
       if (req.query.preview === 'true') {
         if (req.query.bgcolor) prefs.bgcolor = req.query.bgcolor;
         if (req.query.gradient) prefs.gradient = req.query.gradient;
+        if (req.query.bgmode) prefs.bgmode = req.query.bgmode;
         if (req.query.font) prefs.font = req.query.font;
         if (req.query.fontcolor) prefs.fontcolor = req.query.fontcolor;
         if (req.query.avatarborder) prefs.avatarborder = req.query.avatarborder;
@@ -814,28 +828,46 @@ function startDashboard(client) {
       const width = 600, height = 180;
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext("2d");
-      // Background: saved image > gradient > color > default
-      if (prefs.bgimage && isUnlocked("bgimage")) {
+      let bgMode = prefs.bgmode;
+      if (!bgMode) {
+        if (prefs.bgimage) bgMode = "image";
+        else if (prefs.gradient) bgMode = "gradient";
+        else bgMode = "color";
+      }
+      if (bgMode === "image" && !isUnlocked("bgimage")) {
+        bgMode = isUnlocked("gradient") && prefs.gradient ? "gradient" : "color";
+      }
+      if (bgMode === "gradient" && !isUnlocked("gradient")) {
+        bgMode = "color";
+      }
+
+      if (bgMode === "image" && prefs.bgimage && isUnlocked("bgimage")) {
         try {
           let imgPath = path.resolve(prefs.bgimage);
           const img = await loadImage(imgPath);
           ctx.drawImage(img, 0, 0, width, height);
         } catch (e) {
-          ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#1a2a2a";
-          ctx.fillRect(0, 0, width, height);
+          bgMode = isUnlocked("gradient") && prefs.gradient ? "gradient" : "color";
         }
-      } else if (prefs.gradient && isUnlocked("gradient")) {
-        const colors = prefs.gradient.split(",").map(s => s.trim()).filter(Boolean);
-        if (colors.length > 1) {
-          const grad = ctx.createLinearGradient(0, 0, width, height);
-          colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
-          ctx.fillStyle = grad;
-          ctx.fillRect(0, 0, width, height);
+      }
+
+      if (bgMode === "gradient") {
+        if (prefs.gradient && isUnlocked("gradient")) {
+          const colors = prefs.gradient.split(",").map(s => s.trim()).filter(Boolean);
+          if (colors.length > 1) {
+            const grad = ctx.createLinearGradient(0, 0, width, height);
+            colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+          } else {
+            ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#1a2a2a";
+            ctx.fillRect(0, 0, width, height);
+          }
         } else {
           ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#1a2a2a";
           ctx.fillRect(0, 0, width, height);
         }
-      } else {
+      } else if (bgMode === "color") {
         ctx.fillStyle = prefs.bgcolor && isUnlocked("bgcolor") ? prefs.bgcolor : "#1a2a2a";
         ctx.fillRect(0, 0, width, height);
       }
@@ -1053,6 +1085,7 @@ function startDashboard(client) {
         let prefs = {
           bgcolor: req.body.bgcolor || "#1a2a2a",
           gradient: req.body.gradient || "",
+          bgmode: req.body.bgmode || "",
           font: req.body.font || "OpenSans",
           fontcolor: req.body.fontcolor || "#ffffff",
           avatarborder: parseInt(req.body.avatarborder) || 3,
@@ -1065,27 +1098,45 @@ function startDashboard(client) {
         const canvas = createCanvas(width, height);
         const ctx = canvas.getContext("2d");
         
-        // Use uploaded image if available
-        if (req.file && isUnlocked("bgimage")) {
+        let bgMode = prefs.bgmode;
+        if (!bgMode) {
+          if (req.file) bgMode = "image";
+          else if (prefs.gradient) bgMode = "gradient";
+          else bgMode = "color";
+        }
+        if (bgMode === "image" && !isUnlocked("bgimage")) {
+          bgMode = isUnlocked("gradient") && prefs.gradient ? "gradient" : "color";
+        }
+        if (bgMode === "gradient" && !isUnlocked("gradient")) {
+          bgMode = "color";
+        }
+
+        if (bgMode === "image" && req.file && isUnlocked("bgimage")) {
           try {
             const img = await loadImage(req.file.path);
             ctx.drawImage(img, 0, 0, width, height);
           } catch (e) {
-            ctx.fillStyle = prefs.bgcolor;
-            ctx.fillRect(0, 0, width, height);
+            bgMode = isUnlocked("gradient") && prefs.gradient ? "gradient" : "color";
           }
-        } else if (prefs.gradient && isUnlocked("gradient")) {
-          const colors = prefs.gradient.split(",").map(s => s.trim()).filter(Boolean);
-          if (colors.length > 1) {
-            const grad = ctx.createLinearGradient(0, 0, width, height);
-            colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, width, height);
+        }
+
+        if (bgMode === "gradient") {
+          if (prefs.gradient && isUnlocked("gradient")) {
+            const colors = prefs.gradient.split(",").map(s => s.trim()).filter(Boolean);
+            if (colors.length > 1) {
+              const grad = ctx.createLinearGradient(0, 0, width, height);
+              colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
+              ctx.fillStyle = grad;
+              ctx.fillRect(0, 0, width, height);
+            } else {
+              ctx.fillStyle = prefs.bgcolor;
+              ctx.fillRect(0, 0, width, height);
+            }
           } else {
             ctx.fillStyle = prefs.bgcolor;
             ctx.fillRect(0, 0, width, height);
           }
-        } else {
+        } else if (bgMode === "color") {
           ctx.fillStyle = prefs.bgcolor;
           ctx.fillRect(0, 0, width, height);
         }
@@ -1766,6 +1817,33 @@ function startDashboard(client) {
             gap: 8px;
           }
         }
+
+        .bgmode-options {
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .bgmode-option {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 10px;
+          border-radius: 6px;
+          border: 1px solid rgba(113,250,249,0.3);
+          background: rgba(113,250,249,0.08);
+          cursor: pointer;
+        }
+
+        .bgmode-option.disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        body[data-theme="dark"] .bgmode-option {
+          border-color: rgba(255,221,252,0.3);
+          background: rgba(255,221,252,0.08);
+        }
         
         .form-actions {
           display: flex;
@@ -1800,6 +1878,23 @@ function startDashboard(client) {
             ${!isUnlocked('bgcolor') && !isUnlocked('gradient') ? '<span class="feature-badge locked">Locked at Lvl 1</span>' : '<span class="feature-badge">Unlocked</span>'}
           </div>
           <div class="customize-grid">
+            <div class="form-group" style="grid-column: 1/-1;">
+              <label>Background Type</label>
+              <div class="bgmode-options">
+                <label class="bgmode-option">
+                  <input type="radio" name="bgmode" value="color" ${prefs.bgmode === 'color' ? 'checked' : ''}>
+                  <span>Single Color</span>
+                </label>
+                <label class="bgmode-option ${!isUnlocked('gradient') ? 'disabled' : ''}">
+                  <input type="radio" name="bgmode" value="gradient" ${prefs.bgmode === 'gradient' ? 'checked' : ''} ${!isUnlocked('gradient') ? 'disabled' : ''}>
+                  <span>Gradient</span>
+                </label>
+                <label class="bgmode-option ${!isUnlocked('bgimage') ? 'disabled' : ''}">
+                  <input type="radio" name="bgmode" value="image" ${prefs.bgmode === 'image' ? 'checked' : ''} ${!isUnlocked('bgimage') ? 'disabled' : ''}>
+                  <span>Image</span>
+                </label>
+              </div>
+            </div>
             <div class="form-group">
               <label>Background Color</label>
               <input type="color" name="bgcolor" value="${prefs.bgcolor || '#1a2a2a'}" ${!isUnlocked('bgcolor') ? 'disabled' : ''}>
@@ -2137,6 +2232,7 @@ function startDashboard(client) {
         function updatePreview() {
           const form = document.getElementById('customizeForm');
           if (!form) return;
+          if (typeof updateGradientInput === 'function') updateGradientInput();
           
           const params = new URLSearchParams();
           params.set('preview', 'true');
@@ -2148,6 +2244,9 @@ function startDashboard(client) {
           
           const gradient = form.querySelector('[name="gradient"]')?.value;
           if (gradient) params.set('gradient', gradient);
+
+          const bgmode = form.querySelector('[name="bgmode"]:checked')?.value;
+          if (bgmode) params.set('bgmode', bgmode);
           
           const font = form.querySelector('[name="font"]')?.value;
           if (font) params.set('font', font);
@@ -2179,6 +2278,7 @@ function startDashboard(client) {
         function updatePreviewWithCroppedImage() {
           const bgImageInput = document.getElementById('bgimageInput');
           const previewImg = document.getElementById('rankcardPreview');
+          if (typeof updateGradientInput === 'function') updateGradientInput();
           
           if (!previewImg || !bgImageInput || !bgImageInput.files || bgImageInput.files.length === 0) {
             // No cropped image, use server preview
@@ -2199,6 +2299,9 @@ function startDashboard(client) {
             
             const gradient = form.querySelector('[name="gradient"]')?.value;
             if (gradient) formData.append('gradient', gradient);
+
+            const bgmode = form.querySelector('[name="bgmode"]:checked')?.value;
+            if (bgmode) formData.append('bgmode', bgmode);
             
             const font = form.querySelector('[name="font"]')?.value;
             if (font) formData.append('font', font);
@@ -2251,6 +2354,7 @@ function startDashboard(client) {
           const draft = {
             bgcolor: form.querySelector('[name="bgcolor"]')?.value || '',
             gradient: form.querySelector('[name="gradient"]')?.value || '',
+            bgmode: form.querySelector('[name="bgmode"]:checked')?.value || '',
             font: form.querySelector('[name="font"]')?.value || '',
             fontcolor: form.querySelector('[name="fontcolor"]')?.value || '',
             avatarborder: form.querySelector('[name="avatarborder"]')?.value || '',
@@ -2282,6 +2386,10 @@ function startDashboard(client) {
               const parts = draft.gradient.split(',');
               if (parts[0]) form.querySelector('#gradColor1').value = parts[0];
               if (parts[1]) form.querySelector('#gradColor2').value = parts[1];
+            }
+            if (draft.bgmode) {
+              const bgmodeRadio = form.querySelector('input[name="bgmode"][value="' + draft.bgmode + '"]');
+              if (bgmodeRadio && !bgmodeRadio.disabled) bgmodeRadio.checked = true;
             }
             if (draft.font) {
               const fontSelect = form.querySelector('[name="font"]');
@@ -2423,6 +2531,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     let update = {};
     if (isUnlocked('bgcolor') && req.body.bgcolor) update.bgcolor = req.body.bgcolor;
     if (isUnlocked('gradient') && req.body.gradient) update.gradient = req.body.gradient;
+    if (req.body.bgmode) {
+      let bgmode = req.body.bgmode;
+      if (bgmode === 'gradient' && !isUnlocked('gradient')) bgmode = 'color';
+      if (bgmode === 'image' && !isUnlocked('bgimage')) bgmode = 'color';
+      update.bgmode = bgmode;
+    }
     if (isUnlocked('font') && req.body.font) update.font = req.body.font;
     if (isUnlocked('font') && req.body.fontcolor) update.fontcolor = req.body.fontcolor;
     if (isUnlocked('bgimage') && req.file) {

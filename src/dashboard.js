@@ -590,122 +590,127 @@ function startDashboard(client) {
 
     // Leaderboard page
     app.get("/leaderboard", async (req, res) => {
-      // For now, use the first guild the bot is in
-      const guild = client.guilds.cache.first();
-      if (!guild) {
-        return res.send(htmlTemplate(`<h2>Leaderboard</h2><p>The bot is not in any servers.</p>`, { ...getTemplateOpts(req), active: "leaderboard" }));
+      try {
+        // For now, use the first guild the bot is in
+        const guild = client.guilds.cache.first();
+        if (!guild) {
+          return res.send(htmlTemplate(`<h2>Leaderboard</h2><p>The bot is not in any servers.</p>`, { ...getTemplateOpts(req), active: "leaderboard" }));
+        }
+        // Fetch all users by XP
+        const { all } = require("./db");
+        const rows = await all(
+          `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
+          [guild.id]
+        );
+        // Try to resolve usernames
+        await guild.members.fetch().catch(() => {});
+        const leaderboard = rows.map((r, i) => {
+          const member = guild.members.cache.get(r.user_id);
+          const displayName = member?.nickname || member?.user?.username || `User ${r.user_id}`;
+          const avatarUrl = member?.user?.displayAvatarURL({ extension: 'png', size: 64 }) || '';
+          const badge = i === 0 ? '👑 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : '';
+          const medalColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#71faf9';
+          return `
+            <tr class="lb-row" style="background: linear-gradient(90deg, ${medalColor}15 0%, transparent 100%);">
+              <td class="lb-rank" style="font-weight:700;color:${medalColor};">${badge} #${i+1}</td>
+              <td class="lb-user">
+                ${avatarUrl ? `<img src="${avatarUrl}" alt="${displayName}" class="lb-avatar">` : '<div class="lb-avatar-placeholder">👤</div>'}
+                <span>${escapeHtml(displayName)}</span>
+              </td>
+              <td class="lb-level"><span style="background:linear-gradient(135deg,#71faf9,#ffddfc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;">Lvl ${r.level}</span></td>
+              <td class="lb-xp"><span style="color:#71faf9;font-weight:600;">${r.xp.toLocaleString()}</span></td>
+            </tr>
+          `;
+        }).join("");
+        res.send(htmlTemplate(`
+          <h2>Leaderboard</h2>
+          <style>
+            .leaderboard-container {
+              background: rgba(255, 255, 255, 0.05);
+              border-radius: 12px;
+              overflow: hidden;
+              backdrop-filter: blur(10px);
+              box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            }
+            body[data-theme="dark"] .leaderboard-container {
+              background: rgba(0, 0, 0, 0.2);
+            }
+            .leaderboard-container table {
+              width: 100%;
+            }
+            .lb-row {
+              transition: all 0.2s ease;
+              border-bottom: 1px solid rgba(113, 250, 249, 0.2);
+            }
+            body[data-theme="dark"] .lb-row {
+              border-bottom-color: rgba(255, 221, 252, 0.15);
+            }
+            .lb-row:hover {
+              background: linear-gradient(90deg, rgba(113, 250, 249, 0.1) 0%, rgba(255, 221, 252, 0.05) 100%) !important;
+              transform: translateX(4px);
+            }
+            .lb-rank {
+              text-align: center;
+              width: 80px;
+              font-size: 1.1em;
+            }
+            .lb-user {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              padding: 14px 12px !important;
+            }
+            .lb-avatar {
+              width: 48px;
+              height: 48px;
+              border-radius: 50%;
+              border: 2px solid #71faf9;
+              object-fit: cover;
+              box-shadow: 0 2px 8px rgba(113, 250, 249, 0.4);
+            }
+            body[data-theme="dark"] .lb-avatar {
+              border-color: #ffddfc;
+              box-shadow: 0 2px 8px rgba(255, 221, 252, 0.4);
+            }
+            .lb-avatar-placeholder {
+              width: 48px;
+              height: 48px;
+              border-radius: 50%;
+              background: gradient(135deg, #71faf9, #ffddfc);
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 1.8em;
+              border: 2px solid #71faf9;
+            }
+            .lb-level, .lb-xp {
+              text-align: right;
+              width: 140px;
+            }
+            .lb-level {
+              font-size: 0.95em;
+            }
+          </style>
+          <div class="leaderboard-container">
+            <table style="border-collapse: collapse;">
+              <thead>
+                <tr style="background: linear-gradient(135deg, #71faf9 0%, #ffddfc 100%); color: #0a1e1e;">
+                  <th style="text-align:center;width:80px;padding:12px;">Rank</th>
+                  <th style="padding:12px;">Player</th>
+                  <th style="text-align:right;width:140px;padding:12px;">Level</th>
+                  <th style="text-align:right;width:140px;padding:12px;">XP</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${leaderboard}
+              </tbody>
+            </table>
+          </div>
+        `, { ...getTemplateOpts(req), active: "leaderboard" }));
+      } catch (err) {
+        console.error("/leaderboard error:", err);
+        res.status(500).send(htmlTemplate(`<h2>Leaderboard</h2><p style="color:red;">Error loading leaderboard: ${escapeHtml(err.message)}</p>`, { ...getTemplateOpts(req), active: "leaderboard" }));
       }
-      // Fetch all users by XP
-      const { all } = require("./db");
-      const rows = await all(
-        `SELECT user_id, xp, level FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
-        [guild.id]
-      );
-      // Try to resolve usernames
-      await guild.members.fetch().catch(() => {});
-      const leaderboard = rows.map((r, i) => {
-        const member = guild.members.cache.get(r.user_id);
-        const displayName = member?.nickname || member?.user?.username || `User ${r.user_id}`;
-        const avatarUrl = member?.user?.displayAvatarURL({ extension: 'png', size: 64 }) || '';
-        const badge = i === 0 ? '👑 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : '';
-        const medalColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#71faf9';
-        return `
-          <tr class="lb-row" style="background: linear-gradient(90deg, ${medalColor}15 0%, transparent 100%);">
-            <td class="lb-rank" style="font-weight:700;color:${medalColor};">${badge} #${i+1}</td>
-            <td class="lb-user">
-              ${avatarUrl ? `<img src="${avatarUrl}" alt="${displayName}" class="lb-avatar">` : '<div class="lb-avatar-placeholder">👤</div>'}
-              <span>${escapeHtml(displayName)}</span>
-            </td>
-            <td class="lb-level"><span style="background:linear-gradient(135deg,#71faf9,#ffddfc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;">Lvl ${r.level}</span></td>
-            <td class="lb-xp"><span style="color:#71faf9;font-weight:600;">${r.xp.toLocaleString()}</span></td>
-          </tr>
-        `;
-      }).join("");
-      res.send(htmlTemplate(`
-        <h2>Leaderboard</h2>
-        <style>
-          .leaderboard-container {
-            background: rgba(255, 255, 255, 0.05);
-            border-radius: 12px;
-            overflow: hidden;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-          }
-          body[data-theme="dark"] .leaderboard-container {
-            background: rgba(0, 0, 0, 0.2);
-          }
-          .leaderboard-container table {
-            width: 100%;
-          }
-          .lb-row {
-            transition: all 0.2s ease;
-            border-bottom: 1px solid rgba(113, 250, 249, 0.2);
-          }
-          body[data-theme="dark"] .lb-row {
-            border-bottom-color: rgba(255, 221, 252, 0.15);
-          }
-          .lb-row:hover {
-            background: linear-gradient(90deg, rgba(113, 250, 249, 0.1) 0%, rgba(255, 221, 252, 0.05) 100%) !important;
-            transform: translateX(4px);
-          }
-          .lb-rank {
-            text-align: center;
-            width: 80px;
-            font-size: 1.1em;
-          }
-          .lb-user {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 12px !important;
-          }
-          .lb-avatar {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            border: 2px solid #71faf9;
-            object-fit: cover;
-            box-shadow: 0 2px 8px rgba(113, 250, 249, 0.4);
-          }
-          body[data-theme="dark"] .lb-avatar {
-            border-color: #ffddfc;
-            box-shadow: 0 2px 8px rgba(255, 221, 252, 0.4);
-          }
-          .lb-avatar-placeholder {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: gradient(135deg, #71faf9, #ffddfc);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.8em;
-            border: 2px solid #71faf9;
-          }
-          .lb-level, .lb-xp {
-            text-align: right;
-            width: 140px;
-          }
-          .lb-level {
-            font-size: 0.95em;
-          }
-        </style>
-        <div class="leaderboard-container">
-          <table style="border-collapse: collapse;">
-            <thead>
-              <tr style="background: linear-gradient(135deg, #71faf9 0%, #ffddfc 100%); color: #0a1e1e;">
-                <th style="text-align:center;width:80px;padding:12px;">Rank</th>
-                <th style="padding:12px;">Player</th>
-                <th style="text-align:right;width:140px;padding:12px;">Level</th>
-                <th style="text-align:right;width:140px;padding:12px;">XP</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${leaderboard}
-            </tbody>
-          </table>
-        </div>
-      `, { ...getTemplateOpts(req), active: "leaderboard" }));
     });
 
   // Sessions (must be before passport.session())
@@ -1005,24 +1010,6 @@ function startDashboard(client) {
   }
 
   app.use(express.urlencoded({ extended: true }));
-
-  // Sessions
-  app.set("trust proxy", 1);
-  app.use(
-    session({
-      name: "lop_dashboard_session",
-      secret: process.env.DASHBOARD_SESSION_SECRET || "change-me",
-      resave: false,
-      saveUninitialized: false,
-      rolling: true,
-      cookie: {
-        httpOnly: true,
-        sameSite: "lax",
-        secure: false, // set true only when behind HTTPS and configured correctly
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      }
-    })
-  );
 
   // Basic error logging (helps Render debugging)
   app.use((req, _res, next) => {

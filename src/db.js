@@ -276,6 +276,7 @@ async function initDb() {
       fontcolor TEXT,
       gradient TEXT,
       bgimage TEXT,
+      bgimage_data BYTEA,
       bgcolor TEXT,
       bgmode TEXT,
       border TEXT,
@@ -293,6 +294,7 @@ async function initDb() {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarbordercolor TEXT DEFAULT '#71faf9'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS borderglow TEXT DEFAULT 'none'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgmode TEXT`);
+    await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgimage_data BYTEA`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

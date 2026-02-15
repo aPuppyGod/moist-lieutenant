@@ -4,7 +4,8 @@ const passport = require("passport");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
 
-const { get, run } = require("./db");
+const { get, run, all } = require("./db");
+const { xpToNextLevel, totalXpForLevel } = require("./xp");
 
 // Discord OAuth2 setup
 const DiscordStrategy = require("passport-discord").Strategy;
@@ -823,6 +824,28 @@ function startDashboard(client) {
         if (req.query.borderglow) prefs.borderglow = req.query.borderglow;
         if (req.query.avatarframe) prefs.avatarframe = req.query.avatarframe;
       }
+
+      let rank = null;
+      let displayName = user?.username || "Your Name";
+      if (guild && userId) {
+        const member = await guild.members.fetch(userId).catch(() => null);
+        displayName = member?.displayName || displayName;
+      }
+      try {
+        if (guildId && userId) {
+          const leaderboard = await all(
+            `SELECT user_id FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
+            [guildId]
+          );
+          rank = leaderboard.findIndex(row => row.user_id === userId) + 1;
+        }
+      } catch (e) {
+        rank = null;
+      }
+      const xpStart = totalXpForLevel(userLevel);
+      const xpNext = xpStart + xpToNextLevel(userLevel);
+      const xpIntoLevel = userXp - xpStart;
+      const xpToNext = xpNext - userXp;
       
       // Canvas size unified with Discord bot: 600x180
       const width = 600, height = 180;
@@ -841,11 +864,18 @@ function startDashboard(client) {
         bgMode = "color";
       }
 
-      if (bgMode === "image" && prefs.bgimage && isUnlocked("bgimage")) {
+      if (bgMode === "image" && isUnlocked("bgimage")) {
         try {
-          let imgPath = path.resolve(prefs.bgimage);
-          const img = await loadImage(imgPath);
-          ctx.drawImage(img, 0, 0, width, height);
+          if (prefs.bgimage_data) {
+            const img = await loadImage(prefs.bgimage_data);
+            ctx.drawImage(img, 0, 0, width, height);
+          } else if (prefs.bgimage) {
+            let imgPath = path.resolve(prefs.bgimage);
+            const img = await loadImage(imgPath);
+            ctx.drawImage(img, 0, 0, width, height);
+          } else {
+            throw new Error("No background image data");
+          }
         } catch (e) {
           bgMode = isUnlocked("gradient") && prefs.gradient ? "gradient" : "color";
         }
@@ -976,7 +1006,7 @@ function startDashboard(client) {
           if (res.ok) {
             let avatarBuffer = typeof res.buffer === 'function' ? await res.buffer() : Buffer.from(await res.arrayBuffer());
             const avatar = await loadImage(avatarBuffer);
-            ctx.drawImage(avatar, 30, 30, 120, 120);
+            ctx.drawImage(avatar, 30, 20, 120, 120);
           } else {
             throw new Error('Avatar fetch failed');
           }
@@ -1006,37 +1036,47 @@ function startDashboard(client) {
       ctx.fillStyle = prefs.fontcolor || "#fff";
       ctx.strokeStyle = "rgba(0,0,0,0.6)";
       ctx.lineWidth = 3;
-      ctx.strokeText(user?.tag || "Your Name", 170, 70);
-      ctx.fillText(user?.tag || "Your Name", 170, 70);
+      ctx.strokeText(displayName, 170, 50);
+      ctx.fillText(displayName, 170, 50);
       
       ctx.font = `bold 22px ${fontFamily}`;
       ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "rgba(0,0,0,0.7)";
       ctx.lineWidth = 2;
-      ctx.strokeText(`Level: ${userLevel}`, 170, 110);
-      ctx.fillText(`Level: ${userLevel}`, 170, 110);
+      ctx.strokeText(`Level: ${userLevel}`, 170, 80);
+      ctx.fillText(`Level: ${userLevel}`, 170, 80);
+      
+      ctx.font = `bold 22px ${fontFamily}`;
+      ctx.fillStyle = "#ffffff";
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.lineWidth = 2;
+      if (rank && rank > 0) ctx.strokeText(`Rank: #${rank}`, 170, 105);
+      if (rank && rank > 0) ctx.fillText(`Rank: #${rank}`, 170, 105);
       
       ctx.font = `16px ${fontFamily}`;
       ctx.fillStyle = "#ffffff";
       ctx.strokeStyle = "rgba(0,0,0,0.7)";
       ctx.lineWidth = 2;
-      ctx.strokeText(`XP: ${userXp} / ${userXp + 100}`, 170, 140);
-      ctx.fillText(`XP: ${userXp} / ${userXp + 100}`, 170, 140);
+      ctx.strokeText(`XP: ${userXp} / ${xpNext} (+${xpToNext} to next)`, 170, 130);
+      ctx.fillText(`XP: ${userXp} / ${xpNext} (+${xpToNext} to next)`, 170, 130);
+      
       // Progress bar
-      const barX = 170, barY = 150, barW = 380, barH = 20;
-      ctx.fillStyle = "#e8f8f8";
+      const barX = 170, barY = 145, barW = 380, barH = 20;
+      ctx.fillStyle = "#444";
       ctx.fillRect(barX, barY, barW, barH);
-      const progressGrad = ctx.createLinearGradient(barX, barY, barX + barW * 0.1, barY);
-      progressGrad.addColorStop(0, "#71faf9");
-      progressGrad.addColorStop(1, "#2ab3b0");
-      ctx.fillStyle = progressGrad;
-      ctx.fillRect(barX, barY, barW * 0.1, barH);
-      ctx.strokeStyle = "#71faf9";
+      const progressDen = Math.max(1, (xpNext - xpStart));
+      const progress = Math.max(0, Math.min(1, (userXp - xpStart) / progressDen));
+      ctx.fillStyle = "#43B581";
+      ctx.fillRect(barX, barY, barW * progress, barH);
+      ctx.strokeStyle = "#222";
       ctx.lineWidth = 2;
       ctx.strokeRect(barX, barY, barW, barH);
       ctx.font = `bold 16px ${fontFamily}`;
-      ctx.fillStyle = "#0a1e1e";
-      ctx.fillText(`0 / 100 XP this level`, barX + 10, barY + 16);
+      ctx.fillStyle = "#fff";
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.lineWidth = 2;
+      ctx.strokeText(`${xpIntoLevel} / ${xpToNextLevel(userLevel)} XP this level`, barX + 10, barY + 16);
+      ctx.fillText(`${xpIntoLevel} / ${xpToNextLevel(userLevel)} XP this level`, barX + 10, barY + 16);
       // Output as PNG
       res.setHeader("Content-Type", "image/png");
       res.send(canvas.toBuffer());
@@ -1093,6 +1133,28 @@ function startDashboard(client) {
           borderglow: req.body.borderglow || "none",
           avatarframe: req.body.avatarframe || "none"
         };
+
+        let rank = null;
+        let displayName = user?.username || "Your Name";
+        if (guild && userId) {
+          const member = await guild.members.fetch(userId).catch(() => null);
+          displayName = member?.displayName || displayName;
+        }
+        try {
+          if (guildId && userId) {
+            const leaderboard = await all(
+              `SELECT user_id FROM user_xp WHERE guild_id=? ORDER BY xp DESC`,
+              [guildId]
+            );
+            rank = leaderboard.findIndex(row => row.user_id === userId) + 1;
+          }
+        } catch (e) {
+          rank = null;
+        }
+        const xpStart = totalXpForLevel(userLevel);
+        const xpNext = xpStart + xpToNextLevel(userLevel);
+        const xpIntoLevel = userXp - xpStart;
+        const xpToNext = xpNext - userXp;
         
         const width = 600, height = 180;
         const canvas = createCanvas(width, height);
@@ -1194,7 +1256,7 @@ function startDashboard(client) {
             if (res2.ok) {
               let avatarBuffer = typeof res2.buffer === 'function' ? await res2.buffer() : Buffer.from(await res2.arrayBuffer());
               const avatar = await loadImage(avatarBuffer);
-              ctx.drawImage(avatar, 30, 30, 120, 120);
+              ctx.drawImage(avatar, 30, 20, 120, 120);
             } else {
               throw new Error('Avatar fetch failed');
             }
@@ -1265,38 +1327,47 @@ function startDashboard(client) {
         ctx.fillStyle = prefs.fontcolor || "#fff";
         ctx.strokeStyle = "rgba(0,0,0,0.6)";
         ctx.lineWidth = 3;
-        ctx.strokeText(user?.tag || "Your Name", 170, 70);
-        ctx.fillText(user?.tag || "Your Name", 170, 70);
+        ctx.strokeText(displayName, 170, 50);
+        ctx.fillText(displayName, 170, 50);
         
         ctx.font = `bold 22px ${fontFamily}`;
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "rgba(0,0,0,0.7)";
         ctx.lineWidth = 2;
-        ctx.strokeText(`Level: ${userLevel}`, 170, 110);
-        ctx.fillText(`Level: ${userLevel}`, 170, 110);
+        ctx.strokeText(`Level: ${userLevel}`, 170, 80);
+        ctx.fillText(`Level: ${userLevel}`, 170, 80);
+        
+        ctx.font = `bold 22px ${fontFamily}`;
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.lineWidth = 2;
+        if (rank && rank > 0) ctx.strokeText(`Rank: #${rank}`, 170, 105);
+        if (rank && rank > 0) ctx.fillText(`Rank: #${rank}`, 170, 105);
         
         ctx.font = `16px ${fontFamily}`;
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "rgba(0,0,0,0.7)";
         ctx.lineWidth = 2;
-        ctx.strokeText(`XP: ${userXp} / ${userXp + 100}`, 170, 140);
-        ctx.fillText(`XP: ${userXp} / ${userXp + 100}`, 170, 140);
+        ctx.strokeText(`XP: ${userXp} / ${xpNext} (+${xpToNext} to next)`, 170, 130);
+        ctx.fillText(`XP: ${userXp} / ${xpNext} (+${xpToNext} to next)`, 170, 130);
         
         // Progress bar
-        const barX = 170, barY = 150, barW = 380, barH = 20;
-        ctx.fillStyle = "#e8f8f8";
+        const barX = 170, barY = 145, barW = 380, barH = 20;
+        ctx.fillStyle = "#444";
         ctx.fillRect(barX, barY, barW, barH);
-        const progressGrad = ctx.createLinearGradient(barX, barY, barX + barW * 0.1, barY);
-        progressGrad.addColorStop(0, "#71faf9");
-        progressGrad.addColorStop(1, "#2ab3b0");
-        ctx.fillStyle = progressGrad;
-        ctx.fillRect(barX, barY, barW * 0.1, barH);
-        ctx.strokeStyle = "#71faf9";
+        const progressDen = Math.max(1, (xpNext - xpStart));
+        const progress = Math.max(0, Math.min(1, (userXp - xpStart) / progressDen));
+        ctx.fillStyle = "#43B581";
+        ctx.fillRect(barX, barY, barW * progress, barH);
+        ctx.strokeStyle = "#222";
         ctx.lineWidth = 2;
         ctx.strokeRect(barX, barY, barW, barH);
         ctx.font = `bold 16px ${fontFamily}`;
-        ctx.fillStyle = "#0a1e1e";
-        ctx.fillText(`0 / 100 XP this level`, barX + 10, barY + 16);
+        ctx.fillStyle = "#fff";
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.lineWidth = 2;
+        ctx.strokeText(`${xpIntoLevel} / ${xpToNextLevel(userLevel)} XP this level`, barX + 10, barY + 16);
+        ctx.fillText(`${xpIntoLevel} / ${xpToNextLevel(userLevel)} XP this level`, barX + 10, barY + 16);
         
         res.setHeader("Content-Type", "image/png");
         res.send(canvas.toBuffer());
@@ -2541,11 +2612,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     if (isUnlocked('font') && req.body.fontcolor) update.fontcolor = req.body.fontcolor;
     if (isUnlocked('bgimage') && req.file) {
       // Image is already cropped by frontend cropper, just resize to exact dimensions
-      const croppedPath = req.file.path + '_cropped.png';
-      await sharp(req.file.path)
+      const resizedBuffer = await sharp(req.file.path)
         .resize(600, 180, { fit: 'cover' })
-        .toFile(croppedPath);
-      update.bgimage = croppedPath;
+        .png()
+        .toBuffer();
+      update.bgimage_data = resizedBuffer;
+      update.bgimage = null;
     }
     // Save border and avatar frame if unlocked
     if (isUnlocked('border') && req.body.avatarborder) update.avatarborder = parseInt(req.body.avatarborder) || 3;

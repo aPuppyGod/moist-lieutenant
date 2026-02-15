@@ -275,21 +275,43 @@ async function cmdRank(message, args) {
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
-  // Background - use custom image if available, otherwise solid color
-  let bgLoaded = false;
-  if (prefs.bgimage) {
+  // Background - image, gradient, or solid color
+  let bgMode = prefs.bgmode;
+  if (!bgMode) {
+    if (prefs.bgimage_data || prefs.bgimage) bgMode = "image";
+    else if (prefs.gradient) bgMode = "gradient";
+    else bgMode = "color";
+  }
+
+  if (bgMode === "image") {
     try {
-      const bgImage = await loadImage(prefs.bgimage);
-      ctx.drawImage(bgImage, 0, 0, width, height);
-      bgLoaded = true;
-      console.log("[rank] Custom background image loaded:", prefs.bgimage);
+      if (prefs.bgimage_data) {
+        const bgImage = await loadImage(prefs.bgimage_data);
+        ctx.drawImage(bgImage, 0, 0, width, height);
+      } else if (prefs.bgimage) {
+        const bgImage = await loadImage(prefs.bgimage);
+        ctx.drawImage(bgImage, 0, 0, width, height);
+      } else {
+        throw new Error("No background image data");
+      }
     } catch (bgErr) {
-      console.error("[rank] Failed to load custom background image:", prefs.bgimage, bgErr);
-      // Fall back to solid color
+      bgMode = prefs.gradient ? "gradient" : "color";
     }
   }
-  if (!bgLoaded) {
-    ctx.fillStyle = "#23272A";
+
+  if (bgMode === "gradient") {
+    const colors = (prefs.gradient || "").split(",").map(s => s.trim()).filter(Boolean);
+    if (colors.length > 1) {
+      const grad = ctx.createLinearGradient(0, 0, width, height);
+      colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+    } else {
+      ctx.fillStyle = prefs.bgcolor || "#1a2a2a";
+      ctx.fillRect(0, 0, width, height);
+    }
+  } else if (bgMode === "color") {
+    ctx.fillStyle = prefs.bgcolor || "#1a2a2a";
     ctx.fillRect(0, 0, width, height);
   }
 
@@ -382,7 +404,41 @@ async function cmdRank(message, args) {
   }
 
   // Font family
-  let fontFamily = prefs.font || "OpenSans";
+  const fontKey = prefs.font || "OpenSans";
+  const fontMap = {
+    OpenSans: "'Open Sans',sans-serif",
+    Arial: "Arial,sans-serif",
+    ComicSansMS: "'Comic Sans MS',cursive",
+    TimesNewRoman: "'Times New Roman',serif",
+    Roboto: "'Roboto',sans-serif",
+    Lobster: "'Lobster',cursive",
+    Pacifico: "'Pacifico',cursive",
+    Oswald: "'Oswald',sans-serif",
+    Raleway: "'Raleway',sans-serif",
+    BebasNeue: "'Bebas Neue',sans-serif",
+    Merriweather: "'Merriweather',serif",
+    Nunito: "'Nunito',sans-serif",
+    Poppins: "'Poppins',sans-serif",
+    Quicksand: "'Quicksand',sans-serif",
+    SourceCodePro: "'Source Code Pro',monospace",
+    Caveat: "'Caveat',cursive",
+    IndieFlower: "'Indie Flower',cursive",
+    FiraSans: "'Fira Sans',sans-serif",
+    Lato: "'Lato',sans-serif",
+    PlayfairDisplay: "'Playfair Display',serif",
+    AbrilFatface: "'Abril Fatface',cursive",
+    Anton: "'Anton',sans-serif",
+    Bangers: "'Bangers',cursive",
+    DancingScript: "'Dancing Script',cursive",
+    PermanentMarker: "'Permanent Marker',cursive",
+    PTSerif: "'PT Serif',serif",
+    Rubik: "'Rubik',sans-serif",
+    Satisfy: "'Satisfy',cursive",
+    Teko: "'Teko',sans-serif",
+    VarelaRound: "'Varela Round',sans-serif",
+    ZillaSlab: "'Zilla Slab',serif"
+  };
+  let fontFamily = fontMap[fontKey] || "'Open Sans',sans-serif";
   let fontColor = prefs.fontcolor || "#fff";
   // Nickname or username
   let displayName = targetMember?.displayName || targetUser.username;
@@ -391,7 +447,7 @@ async function cmdRank(message, args) {
     // For simplicity, fallback if non-ASCII and font is not OpenSans
     return font === "OpenSans" || /^[\x00-\x7F]*$/.test(str);
   }
-  if (!isRenderable(displayName, fontFamily)) displayName = targetUser.username;
+  if (!isRenderable(displayName, fontKey)) displayName = targetUser.username;
   ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillStyle = fontColor;
   ctx.strokeStyle = "rgba(0,0,0,0.6)";

@@ -998,6 +998,240 @@ function startDashboard(client) {
       res.setHeader("Content-Type", "image/png");
       res.send(canvas.toBuffer());
     });
+
+    // POST endpoint for previewing with uploaded image (for cropped image preview)
+    app.post("/lop/rankcard/preview", upload.single("bgimage"), async (req, res) => {
+      try {
+        const sharp = require('sharp');
+        const path = require('path');
+        const { createCanvas, loadImage, registerFont } = require('canvas');
+        const { getCustomizationUnlocks } = require("./settings");
+        const { get } = require("./db");
+        const user = req.user;
+        const userId = user?.id || null;
+        const guild = client.guilds.cache.first();
+        const guildId = guild?.id || null;
+        let userLevel = 1;
+        let userXp = 0;
+        let unlocks = null;
+        
+        if (guildId && userId) {
+          unlocks = await getCustomizationUnlocks(guildId);
+          const row = await get(
+            `SELECT level, xp FROM user_xp WHERE guild_id=? AND user_id=?`,
+            [guildId, userId]
+          );
+          userLevel = row?.level ?? 1;
+          userXp = row?.xp ?? 0;
+        } else {
+          unlocks = {
+            bgimage: 10,
+            gradient: 5,
+            bgcolor: 1,
+            font: 3,
+            border: 7,
+            avatarframe: 15
+          };
+        }
+        
+        function isUnlocked(opt) {
+          return userLevel >= (unlocks[opt] ?? 1);
+        }
+        
+        // Load prefs from form body (for preview)
+        let prefs = {
+          bgcolor: req.body.bgcolor || "#1a2a2a",
+          gradient: req.body.gradient || "",
+          font: req.body.font || "OpenSans",
+          fontcolor: req.body.fontcolor || "#ffffff",
+          avatarborder: parseInt(req.body.avatarborder) || 3,
+          avatarbordercolor: req.body.avatarbordercolor || "#71faf9",
+          borderglow: req.body.borderglow || "none",
+          avatarframe: req.body.avatarframe || "none"
+        };
+        
+        const width = 600, height = 180;
+        const canvas = createCanvas(width, height);
+        const ctx = canvas.getContext("2d");
+        
+        // Use uploaded image if available
+        if (req.file && isUnlocked("bgimage")) {
+          try {
+            const img = await loadImage(req.file.path);
+            ctx.drawImage(img, 0, 0, width, height);
+          } catch (e) {
+            ctx.fillStyle = prefs.bgcolor;
+            ctx.fillRect(0, 0, width, height);
+          }
+        } else if (prefs.gradient && isUnlocked("gradient")) {
+          const colors = prefs.gradient.split(",").map(s => s.trim()).filter(Boolean);
+          if (colors.length > 1) {
+            const grad = ctx.createLinearGradient(0, 0, width, height);
+            colors.forEach((c, i) => grad.addColorStop(i / (colors.length - 1), c));
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+          } else {
+            ctx.fillStyle = prefs.bgcolor;
+            ctx.fillRect(0, 0, width, height);
+          }
+        } else {
+          ctx.fillStyle = prefs.bgcolor;
+          ctx.fillRect(0, 0, width, height);
+        }
+        
+        // Font
+        let fontFamily = "OpenSans";
+        if (prefs.font && isUnlocked("font")) {
+          const fontMap = {
+            OpenSans: "'Open Sans',sans-serif",
+            Arial: "Arial,sans-serif",
+            ComicSansMS: "'Comic Sans MS',cursive",
+            TimesNewRoman: "'Times New Roman',serif",
+            Roboto: "'Roboto',sans-serif",
+            Lobster: "'Lobster',cursive",
+            Pacifico: "'Pacifico',cursive",
+            Oswald: "'Oswald',sans-serif",
+            Raleway: "'Raleway',sans-serif",
+            BebasNeue: "'Bebas Neue',sans-serif",
+            Merriweather: "'Merriweather',serif",
+            Nunito: "'Nunito',sans-serif",
+            Poppins: "'Poppins',sans-serif",
+            Quicksand: "'Quicksand',sans-serif",
+            SourceCodePro: "'Source Code Pro',monospace",
+            Caveat: "'Caveat',cursive",
+            IndieFlower: "'Indie Flower',cursive",
+            FiraSans: "'Fira Sans',sans-serif",
+            Lato: "'Lato',sans-serif",
+            PlayfairDisplay: "'Playfair Display',serif",
+            AbrilFatface: "'Abril Fatface',cursive",
+            Anton: "'Anton',sans-serif",
+            Bangers: "'Bangers',cursive",
+            DancingScript: "'Dancing Script',cursive",
+            PermanentMarker: "'Permanent Marker',cursive",
+            PTSerif: "'PT Serif',serif",
+            Rubik: "'Rubik',sans-serif",
+            Satisfy: "'Satisfy',cursive",
+            Teko: "'Teko',sans-serif",
+            VarelaRound: "'Varela Round',sans-serif",
+            ZillaSlab: "'Zilla Slab',serif"
+          };
+          fontFamily = fontMap[prefs.font] || "'Open Sans',sans-serif";
+        }
+        
+        // Draw avatar
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(90, 90, 60, 0, Math.PI * 2);
+        ctx.closePath();
+        ctx.clip();
+        try {
+          let avatarURL = user?.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` : null;
+          if (avatarURL) {
+            let fetchFn = (typeof fetch === 'function') ? fetch : require('node-fetch');
+            let res2 = await fetchFn(avatarURL);
+            if (res2.ok) {
+              let avatarBuffer = typeof res2.buffer === 'function' ? await res2.buffer() : Buffer.from(await res2.arrayBuffer());
+              const avatar = await loadImage(avatarBuffer);
+              ctx.drawImage(avatar, 30, 30, 120, 120);
+            } else {
+              throw new Error('Avatar fetch failed');
+            }
+          } else {
+            ctx.fillStyle = "#555";
+            ctx.fillRect(30, 30, 120, 120);
+            ctx.font = `bold 40px ${fontFamily}`;
+            ctx.fillStyle = "#fff";
+            ctx.fillText(user?.username ? user.username[0].toUpperCase() : "?", 80, 120);
+          }
+        } catch (e) {
+          ctx.fillStyle = "#555";
+          ctx.fillRect(30, 30, 120, 120);
+          ctx.font = `bold 40px ${fontFamily}`;
+          ctx.fillStyle = "#fff";
+          ctx.fillText(user?.username ? user.username[0].toUpperCase() : "?", 80, 120);
+        }
+        ctx.restore();
+        
+        // Draw avatar border and frame
+        function drawAvatarBorder(ctx, prefs) {
+          const centerX = 90, centerY = 90, radius = 60;
+          const borderWidth = parseInt(prefs.avatarborder) || 3;
+          const borderColor = prefs.avatarbordercolor || '#71faf9';
+          const glowType = prefs.borderglow || 'none';
+          const frameType = prefs.avatarframe || 'none';
+          
+          if (frameType !== 'none') {
+            ctx.save();
+            ctx.strokeStyle = frameType === 'gold' ? '#FFD700' : 
+                              frameType === 'silver' ? '#C0C0C0' :
+                              frameType === 'bronze' ? '#CD7F32' :
+                              frameType === 'neon' ? '#71faf9' : '#71faf9';
+            ctx.lineWidth = 8;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.strokeStyle = ctx.strokeStyle;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius + 14, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.restore();
+          }
+          
+          ctx.save();
+          if (glowType !== 'none') {
+            const glowRadius = glowType === 'subtle' ? 8 : glowType === 'medium' ? 16 : 24;
+            ctx.shadowColor = borderColor + '80';
+            ctx.shadowBlur = glowRadius;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 0;
+          }
+          ctx.strokeStyle = borderColor;
+          ctx.lineWidth = borderWidth;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        
+        if (isUnlocked('border') || isUnlocked('avatarframe')) {
+          drawAvatarBorder(ctx, prefs);
+        }
+        
+        // Draw text
+        ctx.font = `bold 28px ${fontFamily}`;
+        ctx.fillStyle = prefs.fontcolor || "#fff";
+        ctx.fillText(user?.tag || "Your Name", 170, 70);
+        ctx.font = `bold 22px ${fontFamily}`;
+        ctx.fillStyle = "#71faf9";
+        ctx.fillText(`Level: ${userLevel}`, 170, 110);
+        ctx.font = `16px ${fontFamily}`;
+        ctx.fillStyle = "#ccc";
+        ctx.fillText(`XP: ${userXp} / ${userXp + 100}`, 170, 140);
+        
+        // Progress bar
+        const barX = 170, barY = 150, barW = 380, barH = 20;
+        ctx.fillStyle = "#e8f8f8";
+        ctx.fillRect(barX, barY, barW, barH);
+        const progressGrad = ctx.createLinearGradient(barX, barY, barX + barW * 0.1, barY);
+        progressGrad.addColorStop(0, "#71faf9");
+        progressGrad.addColorStop(1, "#2ab3b0");
+        ctx.fillStyle = progressGrad;
+        ctx.fillRect(barX, barY, barW * 0.1, barH);
+        ctx.strokeStyle = "#71faf9";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(barX, barY, barW, barH);
+        ctx.font = `bold 16px ${fontFamily}`;
+        ctx.fillStyle = "#0a1e1e";
+        ctx.fillText(`0 / 100 XP this level`, barX + 10, barY + 16);
+        
+        res.setHeader("Content-Type", "image/png");
+        res.send(canvas.toBuffer());
+      } catch (err) {
+        console.error("/lop/rankcard/preview error:", err);
+        res.status(500).send("Failed to generate preview");
+      }
+    });
   // (removed duplicate app = express())
 
   // Render sets PORT; local uses DASHBOARD_PORT or 3000
@@ -1727,7 +1961,7 @@ function startDashboard(client) {
             
             // Convert canvas to blob and create a file
             canvas.toBlob(function(blob) {
-              // Create a file from the blob
+            // Create a file from the blob
               const file = new File([blob], 'cropped-background.png', { type: 'image/png' });
               
               // Set the file in the file input
@@ -1749,12 +1983,15 @@ function startDashboard(client) {
                   cropper = null;
                 }
                 
-                // Show the cropped result
+                // Show the cropped result in the cropper image display
                 const img = document.getElementById('cropperImage');
                 img.src = croppedImageData;
                 img.style.maxWidth = '100%';
                 img.style.border = '2px solid #71faf9';
                 img.style.borderRadius = '6px';
+                
+                // Update preview with the cropped image showing
+                updatePreviewWithCroppedImage();
               };
               reader.readAsDataURL(blob);
             }, 'image/png');
@@ -1895,8 +2132,70 @@ function startDashboard(client) {
         }
         
         // Update preview with cropped image
-        function updatePreviewWithCroppedImage(imageData) {
-          updatePreview();
+        let lastCroppedObjectUrl = null;
+        function updatePreviewWithCroppedImage() {
+          const bgImageInput = document.getElementById('bgimageInput');
+          const previewImg = document.getElementById('rankcardPreview');
+          
+          if (!previewImg || !bgImageInput || !bgImageInput.files || bgImageInput.files.length === 0) {
+            // No cropped image, use server preview
+            updatePreview();
+            return;
+          }
+          
+          // There's a cropped image - show it via FormData POST to preview
+          const file = bgImageInput.files[0];
+          const formData = new FormData();
+          formData.append('bgimage', file);
+          
+          // Get all the form values
+          const form = document.getElementById('customizeForm');
+          if (form) {
+            const bgcolor = form.querySelector('[name="bgcolor"]')?.value;
+            if (bgcolor) formData.append('bgcolor', bgcolor);
+            
+            const gradient = form.querySelector('[name="gradient"]')?.value;
+            if (gradient) formData.append('gradient', gradient);
+            
+            const font = form.querySelector('[name="font"]')?.value;
+            if (font) formData.append('font', font);
+            
+            const fontcolor = form.querySelector('[name="fontcolor"]')?.value;
+            if (fontcolor) formData.append('fontcolor', fontcolor);
+            
+            const avatarborder = form.querySelector('[name="avatarborder"]')?.value;
+            if (avatarborder) formData.append('avatarborder', avatarborder);
+            
+            const avatarbordercolor = form.querySelector('[name="avatarbordercolor"]')?.value;
+            if (avatarbordercolor) formData.append('avatarbordercolor', avatarbordercolor);
+            
+            const borderglow = form.querySelector('[name="borderglow"]')?.value;
+            if (borderglow) formData.append('borderglow', borderglow);
+            
+            const avatarframe = form.querySelector('[name="avatarframe"]:checked')?.value;
+            if (avatarframe) formData.append('avatarframe', avatarframe);
+          }
+          
+          formData.append('preview', 'true');
+          formData.append('_t', Date.now());
+          
+          // POST to get preview with cropped image
+          fetch('/lop/rankcard/preview', {
+            method: 'POST',
+            body: formData
+          })
+          .then(response => response.blob())
+          .then(blob => {
+            if (lastCroppedObjectUrl) {
+              URL.revokeObjectURL(lastCroppedObjectUrl);
+            }
+            lastCroppedObjectUrl = URL.createObjectURL(blob);
+            previewImg.src = lastCroppedObjectUrl;
+          })
+          .catch(err => {
+            console.error('Failed to get preview:', err);
+            updatePreview(); // Fallback to regular preview
+          });
         }
         
         // Attach live preview listeners

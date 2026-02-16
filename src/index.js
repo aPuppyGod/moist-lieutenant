@@ -278,7 +278,27 @@ client.on(Events.VoiceStateUpdate, (oldState, newState) => {
 });
 
 // ─────────────────────────────────────────────────────
+// Error Handling
+// ─────────────────────────────────────────────────────
+
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled promise rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+  process.exit(1);
+});
+
+client.on('error', (error) => {
+  console.error('Discord client error:', error);
+});
+
+// ─────────────────────────────────────────────────────
 // Login
 // ─────────────────────────────────────────────────────
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN).catch((error) => {
+  console.error('Failed to login to Discord:', error);
+  process.exit(1);
+});

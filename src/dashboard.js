@@ -13,21 +13,23 @@ const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL;
 
-if (!DISCORD_CALLBACK_URL) {
-  throw new Error("DISCORD_CALLBACK_URL environment variable is required");
-}
-
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-passport.use(new DiscordStrategy({
-  clientID: DISCORD_CLIENT_ID,
-  clientSecret: DISCORD_CLIENT_SECRET,
-  callbackURL: DISCORD_CALLBACK_URL,
-  scope: ["identify", "guilds"]
-}, (accessToken, refreshToken, profile, done) => {
-  process.nextTick(() => done(null, profile));
-}));
+function initializePassport() {
+  if (!DISCORD_CALLBACK_URL) {
+    throw new Error("DISCORD_CALLBACK_URL environment variable is required");
+  }
+  
+  passport.use(new DiscordStrategy({
+    clientID: DISCORD_CLIENT_ID,
+    clientSecret: DISCORD_CLIENT_SECRET,
+    callbackURL: DISCORD_CALLBACK_URL,
+    scope: ["identify", "guilds"]
+  }, (accessToken, refreshToken, profile, done) => {
+    process.nextTick(() => done(null, profile));
+  }));
+}
 
 function htmlTemplate(content, opts = {}) {
   // opts: { user, isAdmin, active }
@@ -753,6 +755,9 @@ function startDashboard(client) {
       }
     })
   );
+
+  // Initialize passport with Discord strategy
+  initializePassport();
 
   // Passport session setup (must be after session)
   app.use(passport.initialize());

@@ -1,5 +1,8 @@
 require("dotenv").config();
 
+console.log(`[${new Date().toISOString()}] Starting Moist Lieutenant bot...`);
+console.log(`[${new Date().toISOString()}] Process ID: ${process.pid}`);
+
 const {
   Client,
   GatewayIntentBits,
@@ -139,8 +142,10 @@ const client = new Client({
 // ─────────────────────────────────────────────────────
 
 client.once(Events.ClientReady, async () => {
+  console.log(`[${new Date().toISOString()}] Discord client ready!`);
   await initDb();
-  console.log(`Logged in as ${client.user.tag}`);
+  console.log(`[${new Date().toISOString()}] Logged in as ${client.user.tag}`);
+  console.log(`[${new Date().toISOString()}] Serving ${client.guilds.cache.size} guild(s)`);
 
   // Dashboard
   startDashboard(client);
@@ -298,6 +303,7 @@ client.on('error', (error) => {
 // Login
 // ─────────────────────────────────────────────────────
 
+console.log(`[${new Date().toISOString()}] Attempting Discord login...`);
 client.login(process.env.DISCORD_TOKEN).catch((error) => {
   console.error('Failed to login to Discord:', error);
   process.exit(1);

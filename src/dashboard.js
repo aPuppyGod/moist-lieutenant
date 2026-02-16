@@ -1417,6 +1417,13 @@ function startDashboard(client) {
   });
 
   // ─────────────────────────────────────────────
+  // Health check endpoint for Railway
+  // ─────────────────────────────────────────────
+  app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  // ─────────────────────────────────────────────
   // Home: list guilds
   // ─────────────────────────────────────────────
   app.get("/", (req, res) => {

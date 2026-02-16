@@ -11,7 +11,11 @@ const { xpToNextLevel, totalXpForLevel } = require("./xp");
 const DiscordStrategy = require("passport-discord").Strategy;
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL || "https://lop-bot-clean-production.up.railway.app";
+const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL;
+
+if (!DISCORD_CALLBACK_URL) {
+  throw new Error("DISCORD_CALLBACK_URL environment variable is required");
+}
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));

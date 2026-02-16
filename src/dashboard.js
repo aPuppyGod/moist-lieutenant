@@ -549,8 +549,26 @@ function escapeHtml(s) {
     .replaceAll('"', "&quot;");
 }
 
-const { getGuildSettings, getLevelRoles, getIgnoredChannels } = require("./settings");
+const { 
+  getGuildSettings, 
+  updateGuildSettings,
+  getLevelRoles, 
+  setLevelRole,
+  deleteLevelRole,
+  getIgnoredChannels,
+  addIgnoredChannel,
+  removeIgnoredChannel
+} = require("./settings");
 const { ChannelType } = require("discord.js");
+
+// Helper function to check if a channel can receive messages
+function isTextChannelLike(channel) {
+  if (!channel) return false;
+  return channel.type === ChannelType.GuildText || 
+         channel.type === ChannelType.GuildAnnouncement ||
+         channel.type === ChannelType.PublicThread ||
+         channel.type === ChannelType.PrivateThread;
+}
 
 function startDashboard(client) {
     const app = express();

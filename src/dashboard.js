@@ -2989,6 +2989,21 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   const server = app.listen(port, "0.0.0.0", () => {
     console.log(`[${new Date().toISOString()}] Dashboard HTTP server listening on 0.0.0.0:${port}`);
     console.log(`[${new Date().toISOString()}] Server ready to accept connections`);
+    
+    // Self-test to confirm server is responding
+    const http = require('http');
+    const testReq = http.request({
+      hostname: 'localhost',
+      port: port,
+      path: '/health',
+      method: 'GET'
+    }, (res) => {
+      console.log(`[${new Date().toISOString()}] Self-test health check: ${res.statusCode}`);
+    });
+    testReq.on('error', (e) => {
+      console.error(`[${new Date().toISOString()}] Self-test failed:`, e.message);
+    });
+    testReq.end();
   });
 
   // Handle server errors
@@ -2997,9 +3012,15 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     process.exit(1);
   });
 
+  // Keep-alive interval to prevent Railway from thinking the service is idle
+  const keepAliveInterval = setInterval(() => {
+    console.log(`[${new Date().toISOString()}] Keep-alive: Service running, uptime ${Math.floor(process.uptime())}s`);
+  }, 30000); // Every 30 seconds
+
   // Graceful shutdown
   process.on('SIGTERM', () => {
     console.log(`[${new Date().toISOString()}] SIGTERM received, closing HTTP server...`);
+    clearInterval(keepAliveInterval);
     server.close(() => {
       console.log(`[${new Date().toISOString()}] HTTP server closed`);
     });

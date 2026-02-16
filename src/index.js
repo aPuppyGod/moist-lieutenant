@@ -283,7 +283,7 @@ client.on(Events.VoiceStateUpdate, (oldState, newState) => {
 });
 
 // ─────────────────────────────────────────────────────
-// Error Handling
+// Error Handling & Graceful Shutdown
 // ─────────────────────────────────────────────────────
 
 process.on('unhandledRejection', (error) => {
@@ -293,6 +293,20 @@ process.on('unhandledRejection', (error) => {
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
   process.exit(1);
+});
+
+// Graceful shutdown on SIGTERM (Railway deployments)
+process.on('SIGTERM', () => {
+  console.log(`[${new Date().toISOString()}] SIGTERM received, shutting down gracefully...`);
+  client.destroy();
+  process.exit(0);
+});
+
+// Graceful shutdown on SIGINT (Ctrl+C)
+process.on('SIGINT', () => {
+  console.log(`[${new Date().toISOString()}] SIGINT received, shutting down gracefully...`);
+  client.destroy();
+  process.exit(0);
 });
 
 client.on('error', (error) => {

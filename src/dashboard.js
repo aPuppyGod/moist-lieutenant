@@ -1420,7 +1420,13 @@ function startDashboard(client) {
   // Health check endpoint for Railway
   // ─────────────────────────────────────────────
   app.get("/health", (req, res) => {
-    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+    console.log(`[${new Date().toISOString()}] Health check requested`);
+    res.status(200).json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      pid: process.pid
+    });
   });
 
   // ─────────────────────────────────────────────

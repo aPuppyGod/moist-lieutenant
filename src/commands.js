@@ -473,21 +473,17 @@ async function cmdRank(message, args) {
   let fontFamily = fontMap[fontKey] || "'Open Sans',sans-serif";
   let fontColor = prefs.fontcolor || "#fff";
   
-  // Sanitize display name to prevent ToFU boxes (emoji/special chars that fonts can't render)
+  // Sanitize display name to prevent ToFU boxes - use whitelist approach
   function sanitizeName(str) {
     if (!str) return "";
-    // Remove emojis and other special Unicode characters that cause ToFU boxes
-    // Keep basic Latin, Latin Extended, numbers, common punctuation
+    // Only keep characters that OpenSans can reliably render:
+    // - Basic Latin (ASCII printable): \x20-\x7E
+    // - Latin-1 Supplement: \xA0-\xFF
+    // - Latin Extended-A: \u0100-\u017F
+    // - Latin Extended-B (partial): \u0180-\u024F
+    // Remove everything else (emojis, special symbols, etc.)
     return str
-      .replace(/[\u{1F000}-\u{1F9FF}]/gu, '') // Emoticons, symbols
-      .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Miscellaneous symbols
-      .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
-      .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Misc symbols and pictographs
-      .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
-      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport and map symbols
-      .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental symbols
-      .replace(/[\u{FE00}-\u{FE0F}]/gu, '')   // Variation selectors
-      .replace(/[\u{200D}\u{200B}-\u{200F}]/gu, '') // Zero-width joiners/spaces
+      .replace(/[^\x20-\x7E\xA0-\xFF\u0100-\u024F]/g, '')
       .trim();
   }
   

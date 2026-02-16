@@ -215,17 +215,12 @@ async function cmdHelp(message) {
         inline: false
       },
       {
-        name: "⚙️ Admin/Manager Commands",
-        value: "`!xp add @user <amount>` - Add XP to user\n`!xp set @user <amount>` - Set user XP\n`!recalc-levels` - Recalculate all levels\n`!sync-roles` - Sync level roles\n\n*For detailed admin help, use `!admin-commands`*",
-        inline: false
-      },
-      {
         name: "🌐 Web Dashboard",
         value: "`!moist-lieutenant` - Get link to configure XP settings, level roles, rank cards, and more",
         inline: false
       }
     )
-    .setFooter({ text: "Use !admin-commands for detailed admin help" })
+    .setFooter({ text: "Moist Lieutenant - Swamp-themed XP & Leveling" })
     .setTimestamp();
 
   await message.reply({ embeds: [embed] }).catch(() => {});

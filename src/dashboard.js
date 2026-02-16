@@ -2985,9 +2985,24 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  // Render needs 0.0.0.0
-  app.listen(port, "0.0.0.0", () => {
-    console.log(`Dashboard running on port ${port}`);
+  // Start listening
+  const server = app.listen(port, "0.0.0.0", () => {
+    console.log(`[${new Date().toISOString()}] Dashboard HTTP server listening on 0.0.0.0:${port}`);
+    console.log(`[${new Date().toISOString()}] Server ready to accept connections`);
+  });
+
+  // Handle server errors
+  server.on('error', (error) => {
+    console.error(`[${new Date().toISOString()}] Server error:`, error);
+    process.exit(1);
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log(`[${new Date().toISOString()}] SIGTERM received, closing HTTP server...`);
+    server.close(() => {
+      console.log(`[${new Date().toISOString()}] HTTP server closed`);
+    });
   });
 }
 

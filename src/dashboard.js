@@ -1381,12 +1381,6 @@ function startDashboard(client) {
   // Render sets PORT; local uses DASHBOARD_PORT or 3000
   const port = parseInt(process.env.PORT || process.env.DASHBOARD_PORT || "3000", 10);
 
-  const password = process.env.DASHBOARD_PASSWORD;
-  if (!password) {
-    console.warn("DASHBOARD_PASSWORD not set; dashboard will not start.");
-    return;
-  }
-
   app.use(express.urlencoded({ extended: true }));
 
   // Basic error logging (helps Render debugging)
@@ -1396,42 +1390,8 @@ function startDashboard(client) {
   });
 
   // ─────────────────────────────────────────────
-  // Auth
-  // ─────────────────────────────────────────────
-  app.get("/login", (req, res) => {
-    res.send(htmlTemplate(`
-      <h2>Bot Dashboard Login</h2>
-      <form method="post" action="/login">
-        <input type="password" name="password" placeholder="Password" />
-        <button type="submit">Login</button>
-      </form>
-      <p style="color:#666;max-width:720px">
-        Tip: always use the same host (localhost OR 127.0.0.1) locally, or cookies can break.
-      </p>
-    `));
-  });
-
-  app.post("/login", (req, res) => {
-    if (req.body.password === password) {
-      req.session.ok = true;
-      return req.session.save(() => res.redirect("/"));
-    }
-    return res.status(403).send("Wrong password.");
-  });
-
-  app.get("/logout", (req, res) => {
-    req.session.destroy(() => res.redirect("/login"));
-  });
-
-  // ─────────────────────────────────────────────
   // Home: list guilds
   // ─────────────────────────────────────────────
-  app.get("/admin", (req, res) => {
-    if (!req.session || !req.session.ok) return res.redirect("/login");
-    return res.redirect("/");
-  });
-
-  // Public home page (optional: show info or redirect to /lop)
   app.get("/", (req, res) => {
     const opts = getTemplateOpts(req);
     res.send(htmlTemplate(`

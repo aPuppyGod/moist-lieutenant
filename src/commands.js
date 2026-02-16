@@ -1,4 +1,4 @@
-// src/commands.js
+﻿// src/commands.js
 const { PermissionsBitField, ChannelType, AttachmentBuilder, EmbedBuilder } = require("discord.js");
 const { get, all, run } = require("./db");
 const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
@@ -199,31 +199,68 @@ function drawAvatarBorder(ctx, prefs) {
 }
 
 async function cmdHelp(message) {
-  const lines = [
-    "**Commands**",
-    "",
-    "**Levels**",
-    "• `!rank [@user]` — show XP + level",
-    "• `!leaderboard [page]` / `!lb [page]` — show top XP",
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("🐸 Commands - Moist Lieutenant")
+    .setDescription("Available commands for Moist Lieutenant")
+    .addFields(
+      {
+        name: "📊 Levels",
+        value: "`!rank [@user]` - Show XP and level\n`!leaderboard [page]` / `!lb [page]` - Show top XP rankings",
+        inline: false
+      },
+      {
+        name: "🎤 Private Voice Channels",
+        value: "*Use these commands only inside your VC's paired text channel:*\n`!voice-limit <0-99>` - Set user limit\n`!voice-lock` / `!voice-unlock` - Lock/unlock channel\n`!voice-rename <name>` - Rename your voice channel\n`!voice-ban @user` - Ban user from your VC",
+        inline: false
+      },
+      {
+        name: "⚙️ Admin/Manager Commands",
+        value: "`!xp add @user <amount>` - Add XP to user\n`!xp set @user <amount>` - Set user XP\n`!recalc-levels` - Recalculate all levels\n`!sync-roles` - Sync level roles\n\n*For detailed admin help, use `!admin-commands`*",
+        inline: false
+      },
+      {
+        name: "🌐 Web Dashboard",
+        value: "`!moist-lieutenant` - Get link to configure XP settings, level roles, rank cards, and more",
+        inline: false
+      }
+    )
+    .setFooter({ text: "Use !admin-commands for detailed admin help" })
+    .setTimestamp();
 
-    "",
-    "**Private VC (only inside the VC’s paired commands channel)**",
-    "• `!voice-limit <0-99>`",
-    "• `!voice-lock` / `!voice-unlock`",
-    "• `!voice-rename <name>`",
-    "• `!voice-ban @user`",
-    "",
-    "**Admin/Manager**",
-    "• `!xp add @user <amount>`",
-    "• `!xp set @user <amount>`",
-    "• `!recalc-levels`",
-    "• `!sync-roles`",
-    "",
-    "**Website**",
-    "• `!moist-lieutenant` — Visit the web dashboard",
-  ];
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+async function cmdAdminHelp(message) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("This command is only for admins/managers. Use `!help` for general commands.").catch(() => {});
+    return;
+  }
 
-  await message.reply(lines.join("\n")).catch(() => {});
+  const embed = new EmbedBuilder()
+    .setColor(0x8b7355)
+    .setTitle("⚙️ Admin Commands - Moist Lieutenant")
+    .setDescription("Administrator and Manager commands")
+    .addFields(
+      {
+        name: "💎 XP Management",
+        value: "`!xp add @user <amount>` - Add XP to a user\n`!xp set @user <amount>` - Set user's XP to exact amount\n\n**Examples:**\n`!xp add @ToadKing 500`\n`!xp set @Froglet 1000`",
+        inline: false
+      },
+      {
+        name: "🔄 System Maintenance",
+        value: "`!recalc-levels` - Recalculate all user levels based on current XP\n`!sync-roles` - Sync level roles to all users\n\n*Use these after changing XP settings or level roles*",
+        inline: false
+      },
+      {
+        name: "🌐 Web Dashboard",
+        value: "Use `!moist-lieutenant` to get the dashboard link where you can:\n• Configure XP settings (min/max, cooldowns)\n• Set up level-up messages and channels\n• Configure level roles\n• Customize rank cards\n• View detailed leaderboards\n• Manage ignored channels",
+        inline: false
+      }
+    )
+    .setFooter({ text: "Need help? Contact the bot owner" })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -835,6 +872,12 @@ async function handleCommands(message) {
   // Help
   if (cmd === "help" || cmd === "commands") {
     await cmdHelp(message);
+    return true;
+  }
+
+  // Admin Help
+  if (cmd === "admin-commands" || cmd === "admin-help") {
+    await cmdAdminHelp(message);
     return true;
   }
 

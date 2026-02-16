@@ -472,14 +472,39 @@ async function cmdRank(message, args) {
   };
   let fontFamily = fontMap[fontKey] || "'Open Sans',sans-serif";
   let fontColor = prefs.fontcolor || "#fff";
-  // Nickname or username
-  let displayName = targetMember?.displayName || targetUser.username;
-  // Check if displayName is renderable in font (basic check: all chars in ASCII or fallback)
-  function isRenderable(str, font) {
-    // For simplicity, fallback if non-ASCII and font is not OpenSans
-    return font === "OpenSans" || /^[\x00-\x7F]*$/.test(str);
+  
+  // Sanitize display name to prevent ToFU boxes (emoji/special chars that fonts can't render)
+  function sanitizeName(str) {
+    if (!str) return "";
+    // Remove emojis and other special Unicode characters that cause ToFU boxes
+    // Keep basic Latin, Latin Extended, numbers, common punctuation
+    return str
+      .replace(/[\u{1F000}-\u{1F9FF}]/gu, '') // Emoticons, symbols
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Miscellaneous symbols
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')   // Dingbats
+      .replace(/[\u{1F300}-\u{1F5FF}]/gu, '') // Misc symbols and pictographs
+      .replace(/[\u{1F600}-\u{1F64F}]/gu, '') // Emoticons
+      .replace(/[\u{1F680}-\u{1F6FF}]/gu, '') // Transport and map symbols
+      .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental symbols
+      .replace(/[\u{FE00}-\u{FE0F}]/gu, '')   // Variation selectors
+      .replace(/[\u{200D}\u{200B}-\u{200F}]/gu, '') // Zero-width joiners/spaces
+      .trim();
   }
-  if (!isRenderable(displayName, fontKey)) displayName = targetUser.username;
+  
+  // Get display name and sanitize it
+  let rawDisplayName = targetMember?.displayName || targetUser.username;
+  let displayName = sanitizeName(rawDisplayName);
+  
+  // If sanitization removed everything or left very little, use username
+  if (!displayName || displayName.length < 2) {
+    displayName = sanitizeName(targetUser.username);
+  }
+  
+  // Final fallback: if still empty, use user ID
+  if (!displayName) {
+    displayName = `User ${targetUser.id.slice(0, 8)}`;
+  }
+  
   ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillStyle = fontColor;
   ctx.strokeStyle = "rgba(0,0,0,0.6)";

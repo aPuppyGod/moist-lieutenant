@@ -1,11 +1,10 @@
 {
-  "name": "lop-bot",
+  "name": "moist-lieutenant",
   "version": "1.0.0",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "import:mee6": "node src/mee6Import.js"
+    "start": "node src/index.js"
   },
   "dependencies": {
     "canvas": "^3.2.1",
@@ -18,8 +17,6 @@
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",
     "pg": "^8.18.0",
-    "sharp": "^0.34.5",
-    "sqlite3": "^5.1.7",
-    "unidecode": "^0.1.8"
+    "sharp": "^0.34.5"
   }
 }

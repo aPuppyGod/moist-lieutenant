@@ -5,7 +5,6 @@ const {
   GatewayIntentBits,
   Partials,
   Events,
-  AuditLogEvent,
   ChannelType
 } = require("discord.js");
 
@@ -17,57 +16,9 @@ const { getGuildSettings } = require("./settings");
 const { getLevelRoles } = require("./settings");
 const { getIgnoredChannels } = require("./settings");
 const { startDashboard } = require("./dashboard");
-const unidecode = require('unidecode');
 
 // ─────────────────────────────────────────────────────
 // Helper functions
-// ─────────────────────────────────────────────────────
-
-function normalizeText(text) {
-  // Custom map for special characters and symbols that resemble letters
-  const customMap = {
-    // Circled letters
-    'Ⓐ': 'a', 'Ⓑ': 'b', 'Ⓒ': 'c', 'Ⓓ': 'd', 'Ⓔ': 'e', 'Ⓕ': 'f', 'Ⓖ': 'g', 'Ⓗ': 'h', 'Ⓘ': 'i', 'Ⓙ': 'j',
-    'Ⓚ': 'k', 'Ⓛ': 'l', 'Ⓜ': 'm', 'Ⓝ': 'n', 'Ⓞ': 'o', 'Ⓟ': 'p', 'Ⓠ': 'q', 'Ⓡ': 'r', 'Ⓢ': 's', 'Ⓣ': 't',
-    'Ⓤ': 'u', 'Ⓥ': 'v', 'Ⓦ': 'w', 'Ⓧ': 'x', 'Ⓨ': 'y', 'Ⓩ': 'z',
-    'ⓐ': 'a', 'ⓑ': 'b', 'ⓒ': 'c', 'ⓓ': 'd', 'ⓔ': 'e', 'ⓕ': 'f', 'ⓖ': 'g', 'ⓗ': 'h', 'ⓘ': 'i', 'ⓙ': 'j',
-    'ⓚ': 'k', 'ⓛ': 'l', 'ⓜ': 'm', 'ⓝ': 'n', 'ⓞ': 'o', 'ⓟ': 'p', 'ⓠ': 'q', 'ⓡ': 'r', 'ⓢ': 's', 'ⓣ': 't',
-    'ⓤ': 'u', 'ⓥ': 'v', 'ⓦ': 'w', 'ⓧ': 'x', 'ⓨ': 'y', 'ⓩ': 'z',
-    // Fullwidth
-    'ａ': 'a', 'ｂ': 'b', 'ｃ': 'c', 'ｄ': 'd', 'ｅ': 'e', 'ｆ': 'f', 'ｇ': 'g', 'ｈ': 'h', 'ｉ': 'i', 'ｊ': 'j',
-    'ｋ': 'k', 'ｌ': 'l', 'ｍ': 'm', 'ｎ': 'n', 'ｏ': 'o', 'ｐ': 'p', 'ｑ': 'q', 'ｒ': 'r', 'ｓ': 's', 'ｔ': 't',
-    'ｕ': 'u', 'ｖ': 'v', 'ｗ': 'w', 'ｘ': 'x', 'ｙ': 'y', 'ｚ': 'z',
-    // Parenthesized
-    '⒜': 'a', '⒝': 'b', '⒞': 'c', '⒟': 'd', '⒠': 'e', '⒡': 'f', '⒢': 'g', '⒣': 'h', '⒤': 'i', '⒥': 'j',
-    '⒦': 'k', '⒧': 'l', '⒨': 'm', '⒩': 'n', '⒪': 'o', '⒫': 'p', '⒬': 'q', '⒭': 'r', '⒮': 's', '⒯': 't',
-    '⒰': 'u', '⒱': 'v', '⒲': 'w', '⒳': 'x', '⒴': 'y', '⒵': 'z',
-    // Squared
-    '🄰': 'a', '🄱': 'b', '🄲': 'c', '🄳': 'd', '🄴': 'e', '🄵': 'f', '🄶': 'g', '🄷': 'h', '🄸': 'i', '🄹': 'j',
-    '🄺': 'k', '🄻': 'l', '🄼': 'm', '🄽': 'n', '🄾': 'o', '🄿': 'p', '🅀': 'q', '🅁': 'r', '🅂': 's', '🅃': 't',
-    '🅄': 'u', '🅅': 'v', '🅆': 'w', '🅇': 'x', '🅈': 'y', '🅉': 'z',
-    // Negative circled
-    '🅐': 'a', '🅑': 'b', '🅒': 'c', '🅓': 'd', '🅔': 'e', '🅕': 'f', '🅖': 'g', '🅗': 'h', '🅘': 'i', '🅙': 'j',
-    '🅚': 'k', '🅛': 'l', '🅜': 'm', '🅝': 'n', '🅞': 'o', '🅟': 'p', '🅠': 'q', '🅡': 'r', '🅢': 's', '🅣': 't',
-    '🅤': 'u', '🅥': 'v', '🅦': 'w', '🅧': 'x', '🅨': 'y', '🅩': 'z',
-    // Regional indicator (but those are flags)
-    // Add specific examples if known
-    '⊑': 'l', '⍜': 'o', '⌿': 'p',  // Assuming these represent l, o, p based on context
-    '↳': 'l', '✺': 'o', '℘': 'p',  // New examples
-    // Add more symbol mappings that resemble letters
-    '↴': 'l', '↓': 'l', '←': 'l', '→': 'l', '↑': 'l',  // Arrows for l/i
-    '★': 'o', '☆': 'o', '✦': 'o', '✧': 'o', '✩': 'o', '✪': 'o', '✫': 'o', '✬': 'o', '✭': 'o', '✮': 'o',  // Stars for o
-    'ρ': 'p', 'π': 'p', 'φ': 'p', 'ψ': 'p',  // Greek letters resembling p
-    'ι': 'i', 'ι': 'i', 'ι': 'i',  // Greek iota for i
-    'α': 'a', 'β': 'b', 'γ': 'c', 'δ': 'd', 'ε': 'e', 'ζ': 'z', 'η': 'h', 'θ': 'o', 'κ': 'k', 'λ': 'l', 'μ': 'm', 'ν': 'n', 'ξ': 'x', 'ο': 'o', 'π': 'p', 'ρ': 'p', 'σ': 's', 'τ': 't', 'υ': 'u', 'φ': 'p', 'χ': 'x', 'ψ': 'p', 'ω': 'o',  // Greek letters
-    'а': 'a', 'б': 'b', 'в': 'b', 'г': 'r', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'i', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'h', 'о': 'o', 'п': 'p', 'р': 'p', 'с': 'c', 'т': 't', 'у': 'y', 'ф': 'f', 'х': 'x', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'sh', 'ъ': 'hard', 'ы': 'y', 'ь': 'soft', 'э': 'e', 'ю': 'yu', 'я': 'ya',  // Cyrillic
-    // Add more as needed
-  };
-
-  // First apply custom map, then unidecode for remaining
-  let normalized = text.replace(/./g, char => customMap[char] || char);
-  return unidecode(normalized);
-}
-
 // ─────────────────────────────────────────────────────
 
 function randInt(min, max) {
@@ -243,28 +194,6 @@ client.on(Events.MessageCreate, async (message) => {
   const isIgnored = ignoredChannels.some(c => c.channel_id === message.channel.id && c.channel_type === "text");
   if (isIgnored) return;
 
-  // React to special words
-  const content = message.content.toLowerCase();
-  const normalizedContent = normalizeText(content);
-  if (content.includes('riley')) {
-    await message.react('🍪').catch(() => {});
-  }
-  if (content.includes('blebber')) {
-    await message.react('🐢').catch(() => {});
-  }
-  if (content.includes('goodnight') || content.includes('good night')) {
-    await message.react('<:eepy:1374218096209821757>').catch(() => {});
-  }
-  if (content.includes('good morning') || content.includes('goodmorning')) {
-    await message.react('<:happi:1377138319049232384>').catch(() => {});
-  }
-  if (content.includes('bean')) {
-    await message.react(':Cheesecake:').catch(() => {});
-  }
-  if (normalizedContent.includes('mido') || normalizedContent.includes('midory') || normalizedContent.includes('midoryi') || normalizedContent.includes('seka') || normalizedContent.includes('midoryiseka') || normalizedContent.includes('lop') || normalizedContent.includes('loppy') || normalizedContent.includes('loptube') || normalizedContent.includes('antoine')) {
-    await message.react('🦝').catch(() => {});
-  }
-
   const guildId = message.guild.id;
   const userId = message.author.id;
 
@@ -346,37 +275,6 @@ client.on(Events.VoiceStateUpdate, (oldState, newState) => {
   onVoiceStateUpdate(oldState, newState, client).catch((err) => {
     console.error("VoiceStateUpdate handler error:", err);
   });
-});
-
-// ─────────────────────────────────────────────────────
-// Timeout Warning for Manager
-// ─────────────────────────────────────────────────────
-
-client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
-  const MANAGER_ID = "900758140499398676"; // From commands.js
-  if (newMember.id !== MANAGER_ID) return;
-
-  // Check if timed out
-  if (!oldMember.communicationDisabledUntil && newMember.communicationDisabledUntil) {
-    // Manager got timed out
-    try {
-      const auditLogs = await newMember.guild.fetchAuditLogs({
-        type: AuditLogEvent.MemberUpdate,
-        limit: 1
-      });
-      const log = auditLogs.entries.first();
-      if (log && log.target.id === MANAGER_ID && log.executor && !log.executor.bot) {
-        const executor = log.executor;
-        // Send warning to a channel
-        const channel = await newMember.guild.channels.fetch('1419429328592310333').catch(() => null);
-        if (channel) {
-          await channel.send(`<@${executor.id}> YOU HAVE JUST TIMED OUT A BOT MANAGER mind you this person will NOT be able to work on the bot while timed out`);
-        }
-      }
-    } catch (err) {
-      console.error("Error handling manager timeout:", err);
-    }
-  }
 });
 
 // ─────────────────────────────────────────────────────

@@ -205,10 +205,7 @@ async function cmdHelp(message) {
     "**Levels**",
     "• `!rank [@user]` — show XP + level",
     "• `!leaderboard [page]` / `!lb [page]` — show top XP",
-    "• `!shame @user` — shame a user",
-    "• `!cookie-give @user` — give a cookie",
-    "• `!steal-cookie @user` — steal a cookie",
-    "• `!riley` — turtle and cookie",
+
     "",
     "**Private VC (only inside the VC’s paired commands channel)**",
     "• `!voice-limit <0-99>`",
@@ -221,11 +218,9 @@ async function cmdHelp(message) {
     "• `!xp set @user <amount>`",
     "• `!recalc-levels`",
     "• `!sync-roles`",
-    "• `!import-mee6`",
-    "• `!claim-all [force]`",
     "",
     "**Website**",
-    "• `!lop-bot` — Visit: https://lop-bot-clean-production.up.railway.app",
+    "• `!moist-lieutenant` — Visit the web dashboard",
   ];
 
   await message.reply(lines.join("\n")).catch(() => {});
@@ -540,66 +535,6 @@ async function cmdLeaderboard(message, args) {
   await message.reply(`**Leaderboard (page ${page})**\n` + lines.join("\n")).catch(() => {});
 }
 
-async function cmdShame(message, args) {
-  if (!message.guild) return;
-
-  const arg = args[0] || "";
-  const pick = await pickUserSmart(message, arg);
-  if (!pick) {
-    await message.reply("User not found. Usage: `!shame <user>`").catch(() => {});
-    return;
-  }
-  if (pick.ambiguous) {
-    await message.reply(`Multiple users match: ${pick.matches.join(", ")}. Please be more specific or use their ID/username.`).catch(() => {});
-    return;
-  }
-  await message.reply(`SHAME ${pick.member} SHAME ON YOU!`).catch(() => {});
-}
-
-async function cmdCookieGive(message, args) {
-  if (!message.guild) return;
-
-  const arg = args[0] || "";
-  const pick = await pickUserSmart(message, arg);
-  if (!pick) {
-    await message.reply("User not found. Usage: `!cookie-give <user>`").catch(() => {});
-    return;
-  }
-  if (pick.ambiguous) {
-    await message.reply(`Multiple users match: ${pick.matches.join(", ")}. Please be more specific or use their ID/username.`).catch(() => {});
-    return;
-  }
-  await message.reply(`You gave a cookie to ${pick.member}! 🍪`).catch(() => {});
-}
-
-async function cmdStealCookie(message, args) {
-  if (!message.guild) return;
-
-  const arg = args[0] || "";
-  const pick = await pickUserSmart(message, arg);
-  if (!pick) {
-    await message.reply("User not found. Usage: `!steal-cookie <user>`").catch(() => {});
-    return;
-  }
-  if (pick.ambiguous) {
-    await message.reply(`Multiple users match: ${pick.matches.join(", ")}. Please be more specific or use their ID/username.`).catch(() => {});
-    return;
-  }
-  await message.reply(`You stole a cookie from ${pick.member}! 🍪`).catch(() => {});
-}
-
-async function cmdStealCookiesFromEveryone(message) {
-  if (!message.guild) return;
-
-  await message.reply(`BREAKING NEWS ${message.author} IS A HUNGRY AHH BIG BACK TRYING TO STEAL COOKIES FROM EVERYONE!`).catch(() => {});
-}
-
-async function cmdRiley(message) {
-  if (!message.guild) return;
-
-  await message.reply("🐢🍪").catch(() => {});
-}
-
 async function cmdXp(message, args) {
   if (!message.guild) return;
 
@@ -875,116 +810,6 @@ async function cmdVoiceBan(message) {
 }
 
 // ─────────────────────────────────────────────────────
-// MEE6 Import
-// ─────────────────────────────────────────────────────
-
-async function cmdImportMee6(message) {
-  if (!isAdminOrManager(message.member)) {
-    await message.reply("❌ No permission.").catch(() => {});
-    return;
-  }
-
-  const fs = require("fs");
-  const path = require("path");
-  const SNAPSHOT_FILE = path.join(__dirname, "..", "data", "mee6_snapshot.json");
-
-  if (!fs.existsSync(SNAPSHOT_FILE)) {
-    await message.reply("❌ mee6_snapshot.json not found.").catch(() => {});
-    return;
-  }
-
-  const raw = JSON.parse(fs.readFileSync(SNAPSHOT_FILE, "utf8"));
-  const entries = Array.isArray(raw) ? raw : raw.entries;
-
-  if (!Array.isArray(entries)) {
-    await message.reply("❌ Snapshot must be an array or { entries: [...] }").catch(() => {});
-    return;
-  }
-
-  await run(`DELETE FROM mee6_snapshot WHERE guild_id=?`, [message.guild.id]);
-
-  let inserted = 0;
-  for (const e of entries) {
-    if (!e.name || !Number.isFinite(e.xp)) continue;
-    await run(
-      `INSERT INTO mee6_snapshot (guild_id, snapshot_username, snapshot_xp, snapshot_level)
-       VALUES (?, ?, ?, ?)`,
-      [message.guild.id, e.name, e.xp, e.level || 0]
-    );
-    inserted++;
-  }
-
-  await message.reply(`✅ Imported **${inserted}** snapshot rows.`).catch(() => {});
-}
-
-// ─────────────────────────────────────────────────────
-// Claim All
-// ─────────────────────────────────────────────────────
-
-async function cmdClaimAll(message) {
-  if (!isAdminOrManager(message.member)) {
-    await message.reply("❌ No permission.").catch(() => {});
-    return;
-  }
-
-  const LOCK_CLAIM_ALL_AFTER_RUN = true;
-  const guildId = message.guild.id;
-  const force = message.content.toLowerCase().includes("force");
-
-  if (LOCK_CLAIM_ALL_AFTER_RUN && !force) {
-    const done = await get(`SELECT claim_all_done FROM guild_settings WHERE guild_id=?`, [guildId]);
-    if (done && done.claim_all_done === 1) {
-      await message.reply("❌ claim-all already used. Use `!claim-all force` to override.").catch(() => {});
-      return;
-    }
-  }
-
-  // Fetch members safely
-  let members = message.guild.members.cache.filter(m => !m.user.bot);
-
-  if (members.size === 0) {
-    let lastId;
-    while (true) {
-      const batch = await message.guild.members.fetch({
-        limit: 1000,
-        after: lastId
-      }).catch(() => null);
-
-      if (!batch || batch.size === 0) break;
-      lastId = batch.last().id;
-      await new Promise(r => setTimeout(r, 1500));
-    }
-    members = message.guild.members.cache.filter(m => !m.user.bot);
-  }
-
-  const snapshots = await all(
-    `SELECT snapshot_username, snapshot_xp FROM mee6_snapshot WHERE guild_id=?`,
-    [guildId]
-  );
-
-  let applied = 0;
-
-  for (const s of snapshots) {
-    const key = normalizeName(s.snapshot_username);
-    const match = members.find(m =>
-      normalizeName(m.user.username) === key ||
-      normalizeName(m.displayName) === key ||
-      normalizeName(m.user.globalName) === key
-    );
-    if (!match) continue;
-
-    await setUserXp(guildId, match.id, s.snapshot_xp);
-    applied++;
-  }
-
-  if (LOCK_CLAIM_ALL_AFTER_RUN) {
-    await run(`UPDATE guild_settings SET claim_all_done=1 WHERE guild_id=?`, [guildId]);
-  }
-
-  await message.reply(`✅ Applied XP to **${applied}** members.`).catch(() => {});
-}
-
-// ─────────────────────────────────────────────────────
 // Main handler
 // ─────────────────────────────────────────────────────
 
@@ -996,11 +821,11 @@ async function handleCommands(message) {
 
   const { cmd, args } = parsed;
 
-  // Lop-Bot public site command
-  if (cmd === "lop-bot" || cmd === "lopbot") {
+  // Moist Lieutenant public site command
+  if (cmd === "moist-lieutenant") {
     // You can change this URL to your actual public site URL
-    const publicUrl = process.env.LOPBOT_PUBLIC_URL || "https://lop-bot-clean-production.up.railway.app";
-    await message.reply(`View the Lop-Bot leaderboard and customize your rank card here: ${publicUrl}`).catch(() => {});
+    const publicUrl = process.env.BOT_PUBLIC_URL || "https://lop-bot-clean-production.up.railway.app";
+    await message.reply(`View the Moist Lieutenant web dashboard here: ${publicUrl}`).catch(() => {});
     return true;
   }
 
@@ -1024,31 +849,6 @@ async function handleCommands(message) {
     return true;
   }
 
-  if (cmd === "shame") {
-    await cmdShame(message, args);
-    return true;
-  }
-
-  if (cmd === "cookie-give") {
-    await cmdCookieGive(message, args);
-    return true;
-  }
-
-  if (cmd === "steal-cookie") {
-    await cmdStealCookie(message, args);
-    return true;
-  }
-
-  if (cmd === "steal-cookies-from-everyone") {
-    await cmdStealCookiesFromEveryone(message);
-    return true;
-  }
-
-  if (cmd === "riley") {
-    await cmdRiley(message);
-    return true;
-  }
-
   // Admin XP
   if (cmd === "xp") {
     await cmdXp(message, args);
@@ -1062,16 +862,6 @@ async function handleCommands(message) {
 
   if (cmd === "sync-roles" || cmd === "syncroles") {
     await cmdSyncRoles(message);
-    return true;
-  }
-
-  if (cmd === "import-mee6") {
-    await cmdImportMee6(message);
-    return true;
-  }
-
-  if (cmd === "claim-all" || cmd === "claimall") {
-    await cmdClaimAll(message);
     return true;
   }
 

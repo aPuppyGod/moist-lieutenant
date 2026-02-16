@@ -34,26 +34,26 @@ function htmlTemplate(content, opts = {}) {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Lop-Bot</title>
+  <title>Moist Lieutenant</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
   <style>
     /* Light mode (default) */
     body, body[data-theme="light"] {
       font-family: 'Montserrat', Arial, sans-serif;
-      background: linear-gradient(135deg, #ffddfc 0%, #edd7ae 100%);
+      background: linear-gradient(135deg, #a8d5a8 0%, #c8e8b8 100%);
       margin: 0;
       padding: 0;
       color: #0a1e1e;
       min-height: 100vh;
     }
     nav, body[data-theme="light"] nav {
-      background: linear-gradient(135deg, #71faf9 0%, #71faf9 100%);
+      background: linear-gradient(135deg, #7bc96f 0%, #98d989 100%);
       padding: 0 24px;
       display: flex;
       align-items: center;
       height: 56px;
-      box-shadow: 0 2px 12px rgba(113, 250, 249, 0.3);
+      box-shadow: 0 2px 12px rgba(123, 201, 111, 0.3);
     }
     .nav-links {
       display: flex;
@@ -77,8 +77,8 @@ function htmlTemplate(content, opts = {}) {
       border-bottom: 2px solid transparent;
     }
     nav a.active, nav a:hover, body[data-theme="light"] nav a.active, body[data-theme="light"] nav a:hover {
-      color: #ffddfc;
-      border-bottom: 2px solid #ffddfc;
+      color: #8b7355;
+      border-bottom: 2px solid #8b7355;
     }
     nav .nav-right, body[data-theme="light"] nav .nav-right {
       margin-left: auto;
@@ -96,18 +96,18 @@ function htmlTemplate(content, opts = {}) {
       width: 32px;
       height: 32px;
       border-radius: 50%;
-      border: 2px solid #ffddfc;
+      border: 2px solid #8b7355;
       background: #444;
     }
 
     /* Dark mode */
     body[data-theme="dark"] {
-      background: linear-gradient(135deg, #0a1e1e 0%, #0d2626 100%);
+      background: linear-gradient(135deg, #1a3d1a 0%, #0f2a0f 100%);
       color: #f0f0f0;
     }
     body[data-theme="dark"] nav {
-      background: linear-gradient(135deg, #ffddfc 0%, #edd7ae 100%);
-      box-shadow: 0 2px 12px rgba(255, 221, 252, 0.3);
+      background: linear-gradient(135deg, #4a7c59 0%, #5a8c69 100%);
+      box-shadow: 0 2px 12px rgba(74, 124, 89, 0.3);
     }
     body[data-theme="dark"] nav .logo {
       color: #0a1e1e;
@@ -116,14 +116,14 @@ function htmlTemplate(content, opts = {}) {
       color: #0a1e1e;
     }
     body[data-theme="dark"] nav a.active, body[data-theme="dark"] nav a:hover {
-      color: #0d2626;
-      border-bottom-color: #0d2626;
+      color: #b8d96f;
+      border-bottom-color: #b8d96f;
     }
     body[data-theme="dark"] nav .user {
       color: #0a1e1e;
     }
     body[data-theme="dark"] nav .user img {
-      border-color: #0d2626;
+      border-color: #b8d96f;
     }
     body[data-theme="dark"] #themeToggle {
       background: transparent;
@@ -160,32 +160,32 @@ function htmlTemplate(content, opts = {}) {
       margin: 32px auto 0 auto;
       background: rgba(255, 255, 255, 0.95);
       border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(113, 250, 249, 0.2);
+      box-shadow: 0 8px 32px rgba(123, 201, 111, 0.2);
       padding: 32px 24px 24px 24px;
-      border: 2px solid rgba(113, 250, 249, 0.3);
+      border: 2px solid rgba(123, 201, 111, 0.3);
     }
     body[data-theme="dark"] .container {
-      background: rgba(13, 38, 38, 0.9);
-      border: 2px solid rgba(255, 221, 252, 0.3);
-      box-shadow: 0 8px 32px rgba(255, 221, 252, 0.1);
+      background: rgba(15, 42, 15, 0.9);
+      border: 2px solid rgba(184, 217, 111, 0.3);
+      box-shadow: 0 8px 32px rgba(184, 217, 111, 0.1);
     }
     h2 {
-      color: #71faf9;
+      color: #4a7c59;
       text-align: center;
       margin-top: 0;
     }
     body[data-theme="dark"] h2 {
-      color: #ffddfc;
+      color: #b8d96f;
     }
     h3 {
-      color: #ffddfc;
+      color: #8b7355;
       margin-bottom: 8px;
     }
     body[data-theme="dark"] h3 {
-      color: #71faf9;
+      color: #98d989;
     }
     button, .btn {
-      background: linear-gradient(135deg, #71faf9 0%, #5fe8f7 100%);
+      background: linear-gradient(135deg, #7bc96f 0%, #6fa883 100%);
       color: #0a1e1e;
       border: none;
       padding: 10px 18px;
@@ -196,25 +196,25 @@ function htmlTemplate(content, opts = {}) {
       font-size: 1em;
       margin: 8px 0;
       transition: all 0.3s;
-      box-shadow: 0 4px 12px rgba(113, 250, 249, 0.3);
+      box-shadow: 0 4px 12px rgba(123, 201, 111, 0.3);
     }
     button:hover, .btn:hover {
-      background: linear-gradient(135deg, #5fe8f7 0%, #71faf9 100%);
+      background: linear-gradient(135deg, #6fa883 0%, #7bc96f 100%);
       transform: translateY(-3px);
-      box-shadow: 0 6px 20px rgba(113, 250, 249, 0.5);
+      box-shadow: 0 6px 20px rgba(123, 201, 111, 0.5);
     }
     body[data-theme="dark"] button, body[data-theme="dark"] .btn {
-      background: linear-gradient(135deg, #ffddfc 0%, #edd7ae 100%);
+      background: linear-gradient(135deg, #b8d96f 0%, #98d989 100%);
       color: #0a1e1e;
-      box-shadow: 0 4px 12px rgba(255, 221, 252, 0.3);
+      box-shadow: 0 4px 12px rgba(184, 217, 111, 0.3);
     }
     body[data-theme="dark"] button:hover, body[data-theme="dark"] .btn:hover {
-      background: linear-gradient(135deg, #edd7ae 0%, #ffddfc 100%);
-      box-shadow: 0 6px 20px rgba(255, 221, 252, 0.5);
+      background: linear-gradient(135deg, #98d989 0%, #b8d96f 100%);
+      box-shadow: 0 6px 20px rgba(184, 217, 111, 0.5);
     }
     input, select {
       padding: 7px;
-      border: 2px solid #71faf9;
+      border: 2px solid #7bc96f;
       border-radius: 4px;
       background: rgba(255, 255, 255, 0.8);
       color: #0a1e1e;
@@ -222,20 +222,20 @@ function htmlTemplate(content, opts = {}) {
     }
     input:focus, select:focus {
       outline: none;
-      border-color: #ffddfc;
-      box-shadow: 0 0 12px rgba(113, 250, 249, 0.4);
+      border-color: #8b7355;
+      box-shadow: 0 0 12px rgba(123, 201, 111, 0.4);
       background: white;
     }
     body[data-theme="dark"] input, body[data-theme="dark"] select {
-      border: 2px solid #ffddfc;
-      background: rgba(13, 38, 38, 0.8);
+      border: 2px solid #b8d96f;
+      background: rgba(15, 42, 15, 0.8);
       color: #f0f0f0;
     }
     body[data-theme="dark"] input:focus, body[data-theme="dark"] select:focus {
       outline: none;
-      border-color: #71faf9;
-      box-shadow: 0 0 12px rgba(255, 221, 252, 0.4);
-      background: rgba(13, 38, 38, 0.95);
+      border-color: #98d989;
+      box-shadow: 0 0 12px rgba(184, 217, 111, 0.4);
+      background: rgba(15, 42, 15, 0.95);
     }
     table {
       width: 100%;
@@ -253,11 +253,11 @@ function htmlTemplate(content, opts = {}) {
     th {
       color: #0a1e1e;
       font-weight: 700;
-      background: rgba(113, 250, 249, 0.2);
+      background: rgba(123, 201, 111, 0.2);
     }
     body[data-theme="dark"] th {
       color: #f0f0f0;
-      background: rgba(255, 221, 252, 0.2);
+      background: rgba(184, 217, 111, 0.2);
     }
     tr:last-child td {
       border-bottom: none;
@@ -270,28 +270,28 @@ function htmlTemplate(content, opts = {}) {
       margin: 5px 0;
     }
     a {
-      color: #71faf9;
+      color: #4a7c59;
       text-decoration: none;
       transition: color 0.2s;
     }
     a:hover {
-      color: #ffddfc;
+      color: #8b7355;
       text-decoration: underline;
     }
     body[data-theme="dark"] a {
-      color: #ffddfc;
+      color: #b8d96f;
     }
     body[data-theme="dark"] a:hover {
-      color: #71faf9;
+      color: #98d989;
     }
     hr {
       border: 0;
       height: 2px;
-      background: linear-gradient(90deg, transparent, #71faf9 20%, #ffddfc 50%, #71faf9 80%, transparent);
+      background: linear-gradient(90deg, transparent, #7bc96f 20%, #8b7355 50%, #7bc96f 80%, transparent);
       margin: 24px 0;
     }
     body[data-theme="dark"] hr {
-      background: linear-gradient(90deg, transparent, #ffddfc 20%, #71faf9 50%, #ffddfc 80%, transparent);
+      background: linear-gradient(90deg, transparent, #b8d96f 20%, #98d989 50%, #b8d96f 80%, transparent);
     }
     form {
       margin-bottom: 20px;
@@ -479,7 +479,7 @@ function htmlTemplate(content, opts = {}) {
   <script>
     // Initialize theme from localStorage or dark mode default
     function initTheme() {
-      const savedTheme = localStorage.getItem('lop-theme') || 'dark';
+      const savedTheme = localStorage.getItem('moist-lieutenant-theme') || 'dark';
       document.body.setAttribute('data-theme', savedTheme);
       updateThemeButton(savedTheme);
     }
@@ -501,7 +501,7 @@ function htmlTemplate(content, opts = {}) {
       const currentTheme = document.body.getAttribute('data-theme') || 'dark';
       const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
       document.body.setAttribute('data-theme', newTheme);
-      localStorage.setItem('lop-theme', newTheme);
+      localStorage.setItem('moist-lieutenant-theme', newTheme);
       updateThemeButton(newTheme);
     }
     
@@ -511,7 +511,7 @@ function htmlTemplate(content, opts = {}) {
 </head>
 <body data-theme="dark">
   <nav>
-    <span class="logo">Lop-Bot</span>
+    <span class="logo">🐸 Moist Lieutenant</span>
     <div class="nav-links">
       <a href="/"${active==="home"?" class=active":""}>Home</a>
       <a href="/leaderboard"${active==="leaderboard"?" class=active":""}>Leaderboard</a>
@@ -610,7 +610,7 @@ function startDashboard(client) {
           const displayName = member?.nickname || member?.user?.username || `User ${r.user_id}`;
           const avatarUrl = member?.user?.displayAvatarURL({ extension: 'png', size: 64 }) || '';
           const badge = i === 0 ? '👑 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : '';
-          const medalColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#71faf9';
+          const medalColor = i === 0 ? '#FFD700' : i === 1 ? '#C0C0C0' : i === 2 ? '#CD7F32' : '#7bc96f';
           return `
             <tr class="lb-row" style="background: linear-gradient(90deg, ${medalColor}15 0%, transparent 100%);">
               <td class="lb-rank" style="font-weight:700;color:${medalColor};">${badge} #${i+1}</td>
@@ -618,8 +618,8 @@ function startDashboard(client) {
                 ${avatarUrl ? `<img src="${avatarUrl}" alt="${displayName}" class="lb-avatar">` : '<div class="lb-avatar-placeholder">👤</div>'}
                 <span>${escapeHtml(displayName)}</span>
               </td>
-              <td class="lb-level"><span style="background:linear-gradient(135deg,#71faf9,#ffddfc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;">Lvl ${r.level}</span></td>
-              <td class="lb-xp"><span style="color:#71faf9;font-weight:600;">${r.xp.toLocaleString()}</span></td>
+              <td class="lb-level"><span style="background:linear-gradient(135deg,#7bc96f,#8b7355);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:700;">Lvl ${r.level}</span></td>
+              <td class="lb-xp"><span style="color:#7bc96f;font-weight:600;">${r.xp.toLocaleString()}</span></td>
             </tr>
           `;
         }).join("");
@@ -665,24 +665,24 @@ function startDashboard(client) {
               width: 48px;
               height: 48px;
               border-radius: 50%;
-              border: 2px solid #71faf9;
+              border: 2px solid #7bc96f;
               object-fit: cover;
-              box-shadow: 0 2px 8px rgba(113, 250, 249, 0.4);
+              box-shadow: 0 2px 8px rgba(123, 201, 111, 0.4);
             }
             body[data-theme="dark"] .lb-avatar {
-              border-color: #ffddfc;
-              box-shadow: 0 2px 8px rgba(255, 221, 252, 0.4);
+              border-color: #b8d96f;
+              box-shadow: 0 2px 8px rgba(184, 217, 111, 0.4);
             }
             .lb-avatar-placeholder {
               width: 48px;
               height: 48px;
               border-radius: 50%;
-              background: gradient(135deg, #71faf9, #ffddfc);
+              background: gradient(135deg, #7bc96f, #8b7355);
               display: flex;
               align-items: center;
               justify-content: center;
               font-size: 1.8em;
-              border: 2px solid #71faf9;
+              border: 2px solid #7bc96f;
             }
             .lb-level, .lb-xp {
               text-align: right;
@@ -695,7 +695,7 @@ function startDashboard(client) {
           <div class="leaderboard-container">
             <table style="border-collapse: collapse;">
               <thead>
-                <tr style="background: linear-gradient(135deg, #71faf9 0%, #ffddfc 100%); color: #0a1e1e;">
+                <tr style="background: linear-gradient(135deg, #7bc96f 0%, #8b7355 100%); color: #0a1e1e;">
                   <th style="text-align:center;width:80px;padding:12px;">Rank</th>
                   <th style="padding:12px;">Player</th>
                   <th style="text-align:right;width:140px;padding:12px;">Level</th>
@@ -946,7 +946,7 @@ function startDashboard(client) {
         
         // Get border settings, with defaults
         const borderWidth = parseInt(prefs.avatarborder) || 3;
-        const borderColor = prefs.avatarbordercolor || '#71faf9';
+        const borderColor = prefs.avatarbordercolor || '#7bc96f';
         const glowType = prefs.borderglow || 'none';
         const frameType = prefs.avatarframe || 'none';
         
@@ -956,7 +956,7 @@ function startDashboard(client) {
           ctx.strokeStyle = frameType === 'gold' ? '#FFD700' : 
                             frameType === 'silver' ? '#C0C0C0' :
                             frameType === 'bronze' ? '#CD7F32' :
-                            frameType === 'neon' ? '#71faf9' : '#71faf9';
+                            frameType === 'neon' ? '#7bc96f' : '#7bc96f';
           ctx.lineWidth = 8;
           ctx.beginPath();
           ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2);
@@ -1129,7 +1129,7 @@ function startDashboard(client) {
           font: req.body.font || "OpenSans",
           fontcolor: req.body.fontcolor || "#ffffff",
           avatarborder: parseInt(req.body.avatarborder) || 3,
-          avatarbordercolor: req.body.avatarbordercolor || "#71faf9",
+          avatarbordercolor: req.body.avatarbordercolor || "#7bc96f",
           borderglow: req.body.borderglow || "none",
           avatarframe: req.body.avatarframe || "none"
         };
@@ -1280,7 +1280,7 @@ function startDashboard(client) {
         function drawAvatarBorder(ctx, prefs) {
           const centerX = 90, centerY = 90, radius = 60;
           const borderWidth = parseInt(prefs.avatarborder) || 3;
-          const borderColor = prefs.avatarbordercolor || '#71faf9';
+          const borderColor = prefs.avatarbordercolor || '#7bc96f';
           const glowType = prefs.borderglow || 'none';
           const frameType = prefs.avatarframe || 'none';
           
@@ -1289,7 +1289,7 @@ function startDashboard(client) {
             ctx.strokeStyle = frameType === 'gold' ? '#FFD700' : 
                               frameType === 'silver' ? '#C0C0C0' :
                               frameType === 'bronze' ? '#CD7F32' :
-                              frameType === 'neon' ? '#71faf9' : '#71faf9';
+                              frameType === 'neon' ? '#7bc96f' : '#7bc96f';
             ctx.lineWidth = 8;
             ctx.beginPath();
             ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2);
@@ -1395,8 +1395,8 @@ function startDashboard(client) {
   app.get("/", (req, res) => {
     const opts = getTemplateOpts(req);
     res.send(htmlTemplate(`
-      <h2>Welcome to Lop-Bot!</h2>
-      <p>Track your XP, level up, and customize your rank card. Compete on the leaderboard and unlock new features as you level up!</p>
+      <h2>Welcome to Moist Lieutenant! 🐸</h2>
+      <p>Hop into the swamp! Track your XP, level up, and customize your rank card. Compete on the leaderboard and unlock new features as you ribbit your way to the top!</p>
       <ul>
         <li>View the <a href="/leaderboard">Leaderboard</a></li>
         <li>Customize your <a href="/lop">Rank Card</a></li>
@@ -1490,13 +1490,13 @@ function startDashboard(client) {
           font-weight: 700;
           font-size: 1.1em;
           margin-bottom: 14px;
-          color: #71faf9;
+          color: #7bc96f;
           display: flex;
           align-items: center;
           gap: 8px;
         }
         body[data-theme="dark"] .section-title {
-          color: #ffddfc;
+          color: #b8d96f;
         }
         .customize-grid {
           display: grid;
@@ -1520,12 +1520,12 @@ function startDashboard(client) {
           font-size: 0.75em;
           padding: 2px 8px;
           border-radius: 4px;
-          background: rgba(113,250,249,0.2);
-          color: #71faf9;
+          background: rgba(123,201,111,0.2);
+          color: #7bc96f;
         }
         body[data-theme="dark"] .feature-badge {
-          background: rgba(255,221,252,0.2);
-          color: #ffddfc;
+          background: rgba(184,217,111,0.2);
+          color: #b8d96f;
         }
         .feature-badge.locked {
           background: rgba(184,134,11,0.2);
@@ -1535,20 +1535,20 @@ function startDashboard(client) {
           width: 60px;
           height: 44px;
           padding: 2px;
-          border: 2px solid rgba(113,250,249,0.5);
+          border: 2px solid rgba(123,201,111,0.5);
           border-radius: 6px;
           cursor: pointer;
           transition: all 0.2s;
         }
         .customize-form input[type="color"]:hover {
-          border-color: #71faf9;
-          box-shadow: 0 0 12px rgba(113,250,249,0.5);
+          border-color: #7bc96f;
+          box-shadow: 0 0 12px rgba(123,201,111,0.5);
         }
         .customize-form input[type="text"],
         .customize-form select,
         .customize-form input[type="number"] {
           padding: 8px 12px;
-          border: 2px solid rgba(113,250,249,0.3);
+          border: 2px solid rgba(123,201,111,0.3);
           border-radius: 6px;
           background: rgba(255,255,255,0.95);
           color: #0a1e1e;
@@ -1556,18 +1556,18 @@ function startDashboard(client) {
           transition: all 0.2s;
         }
         body[data-theme="dark"] .customize-form input[type="color"] {
-          border-color: rgba(255,221,252,0.5);
+          border-color: rgba(184,217,111,0.5);
         }
         body[data-theme="dark"] .customize-form input[type="color"]:hover {
-          border-color: #ffddfc;
-          box-shadow: 0 0 12px rgba(255,221,252,0.5);
+          border-color: #b8d96f;
+          box-shadow: 0 0 12px rgba(184,217,111,0.5);
         }
         body[data-theme="dark"] .customize-form input[type="text"],
         body[data-theme="dark"] .customize-form select,
         body[data-theme="dark"] .customize-form input[type="number"] {
           background: rgba(0,0,0,0.3);
           color: #f0f0f0;
-          border-color: rgba(255,221,252,0.3);
+          border-color: rgba(184,217,111,0.3);
         }
         .customize-form input[type="color"]:disabled,
         .customize-form select:disabled,
@@ -1578,38 +1578,38 @@ function startDashboard(client) {
         .customize-form input:focus,
         .customize-form select:focus {
           outline: none;
-          border-color: #71faf9;
-          box-shadow: 0 0 8px rgba(113,250,249,0.4);
+          border-color: #7bc96f;
+          box-shadow: 0 0 8px rgba(123,201,111,0.4);
         }
         body[data-theme="dark"] .customize-form input:focus,
         body[data-theme="dark"] .customize-form select:focus {
-          border-color: #ffddfc;
-          box-shadow: 0 0 8px rgba(255,221,252,0.4);
+          border-color: #b8d96f;
+          box-shadow: 0 0 8px rgba(184,217,111,0.4);
         }
         .image-upload-area {
-          border: 2px dashed rgba(113,250,249,0.4);
+          border: 2px dashed rgba(123,201,111,0.4);
           border-radius: 8px;
           padding: 20px;
           text-align: center;
           cursor: pointer;
           transition: all 0.2s;
-          background: rgba(113,250,249,0.05);
+          background: rgba(123,201,111,0.05);
         }
         body[data-theme="dark"] .image-upload-area {
-          border-color: rgba(255,221,252,0.4);
-          background: rgba(255,221,252,0.05);
+          border-color: rgba(184,217,111,0.4);
+          background: rgba(184,217,111,0.05);
         }
         .image-upload-area:hover {
-          border-color: #71faf9;
-          background: rgba(113,250,249,0.1);
+          border-color: #7bc96f;
+          background: rgba(123,201,111,0.1);
         }
         body[data-theme="dark"] .image-upload-area:hover {
-          border-color: #ffddfc;
-          background: rgba(255,221,252,0.1);
+          border-color: #b8d96f;
+          background: rgba(184,217,111,0.1);
         }
         .image-upload-area.dragover {
-          border-color: #71faf9;
-          background: rgba(113,250,249,0.15);
+          border-color: #7bc96f;
+          background: rgba(123,201,111,0.15);
           transform: scale(1.02);
         }
         #cropperContainer {
@@ -1618,7 +1618,7 @@ function startDashboard(client) {
           overflow: hidden;
           box-shadow: 0 4px 12px rgba(0,0,0,0.2);
           padding: 16px;
-          background: rgba(113, 250, 249, 0.05);
+          background: rgba(123, 201, 111, 0.05);
         }
         #cropperContainer img {
           border-radius: 8px;
@@ -1640,12 +1640,12 @@ function startDashboard(client) {
           transition: all 0.2s;
         }
         .crop-confirm-btn {
-          background: linear-gradient(135deg, #71faf9, #2ab3b0);
+          background: linear-gradient(135deg, #7bc96f, #6fa883);
           color: #0a1e1e;
         }
         .crop-confirm-btn:hover {
           transform: translateY(-1px);
-          box-shadow: 0 4px 12px rgba(113, 250, 249, 0.4);
+          box-shadow: 0 4px 12px rgba(123, 201, 111, 0.4);
         }
         .crop-cancel-btn {
           background: #555;
@@ -1656,7 +1656,7 @@ function startDashboard(client) {
         }
         #cropPreviewText {
           font-size: 0.9em;
-          color: #71faf9;
+          color: #7bc96f;
           margin-top: 8px;
           font-style: italic;
         }
@@ -1678,10 +1678,10 @@ function startDashboard(client) {
         }
         .preset-btn:hover {
           transform: scale(1.1);
-          border-color: #71faf9;
+          border-color: #7bc96f;
         }
         .customize-form button[type="submit"] {
-          background: linear-gradient(135deg, #71faf9, #ffddfc);
+          background: linear-gradient(135deg, #7bc96f, #8b7355);
           color: #0a1e1e;
           border: none;
           padding: 12px 28px;
@@ -1690,12 +1690,12 @@ function startDashboard(client) {
           cursor: pointer;
           font-size: 1em;
           transition: all 0.2s;
-          box-shadow: 0 4px 12px rgba(113,250,249,0.3);
+          box-shadow: 0 4px 12px rgba(123,201,111,0.3);
           margin-top: 24px;
         }
         .customize-form button[type="submit"]:hover {
           transform: translateY(-2px);
-          box-shadow: 0 6px 16px rgba(113,250,249,0.5);
+          box-shadow: 0 6px 16px rgba(123,201,111,0.5);
         }
         .customize-form button[type="submit"]:active {
           transform: translateY(0);
@@ -1934,10 +1934,10 @@ function startDashboard(client) {
               <label style="font-weight:600;margin-bottom:8px;display:block;">Gradient Colors <span class="feature-badge">${isUnlocked('gradient') ? 'Lvl ' + unlocks.gradient : 'Locked'}</span></label>
               <div style="display:grid;grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));gap:8px;">
                 <div>
-                  <input type="color" id="gradColor1" class="grad-picker" value="${prefs.gradient?.split(',')[0] || '#ffddfc'}" ${!isUnlocked('gradient') ? 'disabled' : ''}>
+                  <input type="color" id="gradColor1" class="grad-picker" value="${prefs.gradient?.split(',')[0] || '#7bc96f'}" ${!isUnlocked('gradient') ? 'disabled' : ''}>
                 </div>
                 <div>
-                  <input type="color" id="gradColor2" class="grad-picker" value="${prefs.gradient?.split(',')[1] || '#edd7ae'}" ${!isUnlocked('gradient') ? 'disabled' : ''}>
+                  <input type="color" id="gradColor2" class="grad-picker" value="${prefs.gradient?.split(',')[1] || '#8b7355'}" ${!isUnlocked('gradient') ? 'disabled' : ''}>
                 </div>
               </div>
               <input type="hidden" name="gradient" id="gradientInput" value="${prefs.gradient || ''}">
@@ -2055,7 +2055,7 @@ function startDashboard(client) {
                 <input type="radio" name="avatarframe" value="bronze" ${prefs.avatarframe === 'bronze' ? 'checked' : ''} ${!isUnlocked('avatarframe') ? 'disabled' : ''} style="display:none;">
               </label>
               <label style="display:flex;flex-direction:column;align-items:center;cursor:pointer;gap:6px;padding:12px;border-radius:8px;border:2px solid transparent;transition:all 0.2s;${!isUnlocked('avatarframe') ? 'opacity:0.5;cursor:not-allowed;' : ''}">
-                <div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg, #71faf9, #ffddfc);display:flex;align-items:center;justify-content:center;font-size:2em;box-shadow:inset 0 0 0 3px #71faf9;">👤</div>
+                <div style="width:70px;height:70px;border-radius:50%;background:linear-gradient(135deg, #7bc96f, #8b7355);display:flex;align-items:center;justify-content:center;font-size:2em;box-shadow:inset 0 0 0 3px #7bc96f;">👤</div>
                 <span style="font-weight:600;font-size:0.85em;">Neon</span>
                 <input type="radio" name="avatarframe" value="neon" ${prefs.avatarframe === 'neon' ? 'checked' : ''} ${!isUnlocked('avatarframe') ? 'disabled' : ''} style="display:none;">
               </label>
@@ -2076,7 +2076,7 @@ function startDashboard(client) {
             </div>
             <div class="form-group">
               <label>Border Color</label>
-              <input type="color" name="avatarbordercolor" value="${prefs.avatarbordercolor || '#71faf9'}" ${!isUnlocked('border') ? 'disabled' : ''}>
+              <input type="color" name="avatarbordercolor" value="${prefs.avatarbordercolor || '#7bc96f'}" ${!isUnlocked('border') ? 'disabled' : ''}>
             </div>
             <div class="form-group">
               <label>Glow Effect</label>
@@ -2156,7 +2156,7 @@ function startDashboard(client) {
                 const img = document.getElementById('cropperImage');
                 img.src = croppedImageData;
                 img.style.maxWidth = '100%';
-                img.style.border = '2px solid #71faf9';
+                img.style.border = '2px solid #7bc96f';
                 img.style.borderRadius = '6px';
                 
                 // Update preview with the cropped image showing

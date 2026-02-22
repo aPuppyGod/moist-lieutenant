@@ -991,36 +991,24 @@ async function cmdClaimAll(message) {
 
 async function sendTtsFallbackSilently(message, text) {
   const channel = message.channel;
+  const speakerName =
+    (message.member?.displayName || message.author?.username || "User")
+      .replace(/[\r\n\t]/g, " ")
+      .trim()
+      .slice(0, 80) || "User";
+  const speakerAvatar =
+    message.member?.displayAvatarURL?.({ size: 256 }) ||
+    message.author?.displayAvatarURL?.({ size: 256 }) ||
+    undefined;
 
   if (!channel) return false;
 
-  const scheduleDelete = (sentMessage) => {
-    if (!sentMessage || typeof sentMessage.delete !== "function") return;
-    setTimeout(() => {
-      sentMessage.delete().catch(() => {});
-    }, 20000);
-  };
-
   if (typeof channel.fetchWebhooks !== "function" || typeof channel.createWebhook !== "function") {
-    try {
-      const sent = await channel.send({ content: text, tts: true });
-      scheduleDelete(sent);
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 
   const canManageWebhooks = channel.permissionsFor(message.guild.members.me)?.has(PermissionsBitField.Flags.ManageWebhooks);
-  if (!canManageWebhooks) {
-    try {
-      const sent = await channel.send({ content: text, tts: true });
-      scheduleDelete(sent);
-      return true;
-    } catch {
-      return false;
-    }
-  }
+  if (!canManageWebhooks) return false;
 
   try {
     const hooks = await channel.fetchWebhooks();
@@ -1032,25 +1020,18 @@ async function sendTtsFallbackSilently(message, text) {
       });
     }
 
-    const sent = await hook.send({
+    await hook.send({
       content: text,
       tts: true,
-      username: "\u2800",
+      username: speakerName,
+      avatarURL: speakerAvatar,
       wait: true
     });
-
-    scheduleDelete(sent);
 
     return true;
   } catch (err) {
     console.error("[tts-fallback] Webhook fallback failed:", err);
-    try {
-      const sent = await channel.send({ content: text, tts: true });
-      scheduleDelete(sent);
-      return true;
-    } catch {
-      return false;
-    }
+    return false;
   }
 }
 
@@ -1063,10 +1044,15 @@ async function handleCommands(message) {
 
   const raw = message.content.trim();
   if (raw.toLowerCase().startsWith(".v")) {
+    const deleteCommandMessage = async () => {
+      await message.delete().catch(() => {});
+    };
+
     const payload = raw.slice(2).trim();
 
     if (!payload) {
       await message.reply("Usage: `.v join` or `.v your text here`").catch(() => {});
+      await deleteCommandMessage();
       return true;
     }
 
@@ -1074,9 +1060,11 @@ async function handleCommands(message) {
       const joined = await joinMemberVoiceChannel(message);
       if (!joined.ok) {
         await message.reply(`❌ ${joined.reason}`).catch(() => {});
+        await deleteCommandMessage();
         return true;
       }
       await message.reply(`✅ Joined **${joined.channel.name}**`).catch(() => {});
+      await deleteCommandMessage();
       return true;
     }
 
@@ -1085,17 +1073,20 @@ async function handleCommands(message) {
       if (spoken.reason === "VOICE_UDP_UNAVAILABLE") {
         const sent = await sendTtsFallbackSilently(message, payload);
         if (!sent) {
-          await message.reply("❌ Could not send TTS fallback in this channel.").catch(() => {});
+          await message.reply("❌ I need `Manage Webhooks` in this channel for fallback TTS.").catch(() => {});
+          await deleteCommandMessage();
           return true;
         }
-        await message.react("🔊").catch(() => {});
+        await deleteCommandMessage();
         return true;
       }
 
       await message.reply(`❌ ${spoken.reason}`).catch(() => {});
+      await deleteCommandMessage();
       return true;
     }
-    await message.react("🔊").catch(() => {});
+
+    await deleteCommandMessage();
     return true;
   }
 

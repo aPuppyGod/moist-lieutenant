@@ -5,13 +5,16 @@ const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
 const { createCanvas, loadImage, registerFont } = require("canvas");
 // Register bundled font
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
-const { getLevelRoles } = require("./settings");
+const { getLevelRoles, getGuildSettings } = require("./settings");
 const { joinMemberVoiceChannel, speakTextInVoice } = require("./voiceTts");
 const fs = require("fs");
 const path = require("path");
 
-// Change if you want another prefix
-const PREFIX = "!";
+const PREFIXES = ["!", "?"];
+const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
+
+const MODERATION_PERMISSION = PermissionsBitField.Flags.ModerateMembers;
+const DEFAULT_MOD_COMMAND_PERMISSION = PermissionsBitField.Flags.ManageMessages;
 
 // ─────────────────────────────────────────────────────
 // Permission helpers
@@ -19,6 +22,7 @@ const PREFIX = "!";
 
 function isAdminOrManager(member) {
   if (!member) return false;
+  if (member.id === BOT_MANAGER_ID) return true;
   // "manager" is ambiguous; the closest practical perms are ManageGuild / ManageChannels.
   // Admin also works.
   return (
@@ -26,6 +30,31 @@ function isAdminOrManager(member) {
     member.permissions.has(PermissionsBitField.Flags.ManageGuild) ||
     member.permissions.has(PermissionsBitField.Flags.ManageChannels)
   );
+}
+
+async function getConfiguredModRoleId(guildId) {
+  const settings = await getGuildSettings(guildId);
+  return settings?.mod_role_id || null;
+}
+
+async function memberHasConfiguredModRole(member) {
+  if (!member?.guild) return false;
+  const modRoleId = await getConfiguredModRoleId(member.guild.id);
+  if (!modRoleId) return false;
+  return member.roles?.cache?.has(modRoleId) || false;
+}
+
+async function isModerator(member) {
+  if (!member) return false;
+  if (isAdminOrManager(member)) return true;
+  return await memberHasConfiguredModRole(member);
+}
+
+async function requireModerator(message) {
+  const ok = await isModerator(message.member);
+  if (ok) return true;
+  await message.reply("You need mod permissions or the configured mod role.").catch(() => {});
+  return false;
 }
 
 // ─────────────────────────────────────────────────────
@@ -67,16 +96,17 @@ async function assertVoiceCmdAllowed(message) {
 // ─────────────────────────────────────────────────────
 
 function parseCommand(content) {
-  if (!content.startsWith(PREFIX)) return null;
+  const matchedPrefix = PREFIXES.find((p) => content.startsWith(p));
+  if (!matchedPrefix) return null;
 
-  const without = content.slice(PREFIX.length).trim();
+  const without = content.slice(matchedPrefix.length).trim();
   if (!without) return null;
 
   const parts = without.split(/\s+/);
   const cmd = (parts.shift() || "").toLowerCase();
   const args = parts;
 
-  return { cmd, args };
+  return { cmd, args, prefix: matchedPrefix };
 }
 
 
@@ -199,41 +229,90 @@ function drawAvatarBorder(ctx, prefs) {
   ctx.restore();
 }
 
-async function cmdHelp(message) {
-  const lines = [
-    "**Commands**",
-    "",
-    "**Levels**",
-    "• `!rank [@user]` — show XP + level",
-    "• `!leaderboard [page]` / `!lb [page]` — show top XP",
-    "• `!shame @user` — shame a user",
-    "• `!cookie-give @user` — give a cookie",
-    "• `!steal-cookie @user` — steal a cookie",
-    "• `!riley` — turtle and cookie",
-    "",
-    "**Private VC (only inside the VC’s paired commands channel)**",
-    "• `!voice-limit <0-99>`",
-    "• `!voice-lock` / `!voice-unlock`",
-    "• `!voice-rename <name>`",
-    "• `!voice-ban @user`",
-    "",
-    "**Voice TTS**",
-    "• `.v join` — join your current VC",
-    "• `.v <text>` — speak the text in your VC",
-    "",
-    "**Admin/Manager**",
-    "• `!xp add @user <amount>`",
-    "• `!xp set @user <amount>`",
-    "• `!recalc-levels`",
-    "• `!sync-roles`",
-    "• `!import-mee6`",
-    "• `!claim-all [force]`",
-    "",
-    "**Website**",
-    "• `!lop-bot` — Visit: https://lop-bot-clean-production.up.railway.app",
-  ];
+function compactEmbed(title, lines) {
+  return new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(lines.join("\n"))
+    .setColor(0x2b2d31);
+}
 
-  await message.reply(lines.join("\n")).catch(() => {});
+async function cmdPublicCommands(message) {
+  const embed = compactEmbed("Commands", [
+    "`!commands` `/commands`",
+    "`!rank [user]` `/rank`",
+    "`!leaderboard [page]` `/leaderboard`",
+    "`!shame <user>` `/shame`",
+    "`!cookie-give <user>` `/cookie-give`",
+    "`!steal-cookie <user>` `/steal-cookie`",
+    "`!steal-cookies-from-everyone` `/steal-cookies-from-everyone`",
+    "`!lop-bot` `/lop-bot`",
+    "`!voice-limit/lock/unlock/rename/ban` and matching `/voice-*`",
+    "`.v join` and `.v <text>` (prefix only)",
+    "`!riley` (prefix only)"
+  ]);
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdModCommands(message) {
+  const hasModRole = await memberHasConfiguredModRole(message.member);
+  const isManager = message.member?.id === BOT_MANAGER_ID;
+  if (!hasModRole && !isManager) {
+    await message.reply("Only the configured mod role can use this command list.").catch(() => {});
+    return;
+  }
+  const embed = compactEmbed("Moderation Commands", [
+    "`!mod-role <role-id>` `/mod-role`",
+    "`?ban <user> [reason]` `/ban`",
+    "`?unban <user-id> [reason]` `/unban`",
+    "`?kick <user> [reason]` `/kick`",
+    "`?mute <user> [duration] [reason]` `/mute`",
+    "`?unmute <user> [reason]` `/unmute`",
+    "`?purge <count>` `/purge`",
+    "`?warn <user> [reason]` `/warn`",
+    "`?warnings <user>` `/warnings`",
+    "`?clearwarns <user>` `/clearwarns`",
+    "`?nick <user> <nick>` `/nick`",
+    "`?role <user> <role-id>` `/role`",
+    "`?softban <user> [reason]` `/softban`",
+    "`?lock` `?unlock` `?slowmode <seconds>` and matching `/lock` `/unlock` `/slowmode`"
+  ]);
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdAdminCommands(message) {
+  if (!isAdminOrManager(message.member)) return;
+  const embed = compactEmbed("Admin Commands", [
+    "`!admin-commands` `/admin-commands`",
+    "`!xp add/set <user> <amount>` `/xp`",
+    "`!recalc-levels` `/recalc-levels`",
+    "`!sync-roles` `/sync-roles`",
+    "`!import-mee6` `/import-mee6`",
+    "`!claim-all [force]` `/claim-all`"
+  ]);
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdSetModRole(message, args) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("Only admins/managers can set the mod role.").catch(() => {});
+    return;
+  }
+
+  const raw = (args[0] || "").replace(/[<@&>]/g, "");
+  if (!/^\d{15,21}$/.test(raw)) {
+    await message.reply("Usage: `!mod-role <role-id>`").catch(() => {});
+    return;
+  }
+
+  const role = await message.guild.roles.fetch(raw).catch(() => null);
+  if (!role) {
+    await message.reply("Role not found.").catch(() => {});
+    return;
+  }
+
+  await run(`INSERT INTO guild_settings (guild_id) VALUES (?) ON CONFLICT (guild_id) DO NOTHING`, [message.guild.id]);
+  await run(`UPDATE guild_settings SET mod_role_id=? WHERE guild_id=?`, [role.id, message.guild.id]);
+  await message.reply(`✅ Mod role set to ${role}.`).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -753,6 +832,274 @@ async function cmdSyncRoles(message) {
 }
 
 // ─────────────────────────────────────────────────────
+// Moderation commands
+// ─────────────────────────────────────────────────────
+
+function parseDurationMs(text) {
+  if (!text) return null;
+  const m = String(text).trim().match(/^(\d+)(s|m|h|d)$/i);
+  if (!m) return null;
+  const amount = Number.parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const unitMs = unit === "s" ? 1000 : unit === "m" ? 60_000 : unit === "h" ? 3_600_000 : 86_400_000;
+  return amount * unitMs;
+}
+
+async function cmdBan(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?ban <user> [reason]`").catch(() => {});
+    return;
+  }
+
+  const target = pick.member;
+  if (!target.bannable) {
+    await message.reply("I can't ban that user.").catch(() => {});
+    return;
+  }
+
+  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  await target.ban({ reason }).catch(() => {});
+  await message.reply(`✅ Banned ${target.user.tag}.`).catch(() => {});
+}
+
+async function cmdUnban(message, args) {
+  if (!(await requireModerator(message))) return;
+  const userId = (args[0] || "").replace(/[<@!>]/g, "");
+  if (!/^\d{15,21}$/.test(userId)) {
+    await message.reply("Usage: `?unban <user-id> [reason]`").catch(() => {});
+    return;
+  }
+  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  await message.guild.members.unban(userId, reason).catch(() => {});
+  await message.reply("✅ Unbanned user.").catch(() => {});
+}
+
+async function cmdKick(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?kick <user> [reason]`").catch(() => {});
+    return;
+  }
+
+  const target = pick.member;
+  if (!target.kickable) {
+    await message.reply("I can't kick that user.").catch(() => {});
+    return;
+  }
+
+  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  await target.kick(reason).catch(() => {});
+  await message.reply(`✅ Kicked ${target.user.tag}.`).catch(() => {});
+}
+
+async function cmdMute(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?mute <user> [duration like 10m] [reason]`").catch(() => {});
+    return;
+  }
+
+  const target = pick.member;
+  const durationMs = parseDurationMs(args[1]) || 10 * 60_000;
+  const reason = (parseDurationMs(args[1]) ? args.slice(2) : args.slice(1)).join(" ").trim() || "No reason provided";
+  if (!target.moderatable) {
+    await message.reply("I can't mute that user.").catch(() => {});
+    return;
+  }
+  await target.timeout(durationMs, reason).catch(() => {});
+  await message.reply(`✅ Muted ${target.user.tag}.`).catch(() => {});
+}
+
+async function cmdUnmute(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?unmute <user> [reason]`").catch(() => {});
+    return;
+  }
+
+  const target = pick.member;
+  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  if (!target.moderatable) {
+    await message.reply("I can't unmute that user.").catch(() => {});
+    return;
+  }
+  await target.timeout(null, reason).catch(() => {});
+  await message.reply(`✅ Unmuted ${target.user.tag}.`).catch(() => {});
+}
+
+async function cmdPurge(message, args) {
+  if (!(await requireModerator(message))) return;
+  const amount = clampInt(args[0], 1, 100);
+  if (amount === null) {
+    await message.reply("Usage: `?purge <1-100>`").catch(() => {});
+    return;
+  }
+
+  const deleted = await message.channel.bulkDelete(amount, true).catch(() => null);
+  await message.reply(`✅ Purged ${deleted?.size || 0} messages.`).catch(() => {});
+}
+
+async function cmdWarn(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?warn <user> [reason]`").catch(() => {});
+    return;
+  }
+
+  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  await run(
+    `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, pick.member.id, message.author.id, reason, Date.now()]
+  );
+
+  await message.reply(`✅ Warned ${pick.member.user.tag}.`).catch(() => {});
+}
+
+async function cmdWarnings(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?warnings <user>`").catch(() => {});
+    return;
+  }
+
+  const rows = await all(
+    `SELECT reason, created_at FROM mod_warnings WHERE guild_id=? AND user_id=? ORDER BY created_at DESC LIMIT 10`,
+    [message.guild.id, pick.member.id]
+  );
+  const lines = rows.length
+    ? rows.map((r, i) => `${i + 1}. ${r.reason}`).join("\n")
+    : "No warnings.";
+
+  const embed = compactEmbed(`Warnings for ${pick.member.user.username}`, [lines]);
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdClearWarns(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?clearwarns <user>`").catch(() => {});
+    return;
+  }
+
+  await run(`DELETE FROM mod_warnings WHERE guild_id=? AND user_id=?`, [message.guild.id, pick.member.id]);
+  await message.reply(`✅ Cleared warnings for ${pick.member.user.tag}.`).catch(() => {});
+}
+
+async function cmdLock(message) {
+  if (!(await requireModerator(message))) return;
+  await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+    SendMessages: false
+  }).catch(() => {});
+  await message.reply("🔒 Channel locked.").catch(() => {});
+}
+
+async function cmdUnlock(message) {
+  if (!(await requireModerator(message))) return;
+  await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
+    SendMessages: true
+  }).catch(() => {});
+  await message.reply("🔓 Channel unlocked.").catch(() => {});
+}
+
+async function cmdSlowmode(message, args) {
+  if (!(await requireModerator(message))) return;
+  const seconds = clampInt(args[0], 0, 21600);
+  if (seconds === null) {
+    await message.reply("Usage: `?slowmode <0-21600>`").catch(() => {});
+    return;
+  }
+  await message.channel.setRateLimitPerUser(seconds).catch(() => {});
+  await message.reply(`✅ Slowmode set to ${seconds}s.`).catch(() => {});
+}
+
+async function cmdNick(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?nick <user> <new-nickname>`").catch(() => {});
+    return;
+  }
+
+  const nick = args.slice(1).join(" ").trim();
+  if (!nick) {
+    await message.reply("Usage: `?nick <user> <new-nickname>`").catch(() => {});
+    return;
+  }
+
+  await pick.member.setNickname(nick.slice(0, 32)).catch(() => {});
+  await message.reply(`✅ Updated nickname for ${pick.member.user.tag}.`).catch(() => {});
+}
+
+async function cmdRole(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?role <user> <role-id>`").catch(() => {});
+    return;
+  }
+
+  const roleId = (args[1] || "").replace(/[<@&>]/g, "");
+  if (!/^\d{15,21}$/.test(roleId)) {
+    await message.reply("Usage: `?role <user> <role-id>`").catch(() => {});
+    return;
+  }
+
+  const role = await message.guild.roles.fetch(roleId).catch(() => null);
+  if (!role) {
+    await message.reply("Role not found.").catch(() => {});
+    return;
+  }
+
+  if (pick.member.roles.cache.has(role.id)) {
+    await pick.member.roles.remove(role).catch(() => {});
+    await message.reply(`✅ Removed ${role.name} from ${pick.member.user.tag}.`).catch(() => {});
+    return;
+  }
+
+  await pick.member.roles.add(role).catch(() => {});
+  await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag}.`).catch(() => {});
+}
+
+async function cmdSoftban(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0] || "";
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?softban <user> [reason]`").catch(() => {});
+    return;
+  }
+
+  const target = pick.member;
+  if (!target.bannable) {
+    await message.reply("I can't softban that user.").catch(() => {});
+    return;
+  }
+  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  await target.ban({ reason, deleteMessageSeconds: 24 * 60 * 60 }).catch(() => {});
+  await message.guild.members.unban(target.id, "Softban release").catch(() => {});
+  await message.reply(`✅ Softbanned ${target.user.tag}.`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
 // Private VC commands
 // ─────────────────────────────────────────────────────
 
@@ -846,14 +1193,15 @@ async function cmdVoiceRename(message, args) {
   await message.reply(`Renamed VC to **${voice.name}**.`).catch(() => {});
 }
 
-async function cmdVoiceBan(message) {
+async function cmdVoiceBan(message, args = []) {
   const check = await assertVoiceCmdAllowed(message);
   if (!check.ok) {
     await message.reply(check.reason).catch(() => {});
     return;
   }
 
-  const target = message.mentions.members.first();
+  const arg = args[0] || "";
+  const target = message.mentions.members.first() || (await pickUserSmart(message, arg))?.member;
   if (!target) {
     await message.reply("Usage: `!voice-ban @user`").catch(() => {});
     return;
@@ -1093,26 +1441,45 @@ async function handleCommands(message) {
   const parsed = parseCommand(message.content);
   if (!parsed) return false;
 
-  const { cmd, args } = parsed;
+  return await executeCommand(message, parsed.cmd, parsed.args, parsed.prefix);
+}
 
-  // Lop-Bot public site command
+async function executeCommand(message, cmd, args, prefix) {
+  if (!message.guild) return false;
+
   if (cmd === "lop-bot" || cmd === "lopbot") {
-    // You can change this URL to your actual public site URL
     const publicUrl = process.env.LOPBOT_PUBLIC_URL || "https://lop-bot-clean-production.up.railway.app";
     await message.reply(`View the Lop-Bot leaderboard and customize your rank card here: ${publicUrl}`).catch(() => {});
     return true;
   }
 
-  // Debug log so you can see the handler is firing
-  console.log("[CMD]", cmd, args.join(" "));
+  console.log("[CMD]", prefix, cmd, args.join(" "));
 
-  // Help
-  if (cmd === "help" || cmd === "commands") {
-    await cmdHelp(message);
+  if (cmd === "help") {
+    await message.reply("Use `!commands`, `!mod-commands`, or `!admin-commands`.").catch(() => {});
     return true;
   }
 
-  // Levels
+  if (cmd === "commands") {
+    await cmdPublicCommands(message);
+    return true;
+  }
+
+  if (cmd === "mod-commands") {
+    await cmdModCommands(message);
+    return true;
+  }
+
+  if (cmd === "admin-commands") {
+    await cmdAdminCommands(message);
+    return true;
+  }
+
+  if (cmd === "mod-role") {
+    await cmdSetModRole(message, args);
+    return true;
+  }
+
   if (cmd === "rank") {
     await cmdRank(message, args);
     return true;
@@ -1148,7 +1515,6 @@ async function handleCommands(message) {
     return true;
   }
 
-  // Admin XP
   if (cmd === "xp") {
     await cmdXp(message, args);
     return true;
@@ -1174,7 +1540,6 @@ async function handleCommands(message) {
     return true;
   }
 
-  // Private VC commands
   if (cmd === "voice-limit") {
     await cmdVoiceLimit(message, args);
     return true;
@@ -1196,11 +1561,223 @@ async function handleCommands(message) {
   }
 
   if (cmd === "voice-ban") {
-    await cmdVoiceBan(message);
+    await cmdVoiceBan(message, args);
+    return true;
+  }
+
+  if (cmd === "ban") {
+    await cmdBan(message, args);
+    return true;
+  }
+
+  if (cmd === "unban") {
+    await cmdUnban(message, args);
+    return true;
+  }
+
+  if (cmd === "kick") {
+    await cmdKick(message, args);
+    return true;
+  }
+
+  if (cmd === "mute") {
+    await cmdMute(message, args);
+    return true;
+  }
+
+  if (cmd === "unmute") {
+    await cmdUnmute(message, args);
+    return true;
+  }
+
+  if (cmd === "purge") {
+    await cmdPurge(message, args);
+    return true;
+  }
+
+  if (cmd === "warn") {
+    await cmdWarn(message, args);
+    return true;
+  }
+
+  if (cmd === "warnings") {
+    await cmdWarnings(message, args);
+    return true;
+  }
+
+  if (cmd === "clearwarns") {
+    await cmdClearWarns(message, args);
+    return true;
+  }
+
+  if (cmd === "lock") {
+    await cmdLock(message);
+    return true;
+  }
+
+  if (cmd === "unlock") {
+    await cmdUnlock(message);
+    return true;
+  }
+
+  if (cmd === "slowmode") {
+    await cmdSlowmode(message, args);
+    return true;
+  }
+
+  if (cmd === "nick") {
+    await cmdNick(message, args);
+    return true;
+  }
+
+  if (cmd === "role") {
+    await cmdRole(message, args);
+    return true;
+  }
+
+  if (cmd === "softban") {
+    await cmdSoftban(message, args);
     return true;
   }
 
   return false;
 }
 
-module.exports = { handleCommands };
+function slashPerm(flag) {
+  return String(BigInt(flag));
+}
+
+function buildSlashCommands() {
+  return [
+    { name: "commands", description: "Public commands list" },
+    { name: "mod-commands", description: "Moderation commands list", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
+    { name: "admin-commands", description: "Admin commands list", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator) },
+    { name: "mod-role", description: "Set mod role", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 8, name: "role", description: "Role", required: true }] },
+    { name: "lop-bot", description: "Get website URL" },
+    { name: "rank", description: "Show rank", options: [{ type: 6, name: "user", description: "User", required: false }] },
+    { name: "leaderboard", description: "Show leaderboard", options: [{ type: 4, name: "page", description: "Page", required: false }] },
+    { name: "shame", description: "Shame a user", options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "cookie-give", description: "Give cookie", options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "steal-cookie", description: "Steal cookie", options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "steal-cookies-from-everyone", description: "Steal cookies from everyone" },
+    { name: "xp", description: "Manage XP", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild), options: [{ type: 3, name: "action", description: "add or set", required: true, choices: [{ name: "add", value: "add" }, { name: "set", value: "set" }] }, { type: 6, name: "user", description: "User", required: true }, { type: 4, name: "amount", description: "Amount", required: true }] },
+    { name: "recalc-levels", description: "Recalculate levels", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild) },
+    { name: "sync-roles", description: "Sync level roles", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild) },
+    { name: "import-mee6", description: "Import MEE6 snapshot", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild) },
+    { name: "claim-all", description: "Claim all snapshot XP", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild), options: [{ type: 5, name: "force", description: "Force run", required: false }] },
+    { name: "voice-limit", description: "Set private voice limit", options: [{ type: 4, name: "limit", description: "0-99", required: true }] },
+    { name: "voice-lock", description: "Lock private voice" },
+    { name: "voice-unlock", description: "Unlock private voice" },
+    { name: "voice-rename", description: "Rename private voice", options: [{ type: 3, name: "name", description: "New name", required: true }] },
+    { name: "voice-ban", description: "Ban user from private voice", options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "kick", description: "Kick member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "mute", description: "Mute (timeout) member", default_member_permissions: slashPerm(MODERATION_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "duration", description: "e.g. 10m", required: false }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "unmute", description: "Unmute member", default_member_permissions: slashPerm(MODERATION_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "purge", description: "Delete recent messages", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "count", description: "1-100", required: true }] },
+    { name: "warn", description: "Warn a user", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "warnings", description: "View user warnings", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "clearwarns", description: "Clear user warnings", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "nick", description: "Set nickname", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "name", description: "Nickname", required: true }] },
+    { name: "role", description: "Toggle role on user", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 8, name: "role", description: "Role", required: true }] },
+    { name: "softban", description: "Softban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "lock", description: "Lock channel", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
+    { name: "unlock", description: "Unlock channel", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
+    { name: "slowmode", description: "Set channel slowmode", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "seconds", description: "0-21600", required: true }] }
+  ];
+}
+
+function optionValue(interaction, key) {
+  return interaction.options.getString(key) || interaction.options.getInteger(key) || interaction.options.getBoolean(key) || interaction.options.getUser(key)?.id || interaction.options.getRole(key)?.id || "";
+}
+
+function buildSyntheticMessage(interaction, cmdName, args) {
+  return {
+    guild: interaction.guild,
+    member: interaction.member,
+    channel: interaction.channel,
+    author: interaction.user,
+    client: interaction.client,
+    content: `!${cmdName} ${args.join(" ")}`.trim(),
+    mentions: {
+      users: { first: () => null },
+      members: { first: () => null }
+    },
+    reply: async (payload) => {
+      const body = typeof payload === "string" ? { content: payload, ephemeral: true } : { ...payload, ephemeral: true };
+      if (interaction.replied || interaction.deferred) {
+        return await interaction.followUp(body);
+      }
+      return await interaction.reply(body);
+    },
+    delete: async () => {}
+  };
+}
+
+async function handleSlashCommand(interaction) {
+  if (!interaction.isChatInputCommand()) return false;
+
+  const name = interaction.commandName;
+  if (name === "riley") return false;
+
+  const userOption = interaction.options.getUser("user");
+  const roleOption = interaction.options.getRole("role");
+  const args = [];
+
+  if (name === "xp") {
+    args.push(String(optionValue(interaction, "action")));
+    if (userOption) args.push(userOption.id);
+    args.push(String(optionValue(interaction, "amount")));
+  } else if (name === "claim-all") {
+    if (interaction.options.getBoolean("force")) args.push("force");
+  } else if (name === "mute") {
+    if (userOption) args.push(userOption.id);
+    const duration = optionValue(interaction, "duration");
+    const reason = optionValue(interaction, "reason");
+    if (duration) args.push(String(duration));
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "unmute") {
+    if (userOption) args.push(userOption.id);
+    const reason = optionValue(interaction, "reason");
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "ban" || name === "kick" || name === "warn" || name === "softban") {
+    if (userOption) args.push(userOption.id);
+    const reason = optionValue(interaction, "reason");
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "role") {
+    if (userOption) args.push(userOption.id);
+    if (roleOption) args.push(roleOption.id);
+  } else if (name === "unban") {
+    args.push(String(optionValue(interaction, "user_id")));
+    const reason = optionValue(interaction, "reason");
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "warnings" || name === "clearwarns" || name === "voice-ban" || name === "shame" || name === "cookie-give" || name === "steal-cookie") {
+    if (userOption) args.push(userOption.id);
+  } else if (name === "nick") {
+    if (userOption) args.push(userOption.id);
+    const nick = optionValue(interaction, "name");
+    if (nick) args.push(...String(nick).split(/\s+/));
+  } else if (name === "mod-role") {
+    if (roleOption) args.push(roleOption.id);
+  } else {
+    const keys = ["page", "limit", "name", "count", "seconds"];
+    for (const key of keys) {
+      const value = optionValue(interaction, key);
+      if (value !== "" && value !== null && value !== undefined) {
+        args.push(String(value));
+      }
+    }
+  }
+
+  const synthetic = buildSyntheticMessage(interaction, name, args);
+  return await executeCommand(synthetic, name, args, "/");
+}
+
+async function registerSlashCommands(client) {
+  const defs = buildSlashCommands();
+  await client.application.commands.set(defs);
+  console.log(`[slash] Registered ${defs.length} commands`);
+}
+
+module.exports = { handleCommands, handleSlashCommand, registerSlashCommands };

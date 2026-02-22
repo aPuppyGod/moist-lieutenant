@@ -11,7 +11,7 @@ const {
 
 const { initDb, get, run } = require("./db");
 const { levelFromXp } = require("./xp");
-const { handleCommands } = require("./commands");
+const { handleCommands, handleSlashCommand, registerSlashCommands } = require("./commands");
 const { onVoiceStateUpdate, cleanupPrivateRooms } = require("./voiceRooms");
 const { getGuildSettings } = require("./settings");
 const { getLevelRoles } = require("./settings");
@@ -199,6 +199,10 @@ client.once(Events.ClientReady, async () => {
   try {
     await initDb();
     console.log(`Logged in as ${client.user.tag}`);
+
+    await registerSlashCommands(client).catch((err) => {
+      console.error("Slash command registration failed:", err);
+    });
 
     startDashboard(client);
 
@@ -412,4 +416,15 @@ if (!process.env.DISCORD_TOKEN) {
 client.login(process.env.DISCORD_TOKEN).catch((err) => {
   console.error("Discord login failed:", err);
   process.exit(1);
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  try {
+    await handleSlashCommand(interaction);
+  } catch (err) {
+    console.error("Interaction handler failed:", err);
+    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: "Command failed.", ephemeral: true }).catch(() => {});
+    }
+  }
 });

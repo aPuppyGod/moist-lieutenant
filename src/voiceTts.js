@@ -191,10 +191,7 @@ async function speakTextInVoice(message, text) {
     console.log("[voice-tts] Playback ping snapshot:", { ws: wsPing, udp: udpPing });
 
     if (udpPing == null) {
-      return {
-        ok: false,
-        reason: "VOICE_UDP_UNAVAILABLE"
-      };
+      return { ok: false, reason: "VOICE_UDP_UNAVAILABLE" };
     }
 
     return { ok: true };

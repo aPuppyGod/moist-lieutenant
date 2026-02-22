@@ -206,6 +206,7 @@ async function initDb() {
       reaction_xp INTEGER DEFAULT 3,
       reaction_cooldown_seconds INTEGER DEFAULT 30,
       voice_xp_per_minute INTEGER DEFAULT 5,
+      mod_role_id TEXT DEFAULT NULL,
 
       level_up_channel_id TEXT DEFAULT NULL,
       level_up_message TEXT DEFAULT NULL,
@@ -270,6 +271,18 @@ async function initDb() {
     )
   `);
 
+  // Moderation warnings
+  await run(`
+    CREATE TABLE IF NOT EXISTS mod_warnings (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      created_at BIGINT NOT NULL
+    )
+  `);
+
   // User rank card customizations
   await run(`
     CREATE TABLE IF NOT EXISTS user_rankcard_customizations (
@@ -298,6 +311,7 @@ async function initDb() {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS borderglow TEXT DEFAULT 'none'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgmode TEXT`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgimage_data BYTEA`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

@@ -19,6 +19,14 @@ const { getIgnoredChannels } = require("./settings");
 const { startDashboard } = require("./dashboard");
 const unidecode = require('unidecode');
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[process] Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("[process] Uncaught exception:", error);
+});
+
 // ─────────────────────────────────────────────────────
 // Helper functions
 // ─────────────────────────────────────────────────────
@@ -188,40 +196,46 @@ const client = new Client({
 // ─────────────────────────────────────────────────────
 
 client.once(Events.ClientReady, async () => {
-  await initDb();
-  console.log(`Logged in as ${client.user.tag}`);
+  try {
+    await initDb();
+    console.log(`Logged in as ${client.user.tag}`);
 
-  // Dashboard
-  startDashboard(client);
+    startDashboard(client);
 
-  // Cleanup private VCs
-  setInterval(() => {
-    cleanupPrivateRooms(client).catch(() => {});
-  }, 30_000);
+    setInterval(() => {
+      cleanupPrivateRooms(client).catch((err) => {
+        console.error("cleanupPrivateRooms failed:", err);
+      });
+    }, 30_000);
 
-  // Voice XP every minute
-  setInterval(async () => {
-    const voiceXp = parseInt(process.env.VOICE_XP_PER_MINUTE || "5", 10);
+    setInterval(async () => {
+      try {
+        const voiceXp = parseInt(process.env.VOICE_XP_PER_MINUTE || "5", 10);
 
-    for (const [, guild] of client.guilds.cache) {
-      const ignoredChannels = await getIgnoredChannels(guild.id);
-      await guild.members.fetch().catch(() => {});
+        for (const [, guild] of client.guilds.cache) {
+          const ignoredChannels = await getIgnoredChannels(guild.id);
+          await guild.members.fetch().catch(() => {});
 
-      for (const [, member] of guild.members.cache) {
-        if (member.user.bot) continue;
-        if (!member.voice?.channelId) continue;
+          for (const [, member] of guild.members.cache) {
+            if (member.user.bot) continue;
+            if (!member.voice?.channelId) continue;
 
-        // Check if voice channel is ignored
-        const isIgnored = ignoredChannels.some(c => c.channel_id === member.voice.channelId && c.channel_type === "voice");
-        if (isIgnored) continue;
+            const isIgnored = ignoredChannels.some(c => c.channel_id === member.voice.channelId && c.channel_type === "voice");
+            if (isIgnored) continue;
 
-        const res = await addXp(guild.id, member.id, voiceXp);
-        if (res.newLevel > res.oldLevel) {
-          await handleLevelUp(guild, member.id, res.oldLevel, res.newLevel);
+            const res = await addXp(guild.id, member.id, voiceXp);
+            if (res.newLevel > res.oldLevel) {
+              await handleLevelUp(guild, member.id, res.oldLevel, res.newLevel);
+            }
+          }
         }
+      } catch (err) {
+        console.error("Voice XP interval failed:", err);
       }
-    }
-  }, 60_000);
+    }, 60_000);
+  } catch (err) {
+    console.error("ClientReady startup failed:", err);
+  }
 });
 
 
@@ -370,7 +384,14 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
         // Send warning to a channel
         const channel = await newMember.guild.channels.fetch('1419429328592310333').catch(() => null);
         if (channel) {
-          await channel.send(`<@${executor.id}> YOU HAVE JUST TIMED OUT A BOT MANAGER mind you this person will NOT be able to work on the bot while timed out`);
+          try {
+            await channel.send(`<@${executor.id}> YOU HAVE JUST TIMED OUT A BOT MANAGER mind you this person will NOT be able to work on the bot while timed out`);
+            console.log(`✓ Manager timeout warning sent to ${channel.name}`);
+          } catch (sendErr) {
+            console.error("Error sending manager timeout message:", sendErr);
+          }
+        } else {
+          console.error("Channel 1419429328592310333 not found");
         }
       }
     } catch (err) {
@@ -383,4 +404,12 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 // Login
 // ─────────────────────────────────────────────────────
 
-client.login(process.env.DISCORD_TOKEN);
+if (!process.env.DISCORD_TOKEN) {
+  console.error("DISCORD_TOKEN is not set. Bot login aborted.");
+  process.exit(1);
+}
+
+client.login(process.env.DISCORD_TOKEN).catch((err) => {
+  console.error("Discord login failed:", err);
+  process.exit(1);
+});

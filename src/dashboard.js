@@ -12,18 +12,23 @@ const DiscordStrategy = require("passport-discord").Strategy;
 const DISCORD_CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const DISCORD_CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const DISCORD_CALLBACK_URL = process.env.DISCORD_CALLBACK_URL || "https://lop-bot-clean-production.up.railway.app";
+const HAS_DISCORD_OAUTH = Boolean(DISCORD_CLIENT_ID && DISCORD_CLIENT_SECRET);
 
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((obj, done) => done(null, obj));
 
-passport.use(new DiscordStrategy({
-  clientID: DISCORD_CLIENT_ID,
-  clientSecret: DISCORD_CLIENT_SECRET,
-  callbackURL: DISCORD_CALLBACK_URL,
-  scope: ["identify", "guilds"]
-}, (accessToken, refreshToken, profile, done) => {
-  process.nextTick(() => done(null, profile));
-}));
+if (HAS_DISCORD_OAUTH) {
+  passport.use(new DiscordStrategy({
+    clientID: DISCORD_CLIENT_ID,
+    clientSecret: DISCORD_CLIENT_SECRET,
+    callbackURL: DISCORD_CALLBACK_URL,
+    scope: ["identify", "guilds"]
+  }, (accessToken, refreshToken, profile, done) => {
+    process.nextTick(() => done(null, profile));
+  }));
+} else {
+  console.warn("[dashboard] DISCORD_CLIENT_ID / DISCORD_CLIENT_SECRET not set. Discord OAuth routes will be disabled.");
+}
 
 function htmlTemplate(content, opts = {}) {
   // opts: { user, isAdmin, active }
@@ -737,17 +742,25 @@ function startDashboard(client) {
   app.use(passport.session());
 
   // Discord OAuth2 login
-  app.get("/login", passport.authenticate("discord"));
-  app.get("/auth/discord", passport.authenticate("discord"));
-  app.get("/auth/discord/callback",
-    passport.authenticate("discord", { failureRedirect: "/login" }),
-    (req, res) => {
-      // Redirect to original URL if present, else home
-      const redirectTo = req.session?.returnTo || "/";
-      if (req.session) delete req.session.returnTo;
-      res.redirect(redirectTo);
-    }
-  );
+  if (HAS_DISCORD_OAUTH) {
+    app.get("/login", passport.authenticate("discord"));
+    app.get("/auth/discord", passport.authenticate("discord"));
+    app.get("/auth/discord/callback",
+      passport.authenticate("discord", { failureRedirect: "/login" }),
+      (req, res) => {
+        const redirectTo = req.session?.returnTo || "/";
+        if (req.session) delete req.session.returnTo;
+        res.redirect(redirectTo);
+      }
+    );
+  } else {
+    app.get("/auth/discord", (_req, res) => {
+      res.status(503).send("Discord OAuth is not configured.");
+    });
+    app.get("/auth/discord/callback", (_req, res) => {
+      res.status(503).send("Discord OAuth is not configured.");
+    });
+  }
   app.get("/logout", (req, res) => {
     req.logout(() => {
       res.redirect("/");

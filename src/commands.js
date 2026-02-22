@@ -6,6 +6,7 @@ const { createCanvas, loadImage, registerFont } = require("canvas");
 // Register bundled font
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
 const { getLevelRoles } = require("./settings");
+const { joinMemberVoiceChannel, speakTextInVoice } = require("./voiceTts");
 const fs = require("fs");
 const path = require("path");
 
@@ -215,6 +216,10 @@ async function cmdHelp(message) {
     "• `!voice-lock` / `!voice-unlock`",
     "• `!voice-rename <name>`",
     "• `!voice-ban @user`",
+    "",
+    "**Voice TTS**",
+    "• `.v join` — join your current VC",
+    "• `.v <text>` — speak the text in your VC",
     "",
     "**Admin/Manager**",
     "• `!xp add @user <amount>`",
@@ -984,12 +989,115 @@ async function cmdClaimAll(message) {
   await message.reply(`✅ Applied XP to **${applied}** members.`).catch(() => {});
 }
 
+async function sendTtsFallbackSilently(message, text) {
+  const channel = message.channel;
+
+  if (!channel) return false;
+
+  const scheduleDelete = (sentMessage) => {
+    if (!sentMessage || typeof sentMessage.delete !== "function") return;
+    setTimeout(() => {
+      sentMessage.delete().catch(() => {});
+    }, 20000);
+  };
+
+  if (typeof channel.fetchWebhooks !== "function" || typeof channel.createWebhook !== "function") {
+    try {
+      const sent = await channel.send({ content: text, tts: true });
+      scheduleDelete(sent);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  const canManageWebhooks = channel.permissionsFor(message.guild.members.me)?.has(PermissionsBitField.Flags.ManageWebhooks);
+  if (!canManageWebhooks) {
+    try {
+      const sent = await channel.send({ content: text, tts: true });
+      scheduleDelete(sent);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    const hooks = await channel.fetchWebhooks();
+    let hook = hooks.find((h) => h.owner?.id === message.client.user.id && h.name === "lop-tts-fallback");
+
+    if (!hook) {
+      hook = await channel.createWebhook({
+        name: "lop-tts-fallback"
+      });
+    }
+
+    const sent = await hook.send({
+      content: text,
+      tts: true,
+      username: "\u2800",
+      wait: true
+    });
+
+    scheduleDelete(sent);
+
+    return true;
+  } catch (err) {
+    console.error("[tts-fallback] Webhook fallback failed:", err);
+    try {
+      const sent = await channel.send({ content: text, tts: true });
+      scheduleDelete(sent);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────
 // Main handler
 // ─────────────────────────────────────────────────────
 
 async function handleCommands(message) {
   if (!message || !message.content) return false;
+
+  const raw = message.content.trim();
+  if (raw.toLowerCase().startsWith(".v")) {
+    const payload = raw.slice(2).trim();
+
+    if (!payload) {
+      await message.reply("Usage: `.v join` or `.v your text here`").catch(() => {});
+      return true;
+    }
+
+    if (payload.toLowerCase() === "join") {
+      const joined = await joinMemberVoiceChannel(message);
+      if (!joined.ok) {
+        await message.reply(`❌ ${joined.reason}`).catch(() => {});
+        return true;
+      }
+      await message.reply(`✅ Joined **${joined.channel.name}**`).catch(() => {});
+      return true;
+    }
+
+    const spoken = await speakTextInVoice(message, payload);
+    if (!spoken.ok) {
+      if (spoken.reason === "VOICE_UDP_UNAVAILABLE") {
+        const sent = await sendTtsFallbackSilently(message, payload);
+        if (!sent) {
+          await message.reply("❌ Could not send TTS fallback in this channel.").catch(() => {});
+          return true;
+        }
+        await message.react("🔊").catch(() => {});
+        return true;
+      }
+
+      await message.reply(`❌ ${spoken.reason}`).catch(() => {});
+      return true;
+    }
+    await message.react("🔊").catch(() => {});
+    return true;
+  }
 
   const parsed = parseCommand(message.content);
   if (!parsed) return false;

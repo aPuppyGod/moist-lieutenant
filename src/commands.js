@@ -989,7 +989,9 @@ async function cmdPurge(message, args) {
     commandDeleted = await message.delete().then(() => true).catch(() => false);
   }
 
-  const fetchCount = Math.min(100, amount + (commandDeleted ? 0 : 1));
+  const fetchCount = isInteractionCommand
+    ? amount
+    : Math.min(100, amount + (commandDeleted ? 0 : 1));
   const deleted = await message.channel.bulkDelete(fetchCount, true).catch(() => null);
 
   let purgedCount = deleted?.size || 0;

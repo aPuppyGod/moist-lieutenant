@@ -428,3 +428,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
   }
 });
+
+client.on(Events.GuildCreate, async (guild) => {
+  try {
+    await registerSlashCommands(client);
+    console.log(`[slash] Synced commands after joining guild ${guild.id}`);
+  } catch (err) {
+    console.error("[slash] GuildCreate sync failed:", err);
+  }
+});

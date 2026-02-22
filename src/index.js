@@ -809,13 +809,14 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
   }
 
   if ((oldMember.nickname || "") !== (newMember.nickname || "")) {
+    const nickExecutor = await getAuditExecutor(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
     const tracked = findRecentModAction({
       guildId: newMember.guild.id,
       action: "member_nick_update",
       matcher: (data) => data?.targetUserId === newMember.id,
       ttlMs: 60_000
     });
-    const actorLabel = tracked?.actorId ? await labelFromUserId(newMember.guild, tracked.actorId) : "Unknown";
+    const actorLabel = await resolveActionActorLabel(newMember.guild, nickExecutor, tracked?.actorId);
     await sendGuildLog(newMember.guild, {
       color: LOG_THEME.info,
       title: "📝 Nickname Changed",
@@ -928,6 +929,52 @@ client.on(Events.RoleUpdate, async (oldRole, newRole) => {
     fields: [
       { name: "Name", value: `${oldRole.name} → ${newRole.name}`, inline: true },
       { name: "Color", value: `${oldRole.hexColor} → ${newRole.hexColor}`, inline: true }
+    ]
+  });
+});
+
+client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
+  if (!newGuild) return;
+
+  const changes = [];
+  if (oldGuild.name !== newGuild.name) {
+    changes.push(`Name: ${oldGuild.name} → ${newGuild.name}`);
+  }
+  if (oldGuild.icon !== newGuild.icon) {
+    changes.push("Server icon changed");
+  }
+  if (oldGuild.banner !== newGuild.banner) {
+    changes.push("Server banner changed");
+  }
+  if (oldGuild.verificationLevel !== newGuild.verificationLevel) {
+    changes.push(`Verification level: ${oldGuild.verificationLevel} → ${newGuild.verificationLevel}`);
+  }
+  if (oldGuild.afkChannelId !== newGuild.afkChannelId) {
+    changes.push(`AFK channel: ${oldGuild.afkChannelId || "none"} → ${newGuild.afkChannelId || "none"}`);
+  }
+  if (oldGuild.afkTimeout !== newGuild.afkTimeout) {
+    changes.push(`AFK timeout: ${oldGuild.afkTimeout}s → ${newGuild.afkTimeout}s`);
+  }
+  if (oldGuild.systemChannelId !== newGuild.systemChannelId) {
+    changes.push(`System channel: ${oldGuild.systemChannelId || "none"} → ${newGuild.systemChannelId || "none"}`);
+  }
+  if (oldGuild.rulesChannelId !== newGuild.rulesChannelId) {
+    changes.push(`Rules channel: ${oldGuild.rulesChannelId || "none"} → ${newGuild.rulesChannelId || "none"}`);
+  }
+  if (oldGuild.publicUpdatesChannelId !== newGuild.publicUpdatesChannelId) {
+    changes.push(`Updates channel: ${oldGuild.publicUpdatesChannelId || "none"} → ${newGuild.publicUpdatesChannelId || "none"}`);
+  }
+
+  if (!changes.length) return;
+
+  const executor = await getAuditExecutor(newGuild, AuditLogEvent.GuildUpdate, newGuild.id);
+  await sendGuildLog(newGuild, {
+    color: LOG_THEME.mod,
+    title: "🏰 Server Updated",
+    description: `${newGuild.name} server settings changed.`,
+    fields: [
+      { name: "Updated By", value: executor ? userLabel(executor) : "Unknown", inline: true },
+      { name: "Changes", value: trimText(changes.join("\n"), 1024) }
     ]
   });
 });

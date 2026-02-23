@@ -1,11 +1,10 @@
 {
-  "name": "lop-bot",
+  "name": "moist-lieutenant",
   "version": "1.0.0",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "import:mee6": "node src/mee6Import.js"
+    "start": "node src/index.js"
   },
   "dependencies": {
     "@discordjs/voice": "^0.18.0",

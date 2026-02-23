@@ -28,6 +28,7 @@ async function getGuildSettings(guildId) {
 
     voice_xp_per_minute: row?.voice_xp_per_minute ?? 5,
     command_prefix: row?.command_prefix ?? "!",
+    new_account_warn_days: row?.new_account_warn_days ?? 1,
     mod_role_id: row?.mod_role_id ?? null,
     log_channel_id: row?.log_channel_id ?? null,
 
@@ -47,6 +48,7 @@ async function updateGuildSettings(guildId, patch) {
     "reaction_cooldown_seconds",
     "voice_xp_per_minute",
     "command_prefix",
+    "new_account_warn_days",
     "mod_role_id",
     "log_channel_id",
     "level_up_channel_id",
@@ -147,6 +149,197 @@ async function removeLoggingExclusion(guildId, targetId) {
   );
 }
 
+async function getLoggingEventConfigs(guildId) {
+  return await all(
+    `SELECT event_key, enabled, channel_id
+     FROM logging_event_configs
+     WHERE guild_id=?`,
+    [guildId]
+  );
+}
+
+async function upsertLoggingEventConfig(guildId, eventKey, enabled, channelId) {
+  await run(
+    `INSERT INTO logging_event_configs (guild_id, event_key, enabled, channel_id)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (guild_id, event_key)
+     DO UPDATE SET enabled=EXCLUDED.enabled, channel_id=EXCLUDED.channel_id`,
+    [guildId, eventKey, enabled ? 1 : 0, channelId || null]
+  );
+}
+
+async function getLoggingActorExclusions(guildId) {
+  return await all(
+    `SELECT target_id, target_type
+     FROM logging_actor_exclusions
+     WHERE guild_id=?
+     ORDER BY target_type, target_id`,
+    [guildId]
+  );
+}
+
+async function addLoggingActorExclusion(guildId, targetId, targetType) {
+  await run(
+    `INSERT INTO logging_actor_exclusions (guild_id, target_id, target_type)
+     VALUES (?, ?, ?)
+     ON CONFLICT (guild_id, target_id)
+     DO UPDATE SET target_type=EXCLUDED.target_type`,
+    [guildId, targetId, targetType]
+  );
+}
+
+async function removeLoggingActorExclusion(guildId, targetId) {
+  await run(
+    `DELETE FROM logging_actor_exclusions WHERE guild_id=? AND target_id=?`,
+    [guildId, targetId]
+  );
+}
+
+async function getReactionRoleBindings(guildId) {
+  return await all(
+    `SELECT channel_id, message_id, emoji_key, role_id, remove_on_unreact
+     FROM reaction_role_bindings
+     WHERE guild_id=?
+     ORDER BY message_id, emoji_key`,
+    [guildId]
+  );
+}
+
+async function getReactionRoleBinding(guildId, messageId, emojiKey) {
+  return await get(
+    `SELECT channel_id, message_id, emoji_key, role_id, remove_on_unreact
+     FROM reaction_role_bindings
+     WHERE guild_id=? AND message_id=? AND emoji_key=?`,
+    [guildId, messageId, emojiKey]
+  );
+}
+
+async function upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey, roleId, removeOnUnreact = true) {
+  await run(
+    `INSERT INTO reaction_role_bindings (guild_id, channel_id, message_id, emoji_key, role_id, remove_on_unreact)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (guild_id, message_id, emoji_key)
+     DO UPDATE SET channel_id=EXCLUDED.channel_id, role_id=EXCLUDED.role_id, remove_on_unreact=EXCLUDED.remove_on_unreact`,
+    [guildId, channelId, messageId, emojiKey, roleId, removeOnUnreact ? 1 : 0]
+  );
+}
+
+async function removeReactionRoleBinding(guildId, messageId, emojiKey) {
+  await run(
+    `DELETE FROM reaction_role_bindings
+     WHERE guild_id=? AND message_id=? AND emoji_key=?`,
+    [guildId, messageId, emojiKey]
+  );
+}
+
+async function getTicketSettings(guildId) {
+  await run(
+    `INSERT INTO ticket_settings (guild_id) VALUES (?)
+     ON CONFLICT (guild_id) DO NOTHING`,
+    [guildId]
+  );
+
+  const row = await get(
+    `SELECT guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id
+     FROM ticket_settings
+     WHERE guild_id=?`,
+    [guildId]
+  );
+
+  return {
+    guild_id: guildId,
+    enabled: Number(row?.enabled || 0) === 1,
+    panel_channel_id: row?.panel_channel_id || null,
+    category_id: row?.category_id || null,
+    support_role_id: row?.support_role_id || null,
+    ticket_prefix: row?.ticket_prefix || "ticket",
+    panel_message_id: row?.panel_message_id || null
+  };
+}
+
+async function upsertTicketSettings(guildId, patch) {
+  const current = await getTicketSettings(guildId);
+  const merged = {
+    enabled: patch.enabled !== undefined ? (patch.enabled ? 1 : 0) : (current.enabled ? 1 : 0),
+    panel_channel_id: patch.panel_channel_id !== undefined ? (patch.panel_channel_id || null) : current.panel_channel_id,
+    category_id: patch.category_id !== undefined ? (patch.category_id || null) : current.category_id,
+    support_role_id: patch.support_role_id !== undefined ? (patch.support_role_id || null) : current.support_role_id,
+    ticket_prefix: patch.ticket_prefix !== undefined ? (patch.ticket_prefix || "ticket") : current.ticket_prefix,
+    panel_message_id: patch.panel_message_id !== undefined ? (patch.panel_message_id || null) : current.panel_message_id
+  };
+
+  await run(
+    `INSERT INTO ticket_settings (guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (guild_id)
+     DO UPDATE SET
+       enabled=EXCLUDED.enabled,
+       panel_channel_id=EXCLUDED.panel_channel_id,
+       category_id=EXCLUDED.category_id,
+       support_role_id=EXCLUDED.support_role_id,
+       ticket_prefix=EXCLUDED.ticket_prefix,
+       panel_message_id=EXCLUDED.panel_message_id`,
+    [
+      guildId,
+      merged.enabled,
+      merged.panel_channel_id,
+      merged.category_id,
+      merged.support_role_id,
+      merged.ticket_prefix,
+      merged.panel_message_id
+    ]
+  );
+}
+
+async function getOpenTicketByUser(guildId, openerId) {
+  return await get(
+    `SELECT guild_id, channel_id, opener_id, status, created_at
+     FROM tickets
+     WHERE guild_id=? AND opener_id=? AND status='open'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [guildId, openerId]
+  );
+}
+
+async function getTicketByChannel(guildId, channelId) {
+  return await get(
+    `SELECT guild_id, channel_id, opener_id, status, created_at, closed_at, closed_by
+     FROM tickets
+     WHERE guild_id=? AND channel_id=?`,
+    [guildId, channelId]
+  );
+}
+
+async function createTicket(guildId, channelId, openerId) {
+  await run(
+    `INSERT INTO tickets (guild_id, channel_id, opener_id, status, created_at)
+     VALUES (?, ?, ?, 'open', ?)
+     ON CONFLICT (guild_id, channel_id)
+     DO UPDATE SET opener_id=EXCLUDED.opener_id, status='open', created_at=EXCLUDED.created_at, closed_at=NULL, closed_by=NULL`,
+    [guildId, channelId, openerId, Date.now()]
+  );
+}
+
+async function closeTicket(guildId, channelId, closedBy) {
+  await run(
+    `UPDATE tickets
+     SET status='closed', closed_at=?, closed_by=?
+     WHERE guild_id=? AND channel_id=?`,
+    [Date.now(), closedBy || null, guildId, channelId]
+  );
+}
+
+async function getOpenTickets(guildId) {
+  return await all(
+    `SELECT guild_id, channel_id, opener_id, status, created_at
+     FROM tickets
+     WHERE guild_id=? AND status='open'
+     ORDER BY created_at DESC`,
+    [guildId]
+  );
+}
+
 module.exports = {
   getGuildSettings,
   updateGuildSettings,
@@ -159,6 +352,22 @@ module.exports = {
   getLoggingExclusions,
   addLoggingExclusion,
   removeLoggingExclusion,
+  getLoggingEventConfigs,
+  upsertLoggingEventConfig,
+  getLoggingActorExclusions,
+  addLoggingActorExclusion,
+  removeLoggingActorExclusion,
+  getReactionRoleBindings,
+  getReactionRoleBinding,
+  upsertReactionRoleBinding,
+  removeReactionRoleBinding,
+  getTicketSettings,
+  upsertTicketSettings,
+  getOpenTicketByUser,
+  getTicketByChannel,
+  createTicket,
+  closeTicket,
+  getOpenTickets,
 
   // Customization unlocks
   getCustomizationUnlocks,

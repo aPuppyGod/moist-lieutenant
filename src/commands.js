@@ -6,7 +6,6 @@ const { createCanvas, loadImage, registerFont } = require("canvas");
 // Register bundled font
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
 const { getLevelRoles, getGuildSettings } = require("./settings");
-const { joinMemberVoiceChannel, speakTextInVoice } = require("./voiceTts");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
 const path = require("path");
@@ -256,14 +255,8 @@ async function cmdPublicCommands(message) {
     "`!commands` `/commands`",
     "`!rank [user]` `/rank`",
     "`!leaderboard [page]` `/leaderboard`",
-    "`!shame <user>` `/shame`",
-    "`!cookie-give <user>` `/cookie-give`",
-    "`!steal-cookie <user>` `/steal-cookie`",
-    "`!steal-cookies-from-everyone` `/steal-cookies-from-everyone`",
-    "`!lop-bot` `/lop-bot`",
-    "`!voice-limit/lock/unlock/rename/ban` and matching `/voice-*`",
-    "`.v join` and `.v <text>` (prefix only)",
-    "`!riley` (prefix only)"
+    "`!moist-lieutenant` - Get website URL",
+    "`!voice-limit/lock/unlock/rename/ban` and matching `/voice-*`"
   ]);
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -300,9 +293,7 @@ async function cmdAdminCommands(message) {
     "`!admin-commands` `/admin-commands`",
     "`!xp add/set <user> <amount>` `/xp`",
     "`!recalc-levels` `/recalc-levels`",
-    "`!sync-roles` `/sync-roles`",
-    "`!import-mee6` `/import-mee6`",
-    "`!claim-all [force]` `/claim-all`"
+    "`!sync-roles` `/sync-roles`"
   ]);
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -457,7 +448,7 @@ async function cmdRank(message, args) {
       ctx.arc(90, 90, 60, 0, Math.PI * 2);
       ctx.closePath();
       ctx.clip();
-      ctx.drawImage(avatar, 30, 20, 120, 120);
+      ctx.drawImage(avatar, 30, 30, 120, 120);
       ctx.restore();
       
       // Draw avatar border and frame effects
@@ -1402,106 +1393,12 @@ async function cmdClaimAll(message) {
   await message.reply(`✅ Applied XP to **${applied}** members.`).catch(() => {});
 }
 
-async function sendTtsFallbackSilently(message, text) {
-  const channel = message.channel;
-  const speakerName =
-    (message.member?.displayName || message.author?.username || "User")
-      .replace(/[\r\n\t]/g, " ")
-      .trim()
-      .slice(0, 80) || "User";
-  const speakerAvatar =
-    message.member?.displayAvatarURL?.({ size: 256 }) ||
-    message.author?.displayAvatarURL?.({ size: 256 }) ||
-    undefined;
-
-  if (!channel) return false;
-
-  if (typeof channel.fetchWebhooks !== "function" || typeof channel.createWebhook !== "function") {
-    return false;
-  }
-
-  const canManageWebhooks = channel.permissionsFor(message.guild.members.me)?.has(PermissionsBitField.Flags.ManageWebhooks);
-  if (!canManageWebhooks) return false;
-
-  try {
-    const hooks = await channel.fetchWebhooks();
-    let hook = hooks.find((h) => h.owner?.id === message.client.user.id && h.name === "lop-tts-fallback");
-
-    if (!hook) {
-      hook = await channel.createWebhook({
-        name: "lop-tts-fallback"
-      });
-    }
-
-    await hook.send({
-      content: text,
-      tts: true,
-      username: speakerName,
-      avatarURL: speakerAvatar,
-      wait: true
-    });
-
-    return true;
-  } catch (err) {
-    console.error("[tts-fallback] Webhook fallback failed:", err);
-    return false;
-  }
-}
-
 // ─────────────────────────────────────────────────────
 // Main handler
 // ─────────────────────────────────────────────────────
 
 async function handleCommands(message) {
   if (!message || !message.content) return false;
-
-  const raw = message.content.trim();
-  if (raw.toLowerCase().startsWith(".v")) {
-    const deleteCommandMessage = async () => {
-      await message.delete().catch(() => {});
-    };
-
-    const payload = raw.slice(2).trim();
-
-    if (!payload) {
-      await message.reply("Usage: `.v join` or `.v your text here`").catch(() => {});
-      await deleteCommandMessage();
-      return true;
-    }
-
-    if (payload.toLowerCase() === "join") {
-      const joined = await joinMemberVoiceChannel(message);
-      if (!joined.ok) {
-        await message.reply(`❌ ${joined.reason}`).catch(() => {});
-        await deleteCommandMessage();
-        return true;
-      }
-      await message.reply(`✅ Joined **${joined.channel.name}**`).catch(() => {});
-      await deleteCommandMessage();
-      return true;
-    }
-
-    const spoken = await speakTextInVoice(message, payload);
-    if (!spoken.ok) {
-      if (spoken.reason === "VOICE_UDP_UNAVAILABLE") {
-        const sent = await sendTtsFallbackSilently(message, payload);
-        if (!sent) {
-          await message.reply("❌ I need `Manage Webhooks` in this channel for fallback TTS.").catch(() => {});
-          await deleteCommandMessage();
-          return true;
-        }
-        await deleteCommandMessage();
-        return true;
-      }
-
-      await message.reply(`❌ ${spoken.reason}`).catch(() => {});
-      await deleteCommandMessage();
-      return true;
-    }
-
-    await deleteCommandMessage();
-    return true;
-  }
 
   if (!message.guild) return false;
   const activePrefixes = await getActivePrefixes(message);
@@ -1514,9 +1411,9 @@ async function handleCommands(message) {
 async function executeCommand(message, cmd, args, prefix) {
   if (!message.guild) return false;
 
-  if (cmd === "lop-bot" || cmd === "lopbot") {
-    const publicUrl = process.env.LOPBOT_PUBLIC_URL || "https://lop-bot-clean-production.up.railway.app";
-    await message.reply(`View the Lop-Bot leaderboard and customize your rank card here: ${publicUrl}`).catch(() => {});
+  if (cmd === "moist-lieutenant") {
+    const publicUrl = process.env.BOT_PUBLIC_URL || process.env.DISCORD_CALLBACK_URL?.replace('/auth/discord/callback', '') || "http://localhost:8080";
+    await message.reply(`🐸 **Moist Lieutenant Dashboard**\n\nView the leaderboard and customize your rank card: ${publicUrl}`).catch(() => {});
     return true;
   }
 
@@ -1562,31 +1459,6 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "shame") {
-    await cmdShame(message, args);
-    return true;
-  }
-
-  if (cmd === "cookie-give") {
-    await cmdCookieGive(message, args);
-    return true;
-  }
-
-  if (cmd === "steal-cookie") {
-    await cmdStealCookie(message, args);
-    return true;
-  }
-
-  if (cmd === "steal-cookies-from-everyone") {
-    await cmdStealCookiesFromEveryone(message);
-    return true;
-  }
-
-  if (cmd === "riley") {
-    await cmdRiley(message);
-    return true;
-  }
-
   if (cmd === "xp") {
     await cmdXp(message, args);
     return true;
@@ -1599,16 +1471,6 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "sync-roles" || cmd === "syncroles") {
     await cmdSyncRoles(message);
-    return true;
-  }
-
-  if (cmd === "import-mee6") {
-    await cmdImportMee6(message);
-    return true;
-  }
-
-  if (cmd === "claim-all" || cmd === "claimall") {
-    await cmdClaimAll(message);
     return true;
   }
 
@@ -1726,18 +1588,12 @@ function buildSlashCommands() {
     { name: "admin-commands", description: "Admin commands list", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator) },
     { name: "mod-role", description: "Set mod role", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 8, name: "role", description: "Role", required: true }] },
     { name: "prefix", description: "Set command prefix", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "value", description: "New prefix (1-3 chars)", required: true }] },
-    { name: "lop-bot", description: "Get website URL" },
+    { name: "moist-lieutenant", description: "Get dashboard URL" },
     { name: "rank", description: "Show rank", options: [{ type: 6, name: "user", description: "User", required: false }] },
     { name: "leaderboard", description: "Show leaderboard", options: [{ type: 4, name: "page", description: "Page", required: false }] },
-    { name: "shame", description: "Shame a user", options: [{ type: 6, name: "user", description: "User", required: true }] },
-    { name: "cookie-give", description: "Give cookie", options: [{ type: 6, name: "user", description: "User", required: true }] },
-    { name: "steal-cookie", description: "Steal cookie", options: [{ type: 6, name: "user", description: "User", required: true }] },
-    { name: "steal-cookies-from-everyone", description: "Steal cookies from everyone" },
     { name: "xp", description: "Manage XP", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild), options: [{ type: 3, name: "action", description: "add or set", required: true, choices: [{ name: "add", value: "add" }, { name: "set", value: "set" }] }, { type: 6, name: "user", description: "User", required: true }, { type: 4, name: "amount", description: "Amount", required: true }] },
     { name: "recalc-levels", description: "Recalculate levels", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild) },
     { name: "sync-roles", description: "Sync level roles", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild) },
-    { name: "import-mee6", description: "Import MEE6 snapshot", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild) },
-    { name: "claim-all", description: "Claim all snapshot XP", default_member_permissions: slashPerm(PermissionsBitField.Flags.ManageGuild), options: [{ type: 5, name: "force", description: "Force run", required: false }] },
     { name: "voice-limit", description: "Set private voice limit", options: [{ type: 4, name: "limit", description: "0-99", required: true }] },
     { name: "voice-lock", description: "Lock private voice" },
     { name: "voice-unlock", description: "Unlock private voice" },
@@ -1796,7 +1652,6 @@ async function handleSlashCommand(interaction) {
   if (!interaction.isChatInputCommand()) return false;
 
   const name = interaction.commandName;
-  if (name === "riley") return false;
 
   const userOption = interaction.options.getUser("user");
   const roleOption = interaction.options.getRole("role");
@@ -1806,8 +1661,6 @@ async function handleSlashCommand(interaction) {
     args.push(String(optionValue(interaction, "action")));
     if (userOption) args.push(userOption.id);
     args.push(String(optionValue(interaction, "amount")));
-  } else if (name === "claim-all") {
-    if (interaction.options.getBoolean("force")) args.push("force");
   } else if (name === "mute") {
     if (userOption) args.push(userOption.id);
     const duration = optionValue(interaction, "duration");
@@ -1829,7 +1682,7 @@ async function handleSlashCommand(interaction) {
     args.push(String(optionValue(interaction, "user_id")));
     const reason = optionValue(interaction, "reason");
     if (reason) args.push(...String(reason).split(/\s+/));
-  } else if (name === "warnings" || name === "clearwarns" || name === "voice-ban" || name === "shame" || name === "cookie-give" || name === "steal-cookie") {
+  } else if (name === "warnings" || name === "clearwarns" || name === "voice-ban") {
     if (userOption) args.push(userOption.id);
   } else if (name === "nick") {
     if (userOption) args.push(userOption.id);

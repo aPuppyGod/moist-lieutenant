@@ -207,6 +207,7 @@ async function initDb() {
       reaction_cooldown_seconds INTEGER DEFAULT 30,
       voice_xp_per_minute INTEGER DEFAULT 5,
       command_prefix TEXT DEFAULT '!',
+      new_account_warn_days INTEGER DEFAULT 1,
       mod_role_id TEXT DEFAULT NULL,
       log_channel_id TEXT DEFAULT NULL,
 
@@ -295,6 +296,68 @@ async function initDb() {
     )
   `);
 
+  // Per-event logging controls (enabled + optional channel override)
+  await run(`
+    CREATE TABLE IF NOT EXISTS logging_event_configs (
+      guild_id TEXT NOT NULL,
+      event_key TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      channel_id TEXT DEFAULT NULL,
+      PRIMARY KEY (guild_id, event_key)
+    )
+  `);
+
+  // Excluded actors (users/roles) for log suppression
+  await run(`
+    CREATE TABLE IF NOT EXISTS logging_actor_exclusions (
+      guild_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      PRIMARY KEY (guild_id, target_id)
+    )
+  `);
+
+  // Reaction-role bindings (message + emoji -> role)
+  await run(`
+    CREATE TABLE IF NOT EXISTS reaction_role_bindings (
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      emoji_key TEXT NOT NULL,
+      role_id TEXT NOT NULL,
+      remove_on_unreact INTEGER NOT NULL DEFAULT 1,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (guild_id, message_id, emoji_key)
+    )
+  `);
+
+  // Ticket system settings per guild
+  await run(`
+    CREATE TABLE IF NOT EXISTS ticket_settings (
+      guild_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      panel_channel_id TEXT DEFAULT NULL,
+      category_id TEXT DEFAULT NULL,
+      support_role_id TEXT DEFAULT NULL,
+      ticket_prefix TEXT DEFAULT 'ticket',
+      panel_message_id TEXT DEFAULT NULL
+    )
+  `);
+
+  // Ticket instances
+  await run(`
+    CREATE TABLE IF NOT EXISTS tickets (
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      opener_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at BIGINT NOT NULL,
+      closed_at BIGINT DEFAULT NULL,
+      closed_by TEXT DEFAULT NULL,
+      PRIMARY KEY (guild_id, channel_id)
+    )
+  `);
+
   // User rank card customizations
   await run(`
     CREATE TABLE IF NOT EXISTS user_rankcard_customizations (
@@ -324,8 +387,10 @@ async function initDb() {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgmode TEXT`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgimage_data BYTEA`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS command_prefix TEXT DEFAULT '!'`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS new_account_warn_days INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

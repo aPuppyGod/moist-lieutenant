@@ -18,8 +18,12 @@ const { getGuildSettings } = require("./settings");
 const { getLevelRoles } = require("./settings");
 const { getIgnoredChannels } = require("./settings");
 const { getLoggingExclusions } = require("./settings");
+const { getLoggingEventConfigs } = require("./settings");
+const { getLoggingActorExclusions } = require("./settings");
 const { findRecentModAction } = require("./modActionTracker");
 const { startDashboard } = require("./dashboard");
+const { applyReactionRoleOnAdd, applyReactionRoleOnRemove } = require("./reactionRoles");
+const { handleTicketInteraction } = require("./tickets");
 const unidecode = require('unidecode');
 
 process.on("unhandledRejection", (reason) => {
@@ -169,23 +173,62 @@ function formatMessageLogContent(message) {
   return trimText(lines.join("\n"), 3500);
 }
 
+function collectRenderableMediaUrls(message) {
+  if (!message) return [];
+  const urls = [];
+
+  const attachments = message.attachments ? [...message.attachments.values()] : [];
+  for (const attachment of attachments) {
+    const isImage = attachment.contentType?.startsWith("image/")
+      || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.url || "");
+    if (isImage && attachment.url) urls.push(attachment.url);
+  }
+
+  const stickers = message.stickers ? [...message.stickers.values()] : [];
+  for (const sticker of stickers) {
+    const url = stickerUrl(sticker);
+    if (url) urls.push(url);
+  }
+
+  return [...new Set(urls)].slice(0, 4);
+}
+
 function userLabel(userLike) {
   if (!userLike) return "Unknown";
   const user = userLike.user || userLike;
   const tag = user.tag || user.username || "Unknown";
-  return `${tag} (${user.id || "no-id"})`;
+  const userId = user.id || "no-id";
+  if (!userId || userId === "no-id") return tag;
+  return `[${tag}](https://discord.com/users/${userId})`;
 }
 
 function channelLabel(channel) {
   if (!channel) return "Unknown channel";
-  return `#${channel.name || channel.id} (${channel.id})`;
+  const name = channel.name || channel.id || "unknown";
+  const channelId = channel.id;
+  const guildId = channel.guild?.id || channel.guildId;
+  if (!guildId || !channelId) return `#${name}`;
+  return `[#${name}](https://discord.com/channels/${guildId}/${channelId})`;
+}
+
+function channelLinkFromId(guild, channelId) {
+  if (!guild || !channelId) return "unknown channel";
+  const ch = guild.channels.cache.get(channelId);
+  const name = ch?.name || channelId;
+  return `[#${name}](https://discord.com/channels/${guild.id}/${channelId})`;
+}
+
+function roleLabel(guild, roleId) {
+  if (!guild || !roleId) return "Unknown role";
+  const role = guild.roles.cache.get(roleId);
+  return role ? `@${role.name}` : `role:${roleId}`;
 }
 
 async function labelFromUserId(guild, userId) {
   if (!guild || !userId) return null;
   const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
   const user = member?.user || (await guild.client.users.fetch(userId).catch(() => null));
-  return user ? userLabel(user) : `<@${userId}> (${userId})`;
+  return user ? userLabel(user) : `[User ${userId}](https://discord.com/users/${userId})`;
 }
 
 async function resolveActionActorLabel(guild, auditExecutor, trackedActorId) {
@@ -216,8 +259,30 @@ async function getAuditExecutor(guild, type, targetId) {
 async function sendGuildLog(guild, payload) {
   if (!guild) return;
   const settings = await getGuildSettings(guild.id).catch(() => null);
-  const channelId = settings?.log_channel_id;
-  if (!channelId) return;
+  if (!settings?.log_channel_id) return;
+
+  const eventKey = String(payload?.eventKey || "").trim();
+  let channelId = settings.log_channel_id;
+
+  if (eventKey) {
+    const eventConfigs = await getLoggingEventConfigs(guild.id).catch(() => []);
+    const eventConfig = eventConfigs.find((cfg) => cfg.event_key === eventKey);
+    if (eventConfig && Number(eventConfig.enabled) !== 1) return;
+    if (eventConfig?.channel_id) channelId = eventConfig.channel_id;
+  }
+
+  const actorUserId = payload?.actorUserId ? String(payload.actorUserId) : null;
+  if (actorUserId) {
+    const actorExclusions = await getLoggingActorExclusions(guild.id).catch(() => []);
+    if (actorExclusions.length) {
+      const excludedUsers = new Set(actorExclusions.filter((e) => e.target_type === "user").map((e) => e.target_id));
+      const excludedRoles = new Set(actorExclusions.filter((e) => e.target_type === "role").map((e) => e.target_id));
+      if (excludedUsers.has(actorUserId)) return;
+
+      const actorMember = guild.members.cache.get(actorUserId) || await guild.members.fetch(actorUserId).catch(() => null);
+      if (actorMember && actorMember.roles.cache.some((role) => excludedRoles.has(role.id))) return;
+    }
+  }
 
   const sourceIdsRaw = Array.isArray(payload?.sourceChannelIds)
     ? payload.sourceChannelIds
@@ -257,7 +322,35 @@ async function sendGuildLog(guild, payload) {
     })));
   }
 
-  await channel.send({ embeds: [embed] }).catch(() => {});
+  const mediaUrls = Array.isArray(payload.mediaUrls)
+    ? payload.mediaUrls.filter(Boolean).slice(0, 4)
+    : [];
+
+  if (mediaUrls.length) {
+    embed.addFields([
+      {
+        name: "Media",
+        value: mediaUrls.map((u, i) => `[View ${i + 1}](${u})`).join(" • ")
+      }
+    ]);
+  }
+
+  await channel.send({
+    embeds: [embed],
+    allowedMentions: { parse: [] }
+  }).catch(() => {});
+
+  for (const mediaUrl of mediaUrls) {
+    const mediaEmbed = new EmbedBuilder()
+      .setColor(payload.color || LOG_THEME.info)
+      .setImage(mediaUrl)
+      .setTimestamp(new Date());
+
+    await channel.send({
+      embeds: [mediaEmbed],
+      allowedMentions: { parse: [] }
+    }).catch(() => {});
+  }
 }
 
 async function handleLevelUp(guild, userId, oldLevel, newLevel, message = null) {
@@ -428,28 +521,6 @@ client.on(Events.MessageCreate, async (message) => {
   const isIgnored = ignoredChannels.some(c => c.channel_id === message.channel.id && c.channel_type === "text");
   if (isIgnored) return;
 
-  // React to special words
-  const content = message.content.toLowerCase();
-  const normalizedContent = normalizeText(content);
-  if (content.includes('riley')) {
-    await message.react('🍪').catch(() => {});
-  }
-  if (content.includes('blebber')) {
-    await message.react('🐢').catch(() => {});
-  }
-  if (content.includes('goodnight') || content.includes('good night')) {
-    await message.react('<:eepy:1374218096209821757>').catch(() => {});
-  }
-  if (content.includes('good morning') || content.includes('goodmorning')) {
-    await message.react('<:happi:1377138319049232384>').catch(() => {});
-  }
-  if (content.includes('bean')) {
-    await message.react(':Cheesecake:').catch(() => {});
-  }
-  if (normalizedContent.includes('mido') || normalizedContent.includes('midory') || normalizedContent.includes('midoryi') || normalizedContent.includes('seka') || normalizedContent.includes('midoryiseka') || normalizedContent.includes('lop') || normalizedContent.includes('loppy') || normalizedContent.includes('loptube') || normalizedContent.includes('antoine')) {
-    await message.react('🦝').catch(() => {});
-  }
-
   const guildId = message.guild.id;
   const userId = message.author.id;
 
@@ -521,6 +592,17 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (res.newLevel > res.oldLevel) {
     await handleLevelUp(msg.guild, userId, res.oldLevel, res.newLevel);
   }
+
+  await applyReactionRoleOnAdd(reaction, user).catch((err) => {
+    console.error("Reaction role add failed:", err);
+  });
+});
+
+client.on(Events.MessageReactionRemove, async (reaction, user) => {
+  if (user.bot) return;
+  await applyReactionRoleOnRemove(reaction, user).catch((err) => {
+    console.error("Reaction role remove failed:", err);
+  });
 });
 
 // ─────────────────────────────────────────────────────
@@ -587,6 +669,9 @@ client.login(process.env.DISCORD_TOKEN).catch((err) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    const handledTicket = await handleTicketInteraction(interaction);
+    if (handledTicket) return;
+
     await handleSlashCommand(interaction);
   } catch (err) {
     console.error("Interaction handler failed:", err);
@@ -617,11 +702,16 @@ client.on(Events.MessageDelete, async (message) => {
     : message.author
       ? `${userLabel(message.author)} (self-delete)`
       : "Unknown";
+  const actorUserId = deleter?.id || message.author?.id || null;
+  const mediaUrls = collectRenderableMediaUrls(message);
   await sendGuildLog(message.guild, {
+    eventKey: "message_delete",
+    actorUserId,
+    mediaUrls,
     color: LOG_THEME.warn,
     title: "🗑️ Message Deleted",
     sourceChannelId: message.channel?.id,
-    description: `A message was deleted in ${message.channel ? `<#${message.channel.id}>` : "unknown channel"}.`,
+    description: `A message was deleted in ${message.channel ? channelLabel(message.channel) : "unknown channel"}.`,
     fields: [
       { name: "Author", value: userLabel(message.author), inline: true },
       { name: "Deleted By", value: deletedBy, inline: true },
@@ -642,16 +732,19 @@ client.on(Events.MessageBulkDelete, async (messages, channel) => {
     ttlMs: 60_000
   });
   const actorLabel = await resolveActionActorLabel(guild, executor, tracked?.actorId);
+  const actorUserId = tracked?.actorId || executor?.id || null;
   const preview = messages
     .first(5)
     .map((msg) => `${msg.author ? msg.author.username : "Unknown"}: ${trimText(formatMessageLogContent(msg), 180)}`)
     .join("\n");
 
   await sendGuildLog(guild, {
+    eventKey: "message_bulk_delete",
+    actorUserId,
     color: LOG_THEME.warn,
     title: "🧹 Bulk Purge",
     sourceChannelId: channel?.id,
-    description: `${messages.size} messages were purged in ${channel ? `<#${channel.id}>` : "unknown channel"}.`,
+    description: `${messages.size} messages were purged in ${channel ? channelLabel(channel) : "unknown channel"}.`,
     fields: [
       { name: "Purged By", value: actorLabel, inline: true },
       { name: "Message Count", value: String(messages.size), inline: true },
@@ -667,11 +760,18 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
   if ((oldMessage.content || "") === (newMessage.content || "")) return;
   if (newMessage.author?.bot) return;
 
+  const beforeMediaUrls = collectRenderableMediaUrls(oldMessage);
+  const afterMediaUrls = collectRenderableMediaUrls(newMessage);
+  const mediaUrls = [...new Set([...afterMediaUrls, ...beforeMediaUrls])].slice(0, 4);
+
   await sendGuildLog(newMessage.guild, {
+    eventKey: "message_edit",
+    actorUserId: newMessage.author?.id,
+    mediaUrls,
     color: LOG_THEME.info,
     title: "✏️ Message Edited",
     sourceChannelId: newMessage.channel?.id,
-    description: `A message was edited in ${newMessage.channel ? `<#${newMessage.channel.id}>` : "unknown channel"}.`,
+    description: `A message was edited in ${newMessage.channel ? channelLabel(newMessage.channel) : "unknown channel"}.`,
     fields: [
       { name: "Author", value: userLabel(newMessage.author), inline: true },
       { name: "Before", value: formatMessageLogContent(oldMessage) },
@@ -686,41 +786,71 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
 
   if (!oldState.channelId && newState.channelId) {
     await sendGuildLog(guild, {
+      eventKey: "voice_join",
+      actorUserId: newState.member?.id,
       color: LOG_THEME.info,
       title: "🔊 Voice Join",
       sourceChannelId: newState.channel?.id,
-      description: `${newState.member} joined ${channelLabel(newState.channel)}.`
+      description: `${userLabel(newState.member?.user)} joined ${channelLabel(newState.channel)}.`
     });
     return;
   }
 
   if (oldState.channelId && !newState.channelId) {
     await sendGuildLog(guild, {
+      eventKey: "voice_leave",
+      actorUserId: oldState.member?.id,
       color: LOG_THEME.info,
       title: "🔇 Voice Leave",
       sourceChannelId: oldState.channel?.id,
-      description: `${oldState.member} left ${channelLabel(oldState.channel)}.`
+      description: `${userLabel(oldState.member?.user)} left ${channelLabel(oldState.channel)}.`
     });
     return;
   }
 
   if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
     await sendGuildLog(guild, {
+      eventKey: "voice_move",
+      actorUserId: newState.member?.id,
       color: LOG_THEME.info,
       title: "🔁 Voice Move",
       sourceChannelIds: [oldState.channel?.id, newState.channel?.id],
-      description: `${newState.member} moved from ${channelLabel(oldState.channel)} to ${channelLabel(newState.channel)}.`
+      description: `${userLabel(newState.member?.user)} moved from ${channelLabel(oldState.channel)} to ${channelLabel(newState.channel)}.`
     });
   }
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
   await sendGuildLog(member.guild, {
+    eventKey: "member_join",
+    actorUserId: member.id,
     color: LOG_THEME.info,
     title: "📥 Member Joined",
-    description: `${member} joined the server.`,
+    description: `${userLabel(member.user)} joined the server.`,
     fields: [{ name: "User", value: userLabel(member.user), inline: true }]
   });
+
+  const settings = await getGuildSettings(member.guild.id).catch(() => null);
+  const thresholdDays = Number(settings?.new_account_warn_days ?? 1);
+  if (thresholdDays <= 0) return;
+
+  const accountAgeMs = Date.now() - Number(member.user?.createdTimestamp || 0);
+  const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
+  if (accountAgeMs <= thresholdMs) {
+    const accountAgeDays = Math.max(0, Math.floor(accountAgeMs / (24 * 60 * 60 * 1000)));
+    await sendGuildLog(member.guild, {
+      eventKey: "member_join_new_account",
+      actorUserId: member.id,
+      color: LOG_THEME.warn,
+      title: "⚠️ New Account Joined",
+      description: `${userLabel(member.user)} joined with a recently created account.`,
+      fields: [
+        { name: "User", value: userLabel(member.user), inline: true },
+        { name: "Account Age", value: `${accountAgeDays} day(s)`, inline: true },
+        { name: "Threshold", value: `${thresholdDays} day(s)`, inline: true }
+      ]
+    });
+  }
 });
 
 client.on(Events.GuildMemberRemove, async (member) => {
@@ -733,11 +863,14 @@ client.on(Events.GuildMemberRemove, async (member) => {
     ttlMs: 60_000
   });
   const actorLabel = await resolveActionActorLabel(member.guild, executor, tracked?.actorId);
+  const actorUserId = tracked?.actorId || executor?.id || member.id || null;
 
   await sendGuildLog(member.guild, {
+    eventKey: "member_leave",
+    actorUserId,
     color: LOG_THEME.warn,
     title: "📤 Member Left",
-    description: `${member.user?.tag || member.id} left or was removed.`,
+    description: `${userLabel(member.user)} left or was removed.`,
     fields: [
       { name: "User", value: userLabel(member.user), inline: true },
       { name: "Action By", value: actorLabel, inline: true }
@@ -755,6 +888,8 @@ client.on(Events.GuildBanAdd, async (ban) => {
   });
   const actorLabel = await resolveActionActorLabel(ban.guild, executor, tracked?.actorId);
   await sendGuildLog(ban.guild, {
+    eventKey: "ban_add",
+    actorUserId: tracked?.actorId || executor?.id || null,
     color: LOG_THEME.mod,
     title: "⛔ Member Banned",
     description: `${userLabel(ban.user)} was banned.`,
@@ -772,6 +907,8 @@ client.on(Events.GuildBanRemove, async (ban) => {
   });
   const actorLabel = await resolveActionActorLabel(ban.guild, executor, tracked?.actorId);
   await sendGuildLog(ban.guild, {
+    eventKey: "ban_remove",
+    actorUserId: tracked?.actorId || executor?.id || null,
     color: LOG_THEME.mod,
     title: "✅ Member Unbanned",
     description: `${userLabel(ban.user)} was unbanned.`,
@@ -797,12 +934,14 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     });
     const actorLabel = await resolveActionActorLabel(newMember.guild, executor, tracked?.actorId);
     await sendGuildLog(newMember.guild, {
+      eventKey: "member_role_update",
+      actorUserId: tracked?.actorId || executor?.id || null,
       color: LOG_THEME.mod,
       title: "🧩 Roles Updated",
-      description: `${newMember} role membership changed.`,
+      description: `${userLabel(newMember.user)} role membership changed.`,
       fields: [
-        { name: "Added", value: added.length ? added.map((id) => `<@&${id}>`).join(", ") : "None" },
-        { name: "Removed", value: removed.length ? removed.map((id) => `<@&${id}>`).join(", ") : "None" },
+        { name: "Added", value: added.length ? added.map((id) => roleLabel(newMember.guild, id)).join(", ") : "None" },
+        { name: "Removed", value: removed.length ? removed.map((id) => roleLabel(newMember.guild, id)).join(", ") : "None" },
         { name: "Updated By", value: actorLabel, inline: true }
       ]
     });
@@ -818,9 +957,11 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     });
     const actorLabel = await resolveActionActorLabel(newMember.guild, nickExecutor, tracked?.actorId);
     await sendGuildLog(newMember.guild, {
+      eventKey: "member_nick_update",
+      actorUserId: tracked?.actorId || nickExecutor?.id || newMember.id,
       color: LOG_THEME.info,
       title: "📝 Nickname Changed",
-      description: `${newMember} nickname updated.`,
+      description: `${userLabel(newMember.user)} nickname updated.`,
       fields: [
         { name: "Before", value: oldMember.nickname || "(none)", inline: true },
         { name: "After", value: newMember.nickname || "(none)", inline: true },
@@ -840,9 +981,11 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
     });
     const actorLabel = tracked?.actorId ? await labelFromUserId(newMember.guild, tracked.actorId) : "Unknown";
     await sendGuildLog(newMember.guild, {
+      eventKey: "member_timeout",
+      actorUserId: tracked?.actorId || null,
       color: LOG_THEME.mod,
       title: newTimeout ? "🔇 Member Muted" : "🔊 Member Unmuted",
-      description: `${newMember} ${newTimeout ? "was muted (timed out)" : "was unmuted"}.`,
+      description: `${userLabel(newMember.user)} ${newTimeout ? "was muted (timed out)" : "was unmuted"}.`,
       fields: [
         ...(newTimeout ? [{ name: "Until", value: `<t:${Math.floor(newTimeout / 1000)}:F>` }] : []),
         { name: "Moderator", value: actorLabel || "Unknown", inline: true }
@@ -854,6 +997,7 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 client.on(Events.ChannelCreate, async (channel) => {
   if (!channel.guild) return;
   await sendGuildLog(channel.guild, {
+    eventKey: "channel_create",
     color: LOG_THEME.info,
     title: "➕ Channel Created",
     sourceChannelId: channel.id,
@@ -864,6 +1008,7 @@ client.on(Events.ChannelCreate, async (channel) => {
 client.on(Events.ChannelDelete, async (channel) => {
   if (!channel.guild) return;
   await sendGuildLog(channel.guild, {
+    eventKey: "channel_delete",
     color: LOG_THEME.warn,
     title: "➖ Channel Deleted",
     sourceChannelId: channel.id,
@@ -893,6 +1038,8 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
   if (permsChanged) changeLines.push("Permissions/overwrites changed");
 
   await sendGuildLog(newChannel.guild, {
+    eventKey: "channel_update",
+    actorUserId: tracked?.actorId || null,
     color: LOG_THEME.info,
     title: "🛠️ Channel Updated",
     sourceChannelId: newChannel.id,
@@ -906,26 +1053,29 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
 
 client.on(Events.RoleCreate, async (role) => {
   await sendGuildLog(role.guild, {
+    eventKey: "role_create",
     color: LOG_THEME.mod,
     title: "🏷️ Role Created",
-    description: `Role <@&${role.id}> was created.`
+    description: `Role @${role.name} was created.`
   });
 });
 
 client.on(Events.RoleDelete, async (role) => {
   await sendGuildLog(role.guild, {
+    eventKey: "role_delete",
     color: LOG_THEME.warn,
     title: "🗑️ Role Deleted",
-    description: `Role ${role.name} (${role.id}) was deleted.`
+    description: `Role @${role.name} was deleted.`
   });
 });
 
 client.on(Events.RoleUpdate, async (oldRole, newRole) => {
   if (oldRole.name === newRole.name && oldRole.hexColor === newRole.hexColor) return;
   await sendGuildLog(newRole.guild, {
+    eventKey: "role_update",
     color: LOG_THEME.mod,
     title: "🎨 Role Updated",
-    description: `Role <@&${newRole.id}> was updated.`,
+    description: `Role @${newRole.name} was updated.`,
     fields: [
       { name: "Name", value: `${oldRole.name} → ${newRole.name}`, inline: true },
       { name: "Color", value: `${oldRole.hexColor} → ${newRole.hexColor}`, inline: true }
@@ -950,25 +1100,27 @@ client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
     changes.push(`Verification level: ${oldGuild.verificationLevel} → ${newGuild.verificationLevel}`);
   }
   if (oldGuild.afkChannelId !== newGuild.afkChannelId) {
-    changes.push(`AFK channel: ${oldGuild.afkChannelId || "none"} → ${newGuild.afkChannelId || "none"}`);
+    changes.push(`AFK channel: ${oldGuild.afkChannelId ? channelLinkFromId(newGuild, oldGuild.afkChannelId) : "none"} → ${newGuild.afkChannelId ? channelLinkFromId(newGuild, newGuild.afkChannelId) : "none"}`);
   }
   if (oldGuild.afkTimeout !== newGuild.afkTimeout) {
     changes.push(`AFK timeout: ${oldGuild.afkTimeout}s → ${newGuild.afkTimeout}s`);
   }
   if (oldGuild.systemChannelId !== newGuild.systemChannelId) {
-    changes.push(`System channel: ${oldGuild.systemChannelId || "none"} → ${newGuild.systemChannelId || "none"}`);
+    changes.push(`System channel: ${oldGuild.systemChannelId ? channelLinkFromId(newGuild, oldGuild.systemChannelId) : "none"} → ${newGuild.systemChannelId ? channelLinkFromId(newGuild, newGuild.systemChannelId) : "none"}`);
   }
   if (oldGuild.rulesChannelId !== newGuild.rulesChannelId) {
-    changes.push(`Rules channel: ${oldGuild.rulesChannelId || "none"} → ${newGuild.rulesChannelId || "none"}`);
+    changes.push(`Rules channel: ${oldGuild.rulesChannelId ? channelLinkFromId(newGuild, oldGuild.rulesChannelId) : "none"} → ${newGuild.rulesChannelId ? channelLinkFromId(newGuild, newGuild.rulesChannelId) : "none"}`);
   }
   if (oldGuild.publicUpdatesChannelId !== newGuild.publicUpdatesChannelId) {
-    changes.push(`Updates channel: ${oldGuild.publicUpdatesChannelId || "none"} → ${newGuild.publicUpdatesChannelId || "none"}`);
+    changes.push(`Updates channel: ${oldGuild.publicUpdatesChannelId ? channelLinkFromId(newGuild, oldGuild.publicUpdatesChannelId) : "none"} → ${newGuild.publicUpdatesChannelId ? channelLinkFromId(newGuild, newGuild.publicUpdatesChannelId) : "none"}`);
   }
 
   if (!changes.length) return;
 
   const executor = await getAuditExecutor(newGuild, AuditLogEvent.GuildUpdate, newGuild.id);
   await sendGuildLog(newGuild, {
+    eventKey: "guild_update",
+    actorUserId: executor?.id || null,
     color: LOG_THEME.mod,
     title: "🏰 Server Updated",
     description: `${newGuild.name} server settings changed.`,

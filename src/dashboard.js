@@ -3263,7 +3263,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </select>
         </label>
         <br/><br/>
-        <label>Command Prefix
+        <label>Moderation Command Prefix <span style="font-size:0.85em;opacity:0.8;">(Other commands use !)</span>
           <input name="command_prefix" value="${escapeHtml(settings.command_prefix || "!")}" style="max-width:80px;" />
         </label>
         <br/><br/>

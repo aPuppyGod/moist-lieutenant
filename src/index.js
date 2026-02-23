@@ -600,6 +600,13 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
   if (user.bot) return;
+  
+  const msg = reaction.message.partial
+    ? await reaction.message.fetch().catch(() => null)
+    : reaction.message;
+  
+  if (!msg) return;
+  
   await applyReactionRoleOnRemove(reaction, user).catch((err) => {
     console.error("Reaction role remove failed:", err);
   });

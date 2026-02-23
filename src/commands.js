@@ -93,6 +93,22 @@ async function assertVoiceCmdAllowed(message) {
 }
 
 // ─────────────────────────────────────────────────────
+// Role hierarchy check for moderation
+// ─────────────────────────────────────────────────────
+
+function canModerate(executor, target) {
+  if (!executor || !target) return false;
+  if (executor.id === target.id) return false;
+  if (target.guild.ownerId === target.id) return false; // Can't moderate server owner
+  if (executor.guild.ownerId === executor.id) return true; // Server owner can moderate anyone
+  
+  const executorHighest = executor.roles.highest;
+  const targetHighest = target.roles.highest;
+  
+  return executorHighest.position > targetHighest.position;
+}
+
+// ─────────────────────────────────────────────────────
 // Parsing helpers
 // ─────────────────────────────────────────────────────
 
@@ -111,6 +127,13 @@ function parseCommand(content, prefixes) {
 }
 
 async function getActivePrefixes(message) {
+  const prefix = DEFAULT_PREFIX;
+  const list = [prefix];
+  if (prefix !== LEGACY_PREFIX) list.push(LEGACY_PREFIX);
+  return list;
+}
+
+async function getModPrefixes(message) {
   const configured = (await getGuildSettings(message.guild.id).catch(() => null))?.command_prefix || DEFAULT_PREFIX;
   const prefix = String(configured || DEFAULT_PREFIX).trim() || DEFAULT_PREFIX;
   const list = [prefix];
@@ -819,6 +842,12 @@ async function cmdBan(message, args) {
   }
 
   const target = pick.member;
+  
+  if (!canModerate(message.member, target)) {
+    await message.reply("❌ You cannot ban someone with a higher or equal role.").catch(() => {});
+    return;
+  }
+  
   if (!target.bannable) {
     await message.reply("I can't ban that user.").catch(() => {});
     return;
@@ -853,6 +882,12 @@ async function cmdKick(message, args) {
   }
 
   const target = pick.member;
+  
+  if (!canModerate(message.member, target)) {
+    await message.reply("❌ You cannot kick someone with a higher or equal role.").catch(() => {});
+    return;
+  }
+  
   if (!target.kickable) {
     await message.reply("I can't kick that user.").catch(() => {});
     return;
@@ -874,6 +909,12 @@ async function cmdMute(message, args) {
   }
 
   const target = pick.member;
+  
+  if (!canModerate(message.member, target)) {
+    await message.reply("❌ You cannot mute someone with a higher or equal role.").catch(() => {});
+    return;
+  }
+  
   const durationMs = parseDurationMs(args[1]) || 10 * 60_000;
   const reason = (parseDurationMs(args[1]) ? args.slice(2) : args.slice(1)).join(" ").trim() || "No reason provided";
   if (!target.moderatable) {
@@ -943,6 +984,11 @@ async function cmdWarn(message, args) {
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?warn <user> [reason]`").catch(() => {});
+    return;
+  }
+
+  if (!canModerate(message.member, pick.member)) {
+    await message.reply("❌ You cannot warn someone with a higher or equal role.").catch(() => {});
     return;
   }
 
@@ -1083,6 +1129,12 @@ async function cmdSoftban(message, args) {
   }
 
   const target = pick.member;
+  
+  if (!canModerate(message.member, target)) {
+    await message.reply("❌ You cannot softban someone with a higher or equal role.").catch(() => {});
+    return;
+  }
+  
   if (!target.bannable) {
     await message.reply("I can't softban that user.").catch(() => {});
     return;
@@ -1231,6 +1283,18 @@ async function handleCommands(message) {
   if (!message || !message.content) return false;
 
   if (!message.guild) return false;
+  
+  // List of moderation commands that use the configurable prefix
+  const modCommands = ["ban", "unban", "kick", "mute", "unmute", "purge", "warn", "warnings", "clearwarns", "lock", "unlock", "slowmode", "nick", "role", "softban"];
+  
+  // Try moderation prefix first for mod commands
+  const modPrefixes = await getModPrefixes(message);
+  const modParsed = parseCommand(message.content, modPrefixes);
+  if (modParsed && modCommands.includes(modParsed.cmd)) {
+    return await executeCommand(message, modParsed.cmd, modParsed.args, modParsed.prefix);
+  }
+  
+  // Try regular prefix for all other commands
   const activePrefixes = await getActivePrefixes(message);
   const parsed = parseCommand(message.content, activePrefixes);
   if (!parsed) return false;

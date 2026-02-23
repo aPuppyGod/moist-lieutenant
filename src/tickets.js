@@ -51,7 +51,7 @@ async function sendTicketPanel(guild) {
   }
 
   const embed = new EmbedBuilder()
-    .setColor(0x71faf9)
+    .setColor(0x7bc96f)
     .setTitle("Support Tickets")
     .setDescription("Need help? Click **Open Ticket** below. A private channel will be created for you and staff.")
     .setTimestamp(new Date());
@@ -152,7 +152,7 @@ async function createTicketChannel(guild, openerId) {
   await createTicket(guild.id, channel.id, opener.id);
 
   const firstEmbed = new EmbedBuilder()
-    .setColor(0xffddfc)
+    .setColor(0xa8d5a8)
     .setTitle("Ticket Opened")
     .setDescription(`Hello ${opener}, support will be with you shortly.`)
     .addFields(
@@ -192,7 +192,7 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
   await channel.send({
     embeds: [
       new EmbedBuilder()
-        .setColor(0xedd7ae)
+        .setColor(0x8b7355)
         .setTitle("Ticket Closed")
         .setDescription("This ticket has been closed. Staff can still review the channel.")
         .setTimestamp(new Date())

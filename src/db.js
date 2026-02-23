@@ -373,7 +373,7 @@ async function initDb() {
       border TEXT,
       avatarframe TEXT,
       avatarborder INTEGER DEFAULT 3,
-      avatarbordercolor TEXT DEFAULT '#71faf9',
+      avatarbordercolor TEXT DEFAULT '#7bc96f',
       borderglow TEXT DEFAULT 'none',
       PRIMARY KEY (guild_id, user_id)
     )
@@ -382,7 +382,7 @@ async function initDb() {
   // Migrations: Add missing columns to existing tables
   try {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarborder INTEGER DEFAULT 3`);
-    await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarbordercolor TEXT DEFAULT '#71faf9'`);
+    await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarbordercolor TEXT DEFAULT '#7bc96f'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS borderglow TEXT DEFAULT 'none'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgmode TEXT`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS bgimage_data BYTEA`);

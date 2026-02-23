@@ -1,0 +1,321 @@
+<!-- New Modular Guild Admin Page Template -->
+<div class="page-header">
+  <h2>🐸 ${escapeHtml(guild.name)} Dashboard</h2>
+  <div class="guild-info">
+    Managing ${guild.memberCount} members • ${trackedXpUsers} tracked in leveling system
+  </div>
+  <div class="quick-actions">
+    <a href="/" class="btn">← Back to Home</a>
+    <a href="/logout" class="btn">Logout</a>
+  </div>
+</div>
+
+<div class="modules-grid">
+  <!-- XP & Leveling Module -->
+  <div class="module-card">
+    <div class="module-header">
+      <h3 class="module-title">📊 XP & Leveling</h3>
+      <div class="module-badges">
+        <span class="module-badge enabled">Active</span>
+      </div>
+    </div>
+    <p class="module-description">
+      Manage experience points, level roles, and track user progression
+    </p>
+    <div class="module-stats">
+      <div class="module-stat">
+        <div class="module-stat-label">Tracked Users</div>
+        <div class="module-stat-value">${trackedXpUsers}</div>
+      </div>
+      <div class="module-stat">
+        <div class="module-stat-label">Level Roles</div>
+        <div class="module-stat-value">${levelRoles.length}</div>
+      </div>
+    </div>
+    <div class="module-actions">
+      <button class="settings-btn" onclick="toggleModule('xp-settings')">⚙️ Configure</button>
+    </div>
+    <div id="xp-settings" class="module-content" style="display:none; margin-top:16px;">
+      <h4 style="margin-top:0;">XP Settings</h4>
+      <form method="post" action="/guild/${guildId}/settings">
+        <label>Message XP Min <input name="message_xp_min" value="${escapeHtml(settings.message_xp_min)}" /></label><br/>
+        <label>Message XP Max <input name="message_xp_max" value="${escapeHtml(settings.message_xp_max)}" /></label><br/>
+        <label>Message Cooldown (seconds) <input name="message_cooldown_seconds" value="${escapeHtml(settings.message_cooldown_seconds)}" /></label><br/>
+        <label>Reaction XP <input name="reaction_xp" value="${escapeHtml(settings.reaction_xp)}" /></label><br/>
+        <label>Reaction Cooldown (seconds) <input name="reaction_cooldown_seconds" value="${escapeHtml(settings.reaction_cooldown_seconds)}" /></label><br/>
+        <label>Voice XP Per Minute <input name="voice_xp_per_minute" value="${escapeHtml(settings.voice_xp_per_minute)}" /></label><br/><br/>
+        <button type="submit">💾 Save XP Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Moderation Module -->
+  <div class="module-card">
+    <div class="module-header">
+      <h3 class="module-title">🛡️ Moderation</h3>
+      <div class="module-badges">
+        <span class="module-badge ${settings.mod_role_id ? 'enabled' : 'disabled'}">${settings.mod_role_id ? 'Configured' : 'Not Set'}</span>
+      </div>
+    </div>
+    <p class="module-description">
+      Configure moderation roles, command prefix, and warning system
+    </p>
+    <div class="module-stats">
+      <div class="module-stat">
+        <div class="module-stat-label">Warnings</div>
+        <div class="module-stat-value">${warningRows.length}</div>
+      </div>
+      <div class="module-stat">
+        <div class="module-stat-label">Prefix</div>
+        <div class="module-stat-value">${escapeHtml(settings.command_prefix || '!')}</div>
+      </div>
+    </div>
+    <div class="module-actions">
+      <button class="settings-btn" onclick="toggleModule('mod-settings')">⚙️ Configure</button>
+    </div>
+    <div id="mod-settings" class="module-content" style="display:none; margin-top:16px;">
+      <form method="post" action="/guild/${guildId}/mod-settings">
+        <label>Mod Role
+          <select name="mod_role_id">
+            <option value="" ${!settings.mod_role_id ? "selected" : ""}>None</option>
+            ${roleOptions.map((r) => `
+              <option value="${r.id}" ${settings.mod_role_id === r.id ? "selected" : ""}>@${escapeHtml(r.name)}</option>
+            `).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <label>Command Prefix
+          <input name="command_prefix" value="${escapeHtml(settings.command_prefix || "!")}" style="max-width:80px;" />
+        </label>
+        <br/><br/>
+        <label>Log Channel
+          <select name="log_channel_id">
+            <option value="" ${!settings.log_channel_id ? "selected" : ""}>None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${settings.log_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <button type="submit">💾 Save Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Logging Module -->
+  <div class="module-card">
+    <div class="module-header">
+      <h3 class="module-title">📋 Event Logging</h3>
+      <div class="module-badges">
+        <span class="module-badge ${settings.log_channel_id ? 'enabled' : 'disabled'}">${settings.log_channel_id ? 'Active' : 'Disabled'}</span>
+      </div>
+    </div>
+    <p class="module-description">
+      Track server events, configure logging channels, and manage exclusions
+    </p>
+    <div class="module-stats">
+      <div class="module-stat">
+        <div class="module-stat-label">Exclusions</div>
+        <div class="module-stat-value">${loggingExclusions.length}</div>
+      </div>
+      <div class="module-stat">
+        <div class="module-stat-label">Events</div>
+        <div class="module-stat-value">${LOG_EVENT_DEFS.length}</div>
+      </div>
+    </div>
+    <div class="module-actions">
+      <button class="settings-btn" onclick="toggleModule('logging-settings')">⚙️ Configure</button>
+    </div>
+    <div id="logging-settings" class="module-content" style="display:none; margin-top:16px;">
+      <h4 style="margin-top:0;">Event Controls</h4>
+      <form method="post" action="/guild/${guildId}/logging-events">
+        <table style="width:100%;">
+          <tr><th>Event</th><th>Enabled</th></tr>
+          ${LOG_EVENT_DEFS.map((def) => {
+            const cfg = eventConfigMap.get(def.key);
+            const enabled = cfg ? Number(cfg.enabled) === 1 : true;
+            return `
+              <tr>
+                <td>${escapeHtml(def.label)}</td>
+                <td class="event-toggle-cell"><input class="event-toggle" type="checkbox" name="enabled_${def.key}" ${enabled ? "checked" : ""} /></td>
+              </tr>
+            `;
+          }).join("")}
+        </table>
+        <button type="submit">💾 Save Event Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tickets Module -->
+  <div class="module-card">
+    <div class="module-header">
+      <h3 class="module-title">🎫 Ticket System</h3>
+      <div class="module-badges">
+        <span class="module-badge ${ticketSettings.enabled ? 'enabled' : 'disabled'}">${ticketSettings.enabled ? 'Enabled' : 'Disabled'}</span>
+      </div>
+    </div>
+    <p class="module-description">
+      Manage support tickets with configurable panels and categories
+    </p>
+    <div class="module-stats">
+      <div class="module-stat">
+        <div class="module-stat-label">Open Tickets</div>
+        <div class="module-stat-value">${openTickets.length}</div>
+      </div>
+      <div class="module-stat">
+        <div class="module-stat-label">Status</div>
+        <div class="module-stat-value">${ticketSettings.enabled ? '✓' : '✗'}</div>
+      </div>
+    </div>
+    <div class="module-actions">
+      <button class="settings-btn" onclick="toggleModule('ticket-settings')">⚙️ Configure</button>
+    </div>
+    <div id="ticket-settings" class="module-content" style="display:none; margin-top:16px;">
+      <form class="admin-grid-form" method="post" action="/guild/${guildId}/tickets/settings">
+        <label style="min-width:120px;flex:0 0 120px;">
+          <span>Enabled</span>
+          <input type="checkbox" name="enabled" ${ticketSettings.enabled ? "checked" : ""} />
+        </label>
+        <label>Panel Channel
+          <select name="panel_channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${ticketSettings.panel_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Category
+          <select name="category_id">
+            <option value="">None</option>
+            ${categories.map((c) => `<option value="${c.id}" ${ticketSettings.category_id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Support Role
+          <select name="support_role_id">
+            <option value="">None</option>
+            ${roleOptions.map((r) => `<option value="${r.id}" ${ticketSettings.support_role_id === r.id ? "selected" : ""}>@${escapeHtml(r.name)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="submit">💾 Save Ticket Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Reaction Roles Module -->
+  <div class="module-card">
+    <div class="module-header">
+      <h3 class="module-title">🎭 Reaction Roles</h3>
+      <div class="module-badges">
+        <span class="module-badge ${reactionRoleBindings.length > 0 ? 'enabled' : 'disabled'}">${reactionRoleBindings.length} Active</span>
+      </div>
+    </div>
+    <p class="module-description">
+      Assign roles automatically when users react to messages
+    </p>
+    <div class="module-stats">
+      <div class="module-stat">
+        <div class="module-stat-label">Configured</div>
+        <div class="module-stat-value">${reactionRoleBindings.length}</div>
+      </div>
+      <div class="module-stat">
+        <div class="module-stat-label">Status</div>
+        <div class="module-stat-value">${reactionRoleBindings.length > 0 ? '✓' : '−'}</div>
+      </div>
+    </div>
+    <div class="module-actions">
+      <button class="settings-btn" onclick="toggleModule('reaction-settings')">⚙️ Configure</button>
+    </div>
+    <div id="reaction-settings" class="module-content" style="display:none; margin-top:16px;">
+      <h4 style="margin-top:0;">Add Reaction Role</h4>
+      <form class="admin-grid-form" method="post" action="/guild/${guildId}/reaction-roles/add">
+        <label>Channel
+          <select name="channel_id">
+            <option value="">Select channel</option>
+            ${textChannels.map((c) => `<option value="${c.id}">#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Message ID
+          <input name="message_id" placeholder="Message ID" />
+        </label>
+        <label>Emoji
+          <input name="emoji_key" placeholder="😀 or <:name:id>" />
+        </label>
+        <label>Role
+          <select name="role_id">
+            <option value="">Select role</option>
+            ${roleOptions.map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="submit">➕ Add</button>
+      </form>
+      <ul style="margin-top:16px;">
+        ${reactionRoleBindings.map((row) => {
+          const channelName = guild.channels.cache.get(row.channel_id)?.name || row.channel_id;
+          const roleName = guild.roles.cache.get(row.role_id)?.name || row.role_id;
+          return `
+            <li style="margin:8px 0;">
+              #${escapeHtml(channelName)} • ${escapeHtml(row.emoji_key)} → @${escapeHtml(roleName)}
+              <form style="display:inline" method="post" action="/guild/${guildId}/reaction-roles/delete">
+                <input type="hidden" name="message_id" value="${escapeHtml(row.message_id)}" />
+                <input type="hidden" name="emoji_key" value="${escapeHtml(row.emoji_key)}" />
+                <button type="submit" style="padding:4px 8px;margin:0;font-size:0.8em;">🗑️ Delete</button>
+              </form>
+            </li>
+          `;
+        }).join("") || "<li>No reaction roles configured.</li>"}
+      </ul>
+    </div>
+  </div>
+
+  <!-- Private Voice Module -->
+  <div class="module-card">
+    <div class="module-header">
+      <h3 class="module-title">🎤 Private Voice Rooms</h3>
+      <div class="module-badges">
+        <span class="module-badge ${privateRooms.length > 0 ? 'enabled' : 'disabled'}">${privateRooms.length} Active</span>
+      </div>
+    </div>
+    <p class="module-description">
+      View and manage private temporary voice channels created by users
+    </p>
+    <div class="module-stats">
+      <div class="module-stat">
+        <div class="module-stat-label">Active Rooms</div>
+        <div class="module-stat-value">${privateRooms.length}</div>
+      </div>
+    </div>
+    <div class="module-actions">
+      <button class="settings-btn" onclick="toggleModule('voice-settings')">📋 View Rooms</button>
+    </div>
+    <div id="voice-settings" class="module-content" style="display:none; margin-top:16px;">
+      <table style="width:100%;font-size:0.9em;">
+        <tr><th>Owner</th><th>Voice Channel</th><th>Actions</th></tr>
+        ${privateRooms.slice(0, 10).map((r) => {
+          const owner = guild.members.cache.get(r.owner_id);
+          const ownerName = owner ? `${owner.displayName}` : r.owner_id;
+          const voiceName = guild.channels.cache.get(r.voice_channel_id)?.name || r.voice_channel_id;
+          return `
+            <tr>
+              <td>${escapeHtml(ownerName)}</td>
+              <td>${escapeHtml(voiceName)}</td>
+              <td>
+                <form method="post" action="/guild/${guildId}/private-rooms/delete" style="display:inline;">
+                  <input type="hidden" name="voice_channel_id" value="${escapeHtml(r.voice_channel_id)}" />
+                  <button type="submit" style="padding:4px 8px;margin:0;font-size:0.8em;">🗑️ Remove</button>
+                </form>
+              </td>
+            </tr>
+          `;
+        }).join("") || `<tr><td colspan="3">No active rooms</td></tr>`}
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleModule(id) {
+  const el = document.getElementById(id);
+  if (el.style.display === 'none') {
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+}
+</script>

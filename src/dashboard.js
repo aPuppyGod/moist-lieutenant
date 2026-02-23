@@ -602,6 +602,267 @@ function htmlTemplate(content, opts = {}) {
         width: 50px;
         padding-left: 2px !important;
       }
+      
+      .modules-grid {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* Module Card System */
+    .modules-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 20px;
+      margin: 24px 0;
+    }
+
+    .module-card {
+      background: rgba(255, 255, 255, 0.95);
+      border: 2px solid rgba(113, 250, 249, 0.4);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 16px rgba(113, 250, 249, 0.15);
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: visible;
+    }
+
+    body[data-theme="dark"] .module-card {
+      background: rgba(13, 38, 38, 0.85);
+      border-color: rgba(255, 221, 252, 0.4);
+      box-shadow: 0 4px 16px rgba(255, 221, 252, 0.1);
+    }
+
+    .module-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(113, 250, 249, 0.25);
+      border-color: rgba(113, 250, 249, 0.6);
+    }
+
+    body[data-theme="dark"] .module-card:hover {
+      box-shadow: 0 8px 24px rgba(255, 221, 252, 0.2);
+      border-color: rgba(255, 221, 252, 0.6);
+    }
+
+    .module-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+      gap: 12px;
+    }
+
+    .module-title {
+      font-size: 1.3em;
+      font-weight: 700;
+      color: #0a1e1e;
+      margin: 0;
+      flex: 1;
+    }
+
+    body[data-theme="dark"] .module-title {
+      color: #f0f0f0;
+    }
+
+    .module-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .module-badge {
+      font-size: 0.7em;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    .module-badge.enabled {
+      background: linear-gradient(135deg, #7bc96f 0%, #a8d5a8 100%);
+      color: #0a1e1e;
+      border: 1px solid #7bc96f;
+    }
+
+    .module-badge.disabled {
+      background: rgba(139, 115, 85, 0.2);
+      color: #8b7355;
+      border: 1px solid #8b7355;
+    }
+
+    body[data-theme="dark"] .module-badge.enabled {
+      background: linear-gradient(135deg, #7bc96f 0%, #5a9b4a 100%);
+      color: #f0f0f0;
+    }
+
+    body[data-theme="dark"] .module-badge.disabled {
+      background: rgba(139, 115, 85, 0.3);
+      color: #b8a389;
+    }
+
+    .module-description {
+      color: #2a4a4a;
+      margin: 12px 0 16px 0;
+      font-size: 0.95em;
+      line-height: 1.5;
+    }
+
+    body[data-theme="dark"] .module-description {
+      color: #b8d5d5;
+    }
+
+    .module-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .module-toggle-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(113, 250, 249, 0.2);
+    }
+
+    body[data-theme="dark"] .module-toggle-container {
+      border-top-color: rgba(255, 221, 252, 0.2);
+    }
+
+    .module-toggle-label {
+      font-weight: 600;
+      font-size: 0.9em;
+      color: #0a1e1e;
+    }
+
+    body[data-theme="dark"] .module-toggle-label {
+      color: #f0f0f0;
+    }
+
+    .module-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .module-stat {
+      background: rgba(113, 250, 249, 0.1);
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(113, 250, 249, 0.3);
+    }
+
+    body[data-theme="dark"] .module-stat {
+      background: rgba(255, 221, 252, 0.08);
+      border-color: rgba(255, 221, 252, 0.3);
+    }
+
+    .module-stat-label {
+      font-size: 0.8em;
+      color: #2a4a4a;
+      margin-bottom: 4px;
+    }
+
+    body[data-theme="dark"] .module-stat-label {
+      color: #b8d5d5;
+    }
+
+    .module-stat-value {
+      font-size: 1.2em;
+      font-weight: 700;
+      color: #0a1e1e;
+    }
+
+    body[data-theme="dark"] .module-stat-value {
+      color: #f0f0f0;
+    }
+
+    .settings-btn {
+      background: linear-gradient(135deg, #71faf9 0%, #5fe8f7 100%);
+      color: #0a1e1e;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: 'Montserrat', Arial, sans-serif;
+      font-weight: 600;
+      font-size: 0.9em;
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(113, 250, 249, 0.3);
+      text-decoration: none;
+      display: inline-block;
+    }
+
+    .settings-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(113, 250, 249, 0.4);
+    }
+
+    body[data-theme="dark"] .settings-btn {
+      background: linear-gradient(135deg, #ffddfc 0%, #edd7ae 100%);
+      box-shadow: 0 2px 8px rgba(255, 221, 252, 0.3);
+    }
+
+    body[data-theme="dark"] .settings-btn:hover {
+      box-shadow: 0 4px 12px rgba(255, 221, 252, 0.4);
+    }
+
+    .module-collapsed .module-content {
+      display: none;
+    }
+
+    .module-expand-btn {
+      background: none;
+      border: none;
+      color: #71faf9;
+      cursor: pointer;
+      font-size: 1.2em;
+      padding: 0;
+      margin: 0;
+      transition: transform 0.2s;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    body[data-theme="dark"] .module-expand-btn {
+      color: #ffddfc;
+    }
+
+    .module-collapsed .module-expand-btn {
+      transform: rotate(-90deg);
+    }
+
+    .page-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .page-header h2 {
+      margin: 0 0 8px 0;
+    }
+
+    .page-header .guild-info {
+      color: #2a4a4a;
+      font-size: 0.95em;
+    }
+
+    body[data-theme="dark"] .page-header .guild-info {
+      color: #b8d5d5;
+    }
+
+    .quick-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 16px;
     }
   </style>
   <script>

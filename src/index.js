@@ -101,9 +101,9 @@ function formatLevelUpMessage(template, { user, level, xp }) {
 }
 
 const LOG_THEME = {
-  info: 0x71faf9,
-  warn: 0xedd7ae,
-  mod: 0xffddfc,
+  info: 0x7bc96f,
+  warn: 0x8b7355,
+  mod: 0xa8d5a8,
   neutral: 0x0a1e1e
 };
 

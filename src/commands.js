@@ -197,7 +197,7 @@ function drawAvatarBorder(ctx, prefs) {
   
   // Get border settings, with defaults
   const borderWidth = parseInt(prefs.avatarborder) || 3;
-  const borderColor = prefs.avatarbordercolor || '#71faf9';
+  const borderColor = prefs.avatarbordercolor || '#7bc96f';
   const glowType = prefs.borderglow || 'none';
   const frameType = prefs.avatarframe || 'none';
   
@@ -207,7 +207,7 @@ function drawAvatarBorder(ctx, prefs) {
     ctx.strokeStyle = frameType === 'gold' ? '#FFD700' : 
                       frameType === 'silver' ? '#C0C0C0' :
                       frameType === 'bronze' ? '#CD7F32' :
-                      frameType === 'neon' ? '#71faf9' : '#71faf9';
+                      frameType === 'neon' ? '#7bc96f' : '#7bc96f';
     ctx.lineWidth = 8;
     ctx.beginPath();
     ctx.arc(centerX, centerY, radius + 8, 0, Math.PI * 2);

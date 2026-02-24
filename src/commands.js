@@ -318,7 +318,7 @@ async function cmdAdminCommands(message) {
     "`!xp add/set <user> <amount>` `/xp`",
     "`!recalc-levels` `/recalc-levels`",
     "`!sync-roles` `/sync-roles`",
-    "`!reactionrole add <msgId> <emoji> <@role>`",
+    "`!reactionrole add <msgId> <emoji> <roleId>`",
     "`!reactionrole remove <msgId> <emoji>`",
     "`!reactionrole list`"
   ]);
@@ -1172,7 +1172,7 @@ async function cmdReactionRole(message, args) {
   } else {
     await message.reply(
       "Usage:\n" +
-      "`!reactionrole add <messageId> <emoji> <@role>` - Add reaction role\n" +
+      "`!reactionrole add <messageId> <emoji> <roleId>` - Add reaction role\n" +
       "`!reactionrole remove <messageId> <emoji>` - Remove reaction role\n" +
       "`!reactionrole list` - List all reaction roles"
     ).catch(() => {});
@@ -1181,7 +1181,7 @@ async function cmdReactionRole(message, args) {
 
 async function cmdReactionRoleAdd(message, args) {
   if (args.length < 3) {
-    await message.reply("Usage: `!reactionrole add <messageId> <emoji> <@role>`").catch(() => {});
+    await message.reply("Usage: `!reactionrole add <messageId> <emoji> <roleId>`").catch(() => {});
     return;
   }
 

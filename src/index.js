@@ -1003,6 +1003,14 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 
 client.on(Events.ChannelCreate, async (channel) => {
   if (!channel.guild) return;
+  
+  // Skip logging private VC channels to reduce log spam
+  const isPrivateVC = await get(
+    `SELECT 1 FROM private_voice_rooms WHERE guild_id=? AND (voice_channel_id=? OR text_channel_id=?)`,
+    [channel.guild.id, channel.id, channel.id]
+  );
+  if (isPrivateVC) return;
+  
   await sendGuildLog(channel.guild, {
     eventKey: "channel_create",
     color: LOG_THEME.info,
@@ -1014,6 +1022,14 @@ client.on(Events.ChannelCreate, async (channel) => {
 
 client.on(Events.ChannelDelete, async (channel) => {
   if (!channel.guild) return;
+  
+  // Skip logging private VC channels to reduce log spam
+  const isPrivateVC = await get(
+    `SELECT 1 FROM private_voice_rooms WHERE guild_id=? AND (voice_channel_id=? OR text_channel_id=?)`,
+    [channel.guild.id, channel.id, channel.id]
+  );
+  if (isPrivateVC) return;
+  
   await sendGuildLog(channel.guild, {
     eventKey: "channel_delete",
     color: LOG_THEME.warn,
@@ -1030,6 +1046,13 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
   const permsChanged = JSON.stringify(oldChannel.permissionOverwrites.cache.map((o) => [o.id, o.allow.bitfield.toString(), o.deny.bitfield.toString()]))
     !== JSON.stringify(newChannel.permissionOverwrites.cache.map((o) => [o.id, o.allow.bitfield.toString(), o.deny.bitfield.toString()]));
   if (!nameChanged && !slowmodeChanged && !permsChanged) return;
+
+  // Skip logging private VC channels to reduce log spam
+  const isPrivateVC = await get(
+    `SELECT 1 FROM private_voice_rooms WHERE guild_id=? AND (voice_channel_id=? OR text_channel_id=?)`,
+    [newChannel.guild.id, newChannel.id, newChannel.id]
+  );
+  if (isPrivateVC) return;
 
   const tracked = findRecentModAction({
     guildId: newChannel.guild.id,

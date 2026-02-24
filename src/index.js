@@ -198,8 +198,10 @@ function userLabel(userLike) {
   const user = userLike.user || userLike;
   const tag = user.tag || user.username || "Unknown";
   const userId = user.id || "no-id";
+  const displayName = user.displayName || user.globalName || user.username || tag;
   if (!userId || userId === "no-id") return tag;
-  return `[${tag}](https://discord.com/users/${userId})`;
+  // Use zero-width space to prevent pinging: @\u200Busername
+  return `@\u200B${displayName} ([${tag}](https://discord.com/users/${userId}))`;
 }
 
 function channelLabel(channel) {
@@ -313,6 +315,15 @@ async function sendGuildLog(guild, payload) {
     .setTitle(payload.title || "Server Log")
     .setDescription(trimText(payload.description || ""))
     .setTimestamp(new Date());
+
+  // Add user avatar if actorUserId is provided
+  if (actorUserId) {
+    const actorUser = guild.members.cache.get(actorUserId)?.user || await guild.client.users.fetch(actorUserId).catch(() => null);
+    if (actorUser) {
+      const avatarURL = actorUser.displayAvatarURL({ size: 128 });
+      embed.setThumbnail(avatarURL);
+    }
+  }
 
   if (Array.isArray(payload.fields) && payload.fields.length) {
     embed.addFields(payload.fields.slice(0, 10).map((f) => ({
@@ -798,11 +809,13 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
     color: LOG_THEME.info,
     title: "✏️ Message Edited",
     sourceChannelId: newMessage.channel?.id,
-    description: `A message was edited in ${newMessage.channel ? channelLabel(newMessage.channel) : "unknown channel"}.`,
+    description: `**Message Edited in** ${newMessage.channel ? channelLabel(newMessage.channel) : "unknown channel"}`,
     fields: [
       { name: "Author", value: userLabel(newMessage.author), inline: true },
+      { name: "User ID", value: `\`${newMessage.author?.id}\``, inline: true },
       { name: "Before", value: formatMessageLogContent(oldMessage) },
-      { name: "After", value: formatMessageLogContent(newMessage) }
+      { name: "After", value: formatMessageLogContent(newMessage) },
+      { name: "Jump to Message", value: `[Click here](https://discord.com/channels/${newMessage.guild.id}/${newMessage.channel.id}/${newMessage.id})` }
     ]
   });
 });
@@ -1062,10 +1075,12 @@ client.on(Events.ChannelDelete, async (channel) => {
 client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
   if (!newChannel.guild) return;
   const nameChanged = oldChannel.name !== newChannel.name;
+  const topicChanged = oldChannel.topic !== newChannel.topic;
+  const nsfwChanged = oldChannel.nsfw !== newChannel.nsfw;
   const slowmodeChanged = oldChannel.rateLimitPerUser !== newChannel.rateLimitPerUser;
   const permsChanged = JSON.stringify(oldChannel.permissionOverwrites.cache.map((o) => [o.id, o.allow.bitfield.toString(), o.deny.bitfield.toString()]))
     !== JSON.stringify(newChannel.permissionOverwrites.cache.map((o) => [o.id, o.allow.bitfield.toString(), o.deny.bitfield.toString()]));
-  if (!nameChanged && !slowmodeChanged && !permsChanged) return;
+  if (!nameChanged && !slowmodeChanged && !permsChanged && !topicChanged && !nsfwChanged) return;
 
   // Skip logging private VC channels to reduce log spam
   const isPrivateVC = await get(
@@ -1084,9 +1099,15 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
   const actorLabel = await resolveActionActorLabel(newChannel.guild, executor, tracked?.actorId);
 
   const changeLines = [];
-  if (nameChanged) changeLines.push(`Name: ${oldChannel.name || "(unknown)"} → ${newChannel.name || "(unknown)"}`);
-  if (slowmodeChanged) changeLines.push(`Slowmode: ${oldChannel.rateLimitPerUser || 0}s → ${newChannel.rateLimitPerUser || 0}s`);
-  if (permsChanged) changeLines.push("Permissions/overwrites changed");
+  if (nameChanged) changeLines.push(`**Name:** \`${oldChannel.name || "(unknown)"}\` → \`${newChannel.name || "(unknown)"}\``);
+  if (topicChanged) {
+    const oldTopic = oldChannel.topic ? (oldChannel.topic.length > 50 ? oldChannel.topic.slice(0, 50) + "..." : oldChannel.topic) : "(none)";
+    const newTopic = newChannel.topic ? (newChannel.topic.length > 50 ? newChannel.topic.slice(0, 50) + "..." : newChannel.topic) : "(none)";
+    changeLines.push(`**Topic:** ${oldTopic} → ${newTopic}`);
+  }
+  if (nsfwChanged) changeLines.push(`**NSFW:** ${oldChannel.nsfw ? "Yes" : "No"} → ${newChannel.nsfw ? "Yes" : "No"}`);
+  if (slowmodeChanged) changeLines.push(`**Slowmode:** ${oldChannel.rateLimitPerUser || 0}s → ${newChannel.rateLimitPerUser || 0}s`);
+  if (permsChanged) changeLines.push(`**Permissions:** Modified (view audit log for details)`);
 
   await sendGuildLog(newChannel.guild, {
     eventKey: "channel_update",
@@ -1094,7 +1115,7 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
     color: LOG_THEME.info,
     title: "🛠️ Channel Updated",
     sourceChannelId: newChannel.id,
-    description: `${channelLabel(newChannel)} was updated.`,
+    description: `${channelLabel(newChannel)} was updated by ${actorLabel}.`,
     fields: [
       { name: "Changes", value: changeLines.join("\n") || "Updated" },
       { name: "Updated By", value: actorLabel, inline: true }

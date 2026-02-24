@@ -143,6 +143,14 @@ function trackModerationAction(message, action, data = {}) {
   recordModAction({ guildId: message.guild.id, action, actorId: message.author.id, data });
 }
 
+async function logModAction(guildId, userId, moderatorId, action, reason = null, details = null) {
+  await run(
+    `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [guildId, userId, moderatorId, action, reason, details, Date.now()]
+  ).catch(err => console.error('Failed to log mod action:', err));
+}
+
 
 // Smart user picker: mention, ID, username, global name, nickname, fuzzy match
 async function pickUserSmart(message, arg) {
@@ -869,6 +877,7 @@ async function cmdBan(message, args) {
   const reason = args.slice(1).join(" ").trim() || "No reason provided";
   trackModerationAction(message, "ban_add", { targetUserId: target.id });
   await target.ban({ reason }).catch(() => {});
+  await logModAction(message.guild.id, target.id, message.author.id, "ban", reason);
   await message.reply(`✅ Banned ${target.user.tag}.`).catch(() => {});
 }
 
@@ -882,6 +891,7 @@ async function cmdUnban(message, args) {
   const reason = args.slice(1).join(" ").trim() || "No reason provided";
   trackModerationAction(message, "ban_remove", { targetUserId: userId });
   await message.guild.members.unban(userId, reason).catch(() => {});
+  await logModAction(message.guild.id, userId, message.author.id, "unban", reason);
   await message.reply("✅ Unbanned user.").catch(() => {});
 }
 
@@ -913,6 +923,7 @@ async function cmdKick(message, args) {
   const reason = args.slice(1).join(" ").trim() || "No reason provided";
   trackModerationAction(message, "member_remove", { targetUserId: target.id });
   await target.kick(reason).catch(() => {});
+  await logModAction(message.guild.id, target.id, message.author.id, "kick", reason);
   await message.reply(`✅ Kicked ${target.user.tag}.`).catch(() => {});
 }
 
@@ -944,6 +955,7 @@ async function cmdMute(message, args) {
   }
   trackModerationAction(message, "member_timeout", { targetUserId: target.id, timedOut: true });
   await target.timeout(durationMs, reason).catch(() => {});
+  await logModAction(message.guild.id, target.id, message.author.id, "mute", reason, `Duration: ${durationMs}ms`);
   await message.reply(`✅ Muted ${target.user.tag}.`).catch(() => {});
 }
 
@@ -968,6 +980,7 @@ async function cmdUnmute(message, args) {
   }
   trackModerationAction(message, "member_timeout", { targetUserId: target.id, timedOut: false });
   await target.timeout(null, reason).catch(() => {});
+  await logModAction(message.guild.id, target.id, message.author.id, "unmute", reason);
   await message.reply(`✅ Unmuted ${target.user.tag}.`).catch(() => {});
 }
 
@@ -1031,7 +1044,7 @@ async function cmdWarn(message, args) {
      VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, pick.member.id, message.author.id, reason, Date.now()]
   );
-
+  await logModAction(message.guild.id, pick.member.id, message.author.id, "warn", reason);
   await message.reply(`✅ Warned ${pick.member.user.tag}.`).catch(() => {});
 }
 
@@ -1049,14 +1062,43 @@ async function cmdWarnings(message, args) {
   }
 
   const rows = await all(
-    `SELECT reason, created_at FROM mod_warnings WHERE guild_id=? AND user_id=? ORDER BY created_at DESC LIMIT 10`,
+    `SELECT id, moderator_id, reason, created_at FROM mod_warnings WHERE guild_id=? AND user_id=? ORDER BY created_at DESC LIMIT 15`,
     [message.guild.id, pick.member.id]
   );
-  const lines = rows.length
-    ? rows.map((r, i) => `${i + 1}. ${r.reason}`).join("\n")
-    : "No warnings.";
 
-  const embed = compactEmbed(`Warnings for ${pick.member.user.username}`, [lines]);
+  if (!rows.length) {
+    await message.reply(`No warnings found for ${pick.member.user.tag}.`).catch(() => {});
+    return;
+  }
+
+  const targetUser = pick.member.user;
+  const avatarURL = targetUser.displayAvatarURL({ size: 128 });
+  
+  const embed = new EmbedBuilder()
+    .setColor(0xffa500)
+    .setAuthor({ name: `Warnings for ${targetUser.tag}`, iconURL: avatarURL })
+    .setThumbnail(avatarURL)
+    .setTimestamp();
+
+  for (const row of rows) {
+    const moderator = await message.guild.members.fetch(row.moderator_id).catch(() => null);
+    const modTag = moderator ? moderator.user.tag : `User ${row.moderator_id}`;
+    const timestamp = new Date(Number(row.created_at)).toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    embed.addFields({
+      name: `Warning #${row.id}`,
+      value: `**Moderator:** ${modTag}\n**Reason:** ${row.reason}\n**Date:** ${timestamp}`,
+      inline: false
+    });
+  }
+
+  embed.setFooter({ text: `Total Warnings: ${rows.length}` });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
@@ -1073,8 +1115,101 @@ async function cmdClearWarns(message, args) {
     return;
   }
 
-  await run(`DELETE FROM mod_warnings WHERE guild_id=? AND user_id=?`, [message.guild.id, pick.member.id]);
-  await message.reply(`✅ Cleared warnings for ${pick.member.user.tag}.`).catch(() => {});
+  const result = await run(`DELETE FROM mod_warnings WHERE guild_id=? AND user_id=?`, [message.guild.id, pick.member.id]);
+  const count = result?.changes || 0;
+  await message.reply(`✅ Cleared ${count} warning(s) for ${pick.member.user.tag}.`).catch(() => {});
+}
+
+async function cmdClearWarn(message, args) {
+  if (!(await requireModerator(message))) return;
+  const warningId = args[0];
+  if (!warningId || !/^\d+$/.test(warningId)) {
+    await message.reply("Usage: `?clearwarn <warning-id>`\nUse `?warnings <user>` to see warning IDs.").catch(() => {});
+    return;
+  }
+
+  const warning = await get(`SELECT user_id FROM mod_warnings WHERE guild_id=? AND id=?`, [message.guild.id, warningId]);
+  if (!warning) {
+    await message.reply("❌ Warning not found.").catch(() => {});
+    return;
+  }
+
+  await run(`DELETE FROM mod_warnings WHERE guild_id=? AND id=?`, [message.guild.id, warningId]);
+  await message.reply(`✅ Cleared warning #${warningId}.`).catch(() => {});
+}
+
+async function cmdModLogs(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?modlogs <user>`").catch(() => {});
+    return;
+  }
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?modlogs <user>`").catch(() => {});
+    return;
+  }
+
+  const rows = await all(
+    `SELECT id, moderator_id, action, reason, details, created_at FROM mod_logs WHERE guild_id=? AND user_id=? ORDER BY created_at DESC LIMIT 20`,
+    [message.guild.id, pick.member.id]
+  );
+
+  if (!rows.length) {
+    await message.reply(`No moderation logs found for ${pick.member.user.tag}.`).catch(() => {});
+    return;
+  }
+
+  const targetUser = pick.member.user;
+  const avatarURL = targetUser.displayAvatarURL({ size: 128 });
+  
+  const embed = new EmbedBuilder()
+    .setColor(0xff4444)
+    .setAuthor({ name: `Moderation Logs for ${targetUser.tag}`, iconURL: avatarURL })
+    .setThumbnail(avatarURL)
+    .setTimestamp();
+
+  const actionEmojis = {
+    ban: "🔨",
+    kick: "👢",
+    mute: "🔇",
+    unmute: "🔊",
+    warn: "⚠️",
+    timeout: "⏰",
+    role_add: "➕",
+    role_remove: "➖",
+    nick_change: "✏️",
+    softban: "🧹"
+  };
+
+  for (const row of rows) {
+    const moderator = await message.guild.members.fetch(row.moderator_id).catch(() => null);
+    const modTag = moderator ? moderator.user.tag : `User ${row.moderator_id}`;
+    const timestamp = new Date(Number(row.created_at)).toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+    
+    const emoji = actionEmojis[row.action] || "📋";
+    const actionName = row.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    
+    let value = `**Moderator:** ${modTag}\n**Date:** ${timestamp}`;
+    if (row.reason) value += `\n**Reason:** ${row.reason}`;
+    if (row.details) value += `\n**Details:** ${row.details}`;
+    
+    embed.addFields({
+      name: `${emoji} ${actionName} (#${row.id})`,
+      value: value,
+      inline: false
+    });
+  }
+
+  embed.setFooter({ text: `Total Actions: ${rows.length}` });
+  await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 async function cmdLock(message) {
@@ -1128,6 +1263,7 @@ async function cmdNick(message, args) {
 
   await pick.member.setNickname(nick.slice(0, 32)).catch(() => {});
   trackModerationAction(message, "member_nick_update", { targetUserId: pick.member.id });
+  await logModAction(message.guild.id, pick.member.id, message.author.id, "nick_change", null, `New nickname: ${nick.slice(0, 32)}`);
   await message.reply(`✅ Updated nickname for ${pick.member.user.tag}.`).catch(() => {});
 }
 
@@ -1159,12 +1295,14 @@ async function cmdRole(message, args) {
   if (pick.member.roles.cache.has(role.id)) {
     trackModerationAction(message, "member_role_update", { targetUserId: pick.member.id });
     await pick.member.roles.remove(role).catch(() => {});
+    await logModAction(message.guild.id, pick.member.id, message.author.id, "role_remove", null, `Role: ${role.name}`);
     await message.reply(`✅ Removed ${role.name} from ${pick.member.user.tag}.`).catch(() => {});
     return;
   }
 
   trackModerationAction(message, "member_role_update", { targetUserId: pick.member.id });
   await pick.member.roles.add(role).catch(() => {});
+  await logModAction(message.guild.id, pick.member.id, message.author.id, "role_add", null, `Role: ${role.name}`);
   await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag}.`).catch(() => {});
 }
 
@@ -1197,6 +1335,7 @@ async function cmdSoftban(message, args) {
   await target.ban({ reason, deleteMessageSeconds: 24 * 60 * 60 }).catch(() => {});
   trackModerationAction(message, "ban_remove", { targetUserId: target.id });
   await message.guild.members.unban(target.id, "Softban release").catch(() => {});
+  await logModAction(message.guild.id, target.id, message.author.id, "softban", reason);
   await message.reply(`✅ Softbanned ${target.user.tag}.`).catch(() => {});
 }
 
@@ -1476,7 +1615,7 @@ async function handleCommands(message) {
   if (!message.guild) return false;
   
   // List of moderation commands that use the configurable prefix
-  const modCommands = ["ban", "unban", "kick", "mute", "unmute", "purge", "warn", "warnings", "clearwarns", "lock", "unlock", "slowmode", "nick", "role", "softban"];
+  const modCommands = ["ban", "unban", "kick", "mute", "unmute", "purge", "warn", "warnings", "clearwarns", "clearwarn", "modlogs", "lock", "unlock", "slowmode", "nick", "role", "softban"];
   
   // Try moderation prefix first for mod commands
   const modPrefixes = await getModPrefixes(message);
@@ -1631,6 +1770,16 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "clearwarns") {
     await cmdClearWarns(message, args);
+    return true;
+  }
+
+  if (cmd === "clearwarn") {
+    await cmdClearWarn(message, args);
+    return true;
+  }
+
+  if (cmd === "modlogs") {
+    await cmdModLogs(message, args);
     return true;
   }
 

@@ -286,6 +286,20 @@ async function initDb() {
     )
   `);
 
+  // Moderation logs (all mod actions)
+  await run(`
+    CREATE TABLE IF NOT EXISTS mod_logs (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      reason TEXT,
+      details TEXT,
+      created_at BIGINT NOT NULL
+    )
+  `);
+
   // Logging exclusions (channels/categories to skip logging)
   await run(`
     CREATE TABLE IF NOT EXISTS logging_exclusions (

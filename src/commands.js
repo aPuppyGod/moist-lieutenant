@@ -129,17 +129,13 @@ function parseCommand(content, prefixes) {
 
 async function getActivePrefixes(message) {
   const prefix = DEFAULT_PREFIX;
-  const list = [prefix];
-  if (prefix !== LEGACY_PREFIX) list.push(LEGACY_PREFIX);
-  return list;
+  return [prefix];
 }
 
 async function getModPrefixes(message) {
   const configured = (await getGuildSettings(message.guild.id).catch(() => null))?.command_prefix || DEFAULT_PREFIX;
   const prefix = String(configured || DEFAULT_PREFIX).trim() || DEFAULT_PREFIX;
-  const list = [prefix];
-  if (prefix !== LEGACY_PREFIX) list.push(LEGACY_PREFIX);
-  return list;
+  return [prefix];
 }
 
 function trackModerationAction(message, action, data = {}) {
@@ -1025,7 +1021,11 @@ async function cmdWarn(message, args) {
     return;
   }
 
-  const reason = args.slice(1).join(" ").trim() || "No reason provided";
+  const reason = args.slice(1).join(" ").trim();
+  if (!reason) {
+    await message.reply("Usage: `?warn <user> <reason>` - A reason is required.").catch(() => {});
+    return;
+  }
   await run(
     `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
      VALUES (?, ?, ?, ?, ?)`,

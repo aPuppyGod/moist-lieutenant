@@ -102,6 +102,14 @@ function ticketCloseButton() {
     new ButtonBuilder()
       .setCustomId("ticket_close")
       .setLabel("Close Ticket")
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId("ticket_save_transcript")
+      .setLabel("Save Transcript")
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId("ticket_delete")
+      .setLabel("Delete Ticket")
       .setStyle(ButtonStyle.Danger)
   );
 }
@@ -263,41 +271,7 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
   const closedBy = guild.members.cache.get(closedByUserId) || await guild.members.fetch(closedByUserId).catch(() => null);
   const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
 
-  // Generate and save transcript if enabled
-  let transcriptSaved = false;
-  if (settings.save_transcript) {
-    try {
-      const transcriptBuffer = await generateTranscript(channel);
-      const attachment = new AttachmentBuilder(transcriptBuffer, { name: `ticket-${channel.name}-${Date.now()}.txt` });
-
-      // Send to transcript channel if configured
-      if (settings.ticket_transcript_channel_id) {
-        const transcriptChannel = guild.channels.cache.get(settings.ticket_transcript_channel_id)
-          || await guild.channels.fetch(settings.ticket_transcript_channel_id).catch(() => null);
-        
-        if (transcriptChannel && transcriptChannel.isTextBased && transcriptChannel.isTextBased()) {
-          const transcriptEmbed = new EmbedBuilder()
-            .setColor(0x8b7355)
-            .setTitle("📜 Ticket Transcript")
-            .addFields(
-              { name: "Ticket", value: `#${channel.name}`, inline: true },
-              { name: "Opened By", value: opener ? `${opener.user.tag}` : `Unknown (${ticket.opener_id})`, inline: true },
-              { name: "Closed By", value: closedBy ? `${closedBy.user.tag}` : `Unknown (${closedByUserId})`, inline: true }
-            )
-            .setTimestamp(new Date());
-
-          await transcriptChannel.send({
-            embeds: [transcriptEmbed],
-            files: [attachment],
-          }).catch(() => {});
-          transcriptSaved = true;
-        }
-      }
-    } catch (err) {
-      console.error("Failed to generate/save transcript:", err);
-    }
-  }
-
+  // Mark ticket as closed in database
   await closeTicket(guild.id, channelId, closedByUserId);
 
   // Log ticket closure
@@ -307,17 +281,14 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
     .addFields(
       { name: "Ticket", value: `#${channel.name}`, inline: true },
       { name: "Opened By", value: opener ? `${opener.user.tag} (${opener.id})` : `Unknown (${ticket.opener_id})`, inline: true },
-      { name: "Closed By", value: closedBy ? `${closedBy.user.tag} (${closedBy.id})` : `Unknown (${closedByUserId})`, inline: true },
-      { name: "Transcript Saved", value: transcriptSaved ? "✅ Yes" : "❌ No", inline: true }
+      { name: "Closed By", value: closedBy ? `${closedBy.user.tag} (${closedBy.id})` : `Unknown (${closedByUserId})`, inline: true }
     )
     .setTimestamp(new Date());
   
   await sendTicketLog(guild, logEmbed);
 
-  // Delete channel if enabled, otherwise just rename and lock it
-  if (settings.delete_on_close) {
-    await channel.delete("Ticket closed and auto-delete enabled").catch(() => {});
-  } else {
+  // Rename and lock the channel (no automatic deletion)
+  {
     const safeName = String(channel.name || "ticket").replace(/^closed-/, "");
     await channel.setName(`closed-${safeName}`.slice(0, 95)).catch(() => {});
 
@@ -332,11 +303,10 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
         new EmbedBuilder()
           .setColor(0x8b7355)
           .setTitle("Ticket Closed")
-          .setDescription(transcriptSaved 
-            ? "This ticket has been closed and a transcript has been saved. Staff can still review the channel."
-            : "This ticket has been closed. Staff can still review the channel.")
+          .setDescription("This ticket has been closed. Use the buttons below to save a transcript or delete the ticket.")
           .setTimestamp(new Date())
-      ]
+      ],
+      components: [ticketCloseButton()]
     }).catch(() => {});
   }
 
@@ -346,7 +316,8 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
 async function handleTicketInteraction(interaction) {
   if (!interaction?.isButton || !interaction.isButton()) return false;
   if (!interaction.guild) return false;
-  if (interaction.customId !== "ticket_open" && interaction.customId !== "ticket_close") return false;
+  const validIds = ["ticket_open", "ticket_close", "ticket_save_transcript", "ticket_delete"];
+  if (!validIds.includes(interaction.customId)) return false;
 
   const guild = interaction.guild;
   const settings = await getTicketSettings(guild.id);
@@ -381,13 +352,117 @@ async function handleTicketInteraction(interaction) {
     return true;
   }
 
-  const closed = await closeTicketChannel(guild, interaction.channelId, interaction.user.id);
-  if (!closed.ok) {
-    await interaction.reply({ content: `❌ ${closed.reason}`, ephemeral: true }).catch(() => {});
+  if (interaction.customId === "ticket_close") {
+    const closed = await closeTicketChannel(guild, interaction.channelId, interaction.user.id);
+    if (!closed.ok) {
+      await interaction.reply({ content: `❌ ${closed.reason}`, ephemeral: true }).catch(() => {});
+      return true;
+    }
+    await interaction.reply({ content: "✅ Ticket closed.", ephemeral: true }).catch(() => {});
     return true;
   }
 
-  await interaction.reply({ content: "✅ Ticket closed.", ephemeral: true }).catch(() => {});
+  if (interaction.customId === "ticket_save_transcript") {
+    const ticket = await getTicketByChannel(guild.id, interaction.channelId);
+    if (!ticket) {
+      await interaction.reply({ content: "❌ This is not a ticket channel.", ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const channel = guild.channels.cache.get(interaction.channelId) || await guild.channels.fetch(interaction.channelId).catch(() => null);
+    if (!channel) {
+      await interaction.reply({ content: "❌ Channel not found.", ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+      const transcriptBuffer = await generateTranscript(channel);
+      const attachment = new AttachmentBuilder(transcriptBuffer, { name: `ticket-${channel.name}-${Date.now()}.txt` });
+
+      if (settings.ticket_transcript_channel_id) {
+        const transcriptChannel = guild.channels.cache.get(settings.ticket_transcript_channel_id)
+          || await guild.channels.fetch(settings.ticket_transcript_channel_id).catch(() => null);
+        
+        if (transcriptChannel && transcriptChannel.isTextBased && transcriptChannel.isTextBased()) {
+          const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
+          const transcriptEmbed = new EmbedBuilder()
+            .setColor(0x8b7355)
+            .setTitle("📜 Ticket Transcript")
+            .addFields(
+              { name: "Ticket", value: `#${channel.name}`, inline: true },
+              { name: "Opened By", value: opener ? `${opener.user.tag}` : `Unknown (${ticket.opener_id})`, inline: true },
+              { name: "Saved By", value: `${interaction.user.tag}`, inline: true }
+            )
+            .setTimestamp(new Date());
+
+          await transcriptChannel.send({
+            embeds: [transcriptEmbed],
+            files: [attachment],
+          }).catch(() => {});
+          
+          // Log transcript save
+          const logEmbed = new EmbedBuilder()
+            .setColor(0x7bc96f)
+            .setTitle("📜 Ticket Transcript Saved")
+            .addFields(
+              { name: "Ticket", value: `#${channel.name}`, inline: true },
+              { name: "Saved By", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true }
+            )
+            .setTimestamp(new Date());
+          await sendTicketLog(guild, logEmbed);
+          
+          await interaction.editReply({ content: "✅ Transcript saved to transcript channel." });
+        } else {
+          await interaction.editReply({ content: "❌ Transcript channel not configured or not accessible." });
+        }
+      } else {
+        await interaction.editReply({ content: "❌ Transcript channel not configured." });
+      }
+    } catch (err) {
+      console.error("Failed to save transcript:", err);
+      await interaction.editReply({ content: "❌ Failed to generate transcript." });
+    }
+    return true;
+  }
+
+  if (interaction.customId === "ticket_delete") {
+    const member = interaction.member;
+    const hasAdmin = Boolean(member?.permissions?.has(PermissionsBitField.Flags.Administrator));
+    
+    if (!hasAdmin) {
+      await interaction.reply({ content: "❌ Only administrators can delete tickets.", ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const ticket = await getTicketByChannel(guild.id, interaction.channelId);
+    const channel = guild.channels.cache.get(interaction.channelId) || await guild.channels.fetch(interaction.channelId).catch(() => null);
+    if (!channel) {
+      await interaction.reply({ content: "❌ Channel not found.", ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    // Log ticket deletion
+    if (ticket) {
+      const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
+      const logEmbed = new EmbedBuilder()
+        .setColor(0xff4444)
+        .setTitle("🗑️ Ticket Deleted")
+        .addFields(
+          { name: "Ticket", value: `#${channel.name}`, inline: true },
+          { name: "Opened By", value: opener ? `${opener.user.tag} (${opener.id})` : `Unknown (${ticket.opener_id})`, inline: true },
+          { name: "Deleted By", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true }
+        )
+        .setTimestamp(new Date());
+      await sendTicketLog(guild, logEmbed);
+    }
+
+    await interaction.reply({ content: "✅ Deleting ticket channel...", ephemeral: true }).catch(() => {});
+    await channel.delete("Ticket deleted by administrator").catch(() => {});
+    return true;
+  }
+
   return true;
 }
 

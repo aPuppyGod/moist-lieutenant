@@ -240,7 +240,8 @@ async function getTicketSettings(guildId) {
   );
 
   const row = await get(
-    `SELECT guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id
+    `SELECT guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id,
+            ticket_log_channel_id, ticket_transcript_channel_id, save_transcript, delete_on_close
      FROM ticket_settings
      WHERE guild_id=?`,
     [guildId]
@@ -253,7 +254,11 @@ async function getTicketSettings(guildId) {
     category_id: row?.category_id || null,
     support_role_id: row?.support_role_id || null,
     ticket_prefix: row?.ticket_prefix || "ticket",
-    panel_message_id: row?.panel_message_id || null
+    panel_message_id: row?.panel_message_id || null,
+    ticket_log_channel_id: row?.ticket_log_channel_id || null,
+    ticket_transcript_channel_id: row?.ticket_transcript_channel_id || null,
+    save_transcript: Number(row?.save_transcript ?? 1) === 1,
+    delete_on_close: Number(row?.delete_on_close || 0) === 1
   };
 }
 
@@ -265,12 +270,17 @@ async function upsertTicketSettings(guildId, patch) {
     category_id: patch.category_id !== undefined ? (patch.category_id || null) : current.category_id,
     support_role_id: patch.support_role_id !== undefined ? (patch.support_role_id || null) : current.support_role_id,
     ticket_prefix: patch.ticket_prefix !== undefined ? (patch.ticket_prefix || "ticket") : current.ticket_prefix,
-    panel_message_id: patch.panel_message_id !== undefined ? (patch.panel_message_id || null) : current.panel_message_id
+    panel_message_id: patch.panel_message_id !== undefined ? (patch.panel_message_id || null) : current.panel_message_id,
+    ticket_log_channel_id: patch.ticket_log_channel_id !== undefined ? (patch.ticket_log_channel_id || null) : current.ticket_log_channel_id,
+    ticket_transcript_channel_id: patch.ticket_transcript_channel_id !== undefined ? (patch.ticket_transcript_channel_id || null) : current.ticket_transcript_channel_id,
+    save_transcript: patch.save_transcript !== undefined ? (patch.save_transcript ? 1 : 0) : (current.save_transcript ? 1 : 0),
+    delete_on_close: patch.delete_on_close !== undefined ? (patch.delete_on_close ? 1 : 0) : (current.delete_on_close ? 1 : 0)
   };
 
   await run(
-    `INSERT INTO ticket_settings (guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ticket_settings (guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id,
+                                   ticket_log_channel_id, ticket_transcript_channel_id, save_transcript, delete_on_close)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (guild_id)
      DO UPDATE SET
        enabled=EXCLUDED.enabled,
@@ -278,7 +288,11 @@ async function upsertTicketSettings(guildId, patch) {
        category_id=EXCLUDED.category_id,
        support_role_id=EXCLUDED.support_role_id,
        ticket_prefix=EXCLUDED.ticket_prefix,
-       panel_message_id=EXCLUDED.panel_message_id`,
+       panel_message_id=EXCLUDED.panel_message_id,
+       ticket_log_channel_id=EXCLUDED.ticket_log_channel_id,
+       ticket_transcript_channel_id=EXCLUDED.ticket_transcript_channel_id,
+       save_transcript=EXCLUDED.save_transcript,
+       delete_on_close=EXCLUDED.delete_on_close`,
     [
       guildId,
       merged.enabled,
@@ -286,7 +300,11 @@ async function upsertTicketSettings(guildId, patch) {
       merged.category_id,
       merged.support_role_id,
       merged.ticket_prefix,
-      merged.panel_message_id
+      merged.panel_message_id,
+      merged.ticket_log_channel_id,
+      merged.ticket_transcript_channel_id,
+      merged.save_transcript,
+      merged.delete_on_close
     ]
   );
 }

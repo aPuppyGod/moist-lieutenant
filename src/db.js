@@ -340,7 +340,11 @@ async function initDb() {
       category_id TEXT DEFAULT NULL,
       support_role_id TEXT DEFAULT NULL,
       ticket_prefix TEXT DEFAULT 'ticket',
-      panel_message_id TEXT DEFAULT NULL
+      panel_message_id TEXT DEFAULT NULL,
+      ticket_log_channel_id TEXT DEFAULT NULL,
+      ticket_transcript_channel_id TEXT DEFAULT NULL,
+      save_transcript INTEGER NOT NULL DEFAULT 1,
+      delete_on_close INTEGER NOT NULL DEFAULT 0
     )
   `);
 
@@ -391,6 +395,10 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_log_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_transcript_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS save_transcript INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS delete_on_close INTEGER DEFAULT 0`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

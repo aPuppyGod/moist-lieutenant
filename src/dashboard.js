@@ -3447,6 +3447,26 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <label>Ticket Prefix
           <input name="ticket_prefix" value="${escapeHtml(ticketSettings.ticket_prefix || "ticket")}" />
         </label>
+        <label>Ticket Log Channel
+          <select name="ticket_log_channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${ticketSettings.ticket_log_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label>Ticket Transcript Channel
+          <select name="ticket_transcript_channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${ticketSettings.ticket_transcript_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <label style="min-width:150px;flex:0 0 150px;">
+          <span>Save Transcript</span>
+          <input type="checkbox" name="save_transcript" ${ticketSettings.save_transcript ? "checked" : ""} />
+        </label>
+        <label style="min-width:150px;flex:0 0 150px;">
+          <span>Delete on Close</span>
+          <input type="checkbox" name="delete_on_close" ${ticketSettings.delete_on_close ? "checked" : ""} />
+        </label>
         <button type="submit">Save Ticket Settings</button>
       </form>
 
@@ -3859,13 +3879,21 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const categoryId = String(req.body.category_id || "").trim() || null;
       const supportRoleId = String(req.body.support_role_id || "").trim() || null;
       const ticketPrefix = String(req.body.ticket_prefix || "ticket").trim() || "ticket";
+      const ticketLogChannelId = String(req.body.ticket_log_channel_id || "").trim() || null;
+      const ticketTranscriptChannelId = String(req.body.ticket_transcript_channel_id || "").trim() || null;
+      const saveTranscript = req.body.save_transcript === "on";
+      const deleteOnClose = req.body.delete_on_close === "on";
 
       await upsertTicketSettings(guildId, {
         enabled,
         panel_channel_id: panelChannelId,
         category_id: categoryId,
         support_role_id: supportRoleId,
-        ticket_prefix: ticketPrefix
+        ticket_prefix: ticketPrefix,
+        ticket_log_channel_id: ticketLogChannelId,
+        ticket_transcript_channel_id: ticketTranscriptChannelId,
+        save_transcript: saveTranscript,
+        delete_on_close: deleteOnClose
       });
 
       return res.redirect(`/guild/${guildId}?module=tickets`);

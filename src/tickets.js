@@ -4,7 +4,8 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  EmbedBuilder
+  EmbedBuilder,
+  AttachmentBuilder
 } = require("discord.js");
 
 const {
@@ -15,6 +16,72 @@ const {
   createTicket,
   closeTicket
 } = require("./settings");
+
+async function sendTicketLog(guild, embed) {
+  const settings = await getTicketSettings(guild.id);
+  if (!settings.ticket_log_channel_id) return;
+
+  const logChannel = guild.channels.cache.get(settings.ticket_log_channel_id)
+    || await guild.channels.fetch(settings.ticket_log_channel_id).catch(() => null);
+  
+  if (!logChannel || !logChannel.isTextBased || !logChannel.isTextBased()) return;
+
+  await logChannel.send({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
+}
+
+async function generateTranscript(channel) {
+  const messages = [];
+  let lastId;
+
+  // Fetch all messages in the channel (up to 5000)
+  for (let i = 0; i < 50; i++) {
+    const options = { limit: 100 };
+    if (lastId) options.before = lastId;
+
+    const batch = await channel.messages.fetch(options).catch(() => null);
+    if (!batch || batch.size === 0) break;
+
+    messages.push(...batch.values());
+    lastId = batch.last().id;
+
+    if (batch.size < 100) break;
+  }
+
+  // Sort messages oldest to newest
+  messages.reverse();
+
+  // Generate text transcript
+  const lines = [];
+  lines.push(`Ticket Transcript: #${channel.name}`);
+  lines.push(`Generated: ${new Date().toUTCString()}`);
+  lines.push(`Total Messages: ${messages.length}`);
+  lines.push('='.repeat(80));
+  lines.push('');
+
+  for (const msg of messages) {
+    const timestamp = msg.createdAt.toUTCString();
+    const author = `${msg.author.tag} (${msg.author.id})`;
+    const content = msg.content || '[No content]';
+    
+    lines.push(`[${timestamp}] ${author}:`);
+    lines.push(content);
+    
+    if (msg.attachments.size > 0) {
+      msg.attachments.forEach(att => {
+        lines.push(`  📎 ${att.name}: ${att.url}`);
+      });
+    }
+    
+    if (msg.embeds.length > 0) {
+      lines.push(`  📋 [${msg.embeds.length} embed(s)]`);
+    }
+    
+    lines.push('');
+  }
+
+  const transcriptText = lines.join('\n');
+  return Buffer.from(transcriptText, 'utf-8');
+}
 
 function cleanPrefix(prefix) {
   const value = String(prefix || "ticket").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 16);
@@ -168,6 +235,20 @@ async function createTicketChannel(guild, openerId) {
     allowedMentions: { roles: settings.support_role_id ? [settings.support_role_id] : [] }
   }).catch(() => {});
 
+  // Log ticket opening
+  const logEmbed = new EmbedBuilder()
+    .setColor(0xa8d5a8)
+    .setTitle("🎫 Ticket Opened")
+    .setDescription(`A new ticket has been created.`)
+    .addFields(
+      { name: "Ticket", value: `<#${channel.id}>`, inline: true },
+      { name: "Opened By", value: `${opener.user.tag} (${opener.id})`, inline: true },
+      { name: "Channel Name", value: channel.name, inline: true }
+    )
+    .setTimestamp(new Date());
+  
+  await sendTicketLog(guild, logEmbed);
+
   return { ok: true, channel };
 }
 
@@ -175,29 +256,89 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
   const ticket = await getTicketByChannel(guild.id, channelId);
   if (!ticket || ticket.status !== "open") return { ok: false, reason: "This channel is not an open ticket." };
 
+  const settings = await getTicketSettings(guild.id);
   const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
   if (!channel) return { ok: false, reason: "Ticket channel not found." };
 
+  const closedBy = guild.members.cache.get(closedByUserId) || await guild.members.fetch(closedByUserId).catch(() => null);
+  const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
+
+  // Generate and save transcript if enabled
+  let transcriptSaved = false;
+  if (settings.save_transcript) {
+    try {
+      const transcriptBuffer = await generateTranscript(channel);
+      const attachment = new AttachmentBuilder(transcriptBuffer, { name: `ticket-${channel.name}-${Date.now()}.txt` });
+
+      // Send to transcript channel if configured
+      if (settings.ticket_transcript_channel_id) {
+        const transcriptChannel = guild.channels.cache.get(settings.ticket_transcript_channel_id)
+          || await guild.channels.fetch(settings.ticket_transcript_channel_id).catch(() => null);
+        
+        if (transcriptChannel && transcriptChannel.isTextBased && transcriptChannel.isTextBased()) {
+          const transcriptEmbed = new EmbedBuilder()
+            .setColor(0x8b7355)
+            .setTitle("📜 Ticket Transcript")
+            .addFields(
+              { name: "Ticket", value: `#${channel.name}`, inline: true },
+              { name: "Opened By", value: opener ? `${opener.user.tag}` : `Unknown (${ticket.opener_id})`, inline: true },
+              { name: "Closed By", value: closedBy ? `${closedBy.user.tag}` : `Unknown (${closedByUserId})`, inline: true }
+            )
+            .setTimestamp(new Date());
+
+          await transcriptChannel.send({
+            embeds: [transcriptEmbed],
+            files: [attachment],
+          }).catch(() => {});
+          transcriptSaved = true;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to generate/save transcript:", err);
+    }
+  }
+
   await closeTicket(guild.id, channelId, closedByUserId);
 
-  const safeName = String(channel.name || "ticket").replace(/^closed-/, "");
-  await channel.setName(`closed-${safeName}`.slice(0, 95)).catch(() => {});
+  // Log ticket closure
+  const logEmbed = new EmbedBuilder()
+    .setColor(0x8b7355)
+    .setTitle("🔒 Ticket Closed")
+    .addFields(
+      { name: "Ticket", value: `#${channel.name}`, inline: true },
+      { name: "Opened By", value: opener ? `${opener.user.tag} (${opener.id})` : `Unknown (${ticket.opener_id})`, inline: true },
+      { name: "Closed By", value: closedBy ? `${closedBy.user.tag} (${closedBy.id})` : `Unknown (${closedByUserId})`, inline: true },
+      { name: "Transcript Saved", value: transcriptSaved ? "✅ Yes" : "❌ No", inline: true }
+    )
+    .setTimestamp(new Date());
+  
+  await sendTicketLog(guild, logEmbed);
 
-  const openerId = ticket.opener_id;
-  await channel.permissionOverwrites.edit(openerId, {
-    SendMessages: false,
-    AddReactions: false
-  }).catch(() => {});
+  // Delete channel if enabled, otherwise just rename and lock it
+  if (settings.delete_on_close) {
+    await channel.delete("Ticket closed and auto-delete enabled").catch(() => {});
+  } else {
+    const safeName = String(channel.name || "ticket").replace(/^closed-/, "");
+    await channel.setName(`closed-${safeName}`.slice(0, 95)).catch(() => {});
 
-  await channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor(0x8b7355)
-        .setTitle("Ticket Closed")
-        .setDescription("This ticket has been closed. Staff can still review the channel.")
-        .setTimestamp(new Date())
-    ]
-  }).catch(() => {});
+    const openerId = ticket.opener_id;
+    await channel.permissionOverwrites.edit(openerId, {
+      SendMessages: false,
+      AddReactions: false
+    }).catch(() => {});
+
+    await channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x8b7355)
+          .setTitle("Ticket Closed")
+          .setDescription(transcriptSaved 
+            ? "This ticket has been closed and a transcript has been saved. Staff can still review the channel."
+            : "This ticket has been closed. Staff can still review the channel.")
+          .setTimestamp(new Date())
+      ]
+    }).catch(() => {});
+  }
 
   return { ok: true };
 }

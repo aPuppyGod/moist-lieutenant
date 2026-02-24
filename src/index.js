@@ -560,6 +560,16 @@ client.on(Events.MessageCreate, async (message) => {
 client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (user.bot) return;
 
+  // Fetch partial reaction (needed when message already has reactions)
+  if (reaction.partial) {
+    try {
+      await reaction.fetch();
+    } catch (err) {
+      console.error('Failed to fetch reaction:', err);
+      return;
+    }
+  }
+
   const msg = reaction.message.partial
     ? await reaction.message.fetch().catch(() => null)
     : reaction.message;
@@ -600,6 +610,16 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
 
 client.on(Events.MessageReactionRemove, async (reaction, user) => {
   if (user.bot) return;
+  
+  // Fetch partial reaction (needed when message already has reactions)
+  if (reaction.partial) {
+    try {
+      await reaction.fetch();
+    } catch (err) {
+      console.error('Failed to fetch reaction:', err);
+      return;
+    }
+  }
   
   const msg = reaction.message.partial
     ? await reaction.message.fetch().catch(() => null)

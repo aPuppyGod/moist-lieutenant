@@ -5,7 +5,8 @@ const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
 const { createCanvas, loadImage, registerFont } = require("canvas");
 // Register bundled font
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
-const { getLevelRoles, getGuildSettings } = require("./settings");
+const { getLevelRoles, getGuildSettings, upsertReactionRoleBinding, removeReactionRoleBinding, getReactionRoleBindings } = require("./settings");
+const { normalizeEmojiKey } = require("./reactionRoles");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
 const path = require("path");
@@ -316,7 +317,10 @@ async function cmdAdminCommands(message) {
     "`!admin-commands` `/admin-commands`",
     "`!xp add/set <user> <amount>` `/xp`",
     "`!recalc-levels` `/recalc-levels`",
-    "`!sync-roles` `/sync-roles`"
+    "`!sync-roles` `/sync-roles`",
+    "`!reactionrole add <msgId> <emoji> <@role>`",
+    "`!reactionrole remove <msgId> <emoji>`",
+    "`!reactionrole list`"
   ]);
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -1148,6 +1152,140 @@ async function cmdSoftban(message, args) {
 }
 
 // ─────────────────────────────────────────────────────
+// Reaction Role commands
+// ─────────────────────────────────────────────────────
+
+async function cmdReactionRole(message, args) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("❌ Only admins/managers can configure reaction roles.").catch(() => {});
+    return;
+  }
+
+  const subcommand = (args[0] || "").toLowerCase();
+
+  if (subcommand === "add") {
+    await cmdReactionRoleAdd(message, args.slice(1));
+  } else if (subcommand === "remove") {
+    await cmdReactionRoleRemove(message, args.slice(1));
+  } else if (subcommand === "list") {
+    await cmdReactionRoleList(message);
+  } else {
+    await message.reply(
+      "Usage:\n" +
+      "`!reactionrole add <messageId> <emoji> <@role>` - Add reaction role\n" +
+      "`!reactionrole remove <messageId> <emoji>` - Remove reaction role\n" +
+      "`!reactionrole list` - List all reaction roles"
+    ).catch(() => {});
+  }
+}
+
+async function cmdReactionRoleAdd(message, args) {
+  if (args.length < 3) {
+    await message.reply("Usage: `!reactionrole add <messageId> <emoji> <@role>`").catch(() => {});
+    return;
+  }
+
+  const messageId = args[0];
+  const emojiRaw = args[1];
+  const roleRaw = args[2];
+
+  // Fetch the message to verify it exists
+  let targetMessage;
+  try {
+    targetMessage = await message.channel.messages.fetch(messageId);
+  } catch (e) {
+    await message.reply("❌ Message not found in this channel. Make sure the message ID is correct and in this channel.").catch(() => {});
+    return;
+  }
+
+  // Parse emoji
+  const emojiKey = normalizeEmojiKey(emojiRaw);
+  if (!emojiKey) {
+    await message.reply("❌ Invalid emoji. Use a unicode emoji or a custom emoji like `:name:id` or `<:name:id>`.").catch(() => {});
+    return;
+  }
+
+  // Parse role
+  const roleId = roleRaw.replace(/[<@&>]/g, "");
+  const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
+  if (!role) {
+    await message.reply("❌ Role not found. Mention the role or use its ID.").catch(() => {});
+    return;
+  }
+
+  // Save to database
+  await upsertReactionRoleBinding(
+    message.guild.id,
+    message.channel.id,
+    messageId,
+    emojiKey,
+    role.id,
+    true // remove on unreact
+  );
+
+  // React to the message with the emoji to show it's set up
+  try {
+    // For custom emojis, we need to use the format name:id
+    if (emojiKey.includes(':')) {
+      await targetMessage.react(emojiKey);
+    } else {
+      await targetMessage.react(emojiRaw);
+    }
+  } catch (e) {
+    // Reaction failed, but binding is saved
+    console.error("Failed to react to message:", e);
+  }
+
+  await message.reply(`✅ Reaction role added! Reacting with ${emojiRaw} will give the ${role.name} role.`).catch(() => {});
+}
+
+async function cmdReactionRoleRemove(message, args) {
+  if (args.length < 2) {
+    await message.reply("Usage: `!reactionrole remove <messageId> <emoji>`").catch(() => {});
+    return;
+  }
+
+  const messageId = args[0];
+  const emojiRaw = args[1];
+
+  // Parse emoji
+  const emojiKey = normalizeEmojiKey(emojiRaw);
+  if (!emojiKey) {
+    await message.reply("❌ Invalid emoji.").catch(() => {});
+    return;
+  }
+
+  // Remove from database
+  await removeReactionRoleBinding(message.guild.id, messageId, emojiKey);
+
+  await message.reply(`✅ Reaction role removed for message ${messageId} with emoji ${emojiRaw}.`).catch(() => {});
+}
+
+async function cmdReactionRoleList(message) {
+  const bindings = await getReactionRoleBindings(message.guild.id);
+
+  if (!bindings || bindings.length === 0) {
+    await message.reply("No reaction roles configured.").catch(() => {});
+    return;
+  }
+
+  const lines = [];
+  for (const binding of bindings) {
+    const role = message.guild.roles.cache.get(binding.role_id);
+    const roleName = role ? role.name : `Unknown (${binding.role_id})`;
+    const channelLink = `<#${binding.channel_id}>`;
+    lines.push(`• Message \`${binding.message_id}\` in ${channelLink}: \`${binding.emoji_key}\` → @${roleName}`);
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle("Reaction Roles")
+    .setDescription(lines.join("\n"))
+    .setColor(0x7bc96f);
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
 // Private VC commands
 // ─────────────────────────────────────────────────────
 
@@ -1365,6 +1503,11 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "sync-roles" || cmd === "syncroles") {
     await cmdSyncRoles(message);
+    return true;
+  }
+
+  if (cmd === "reactionrole") {
+    await cmdReactionRole(message, args);
     return true;
   }
 

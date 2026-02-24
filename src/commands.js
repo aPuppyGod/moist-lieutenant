@@ -847,7 +847,11 @@ function parseDurationMs(text) {
 
 async function cmdBan(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?ban <user> [reason]`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?ban <user> [reason]`").catch(() => {});
@@ -887,7 +891,11 @@ async function cmdUnban(message, args) {
 
 async function cmdKick(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?kick <user> [reason]`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?kick <user> [reason]`").catch(() => {});
@@ -914,7 +922,11 @@ async function cmdKick(message, args) {
 
 async function cmdMute(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?mute <user> [duration like 10m] [reason]`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?mute <user> [duration like 10m] [reason]`").catch(() => {});
@@ -941,7 +953,11 @@ async function cmdMute(message, args) {
 
 async function cmdUnmute(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?unmute <user> [reason]`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?unmute <user> [reason]`").catch(() => {});
@@ -993,7 +1009,11 @@ async function cmdPurge(message, args) {
 
 async function cmdWarn(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?warn <user> [reason]`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?warn <user> [reason]`").catch(() => {});
@@ -1017,7 +1037,11 @@ async function cmdWarn(message, args) {
 
 async function cmdWarnings(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?warnings <user>`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?warnings <user>`").catch(() => {});
@@ -1038,7 +1062,11 @@ async function cmdWarnings(message, args) {
 
 async function cmdClearWarns(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?clearwarns <user>`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?clearwarns <user>`").catch(() => {});
@@ -1081,7 +1109,11 @@ async function cmdSlowmode(message, args) {
 
 async function cmdNick(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?nick <user> <new-nickname>`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?nick <user> <new-nickname>`").catch(() => {});
@@ -1101,7 +1133,11 @@ async function cmdNick(message, args) {
 
 async function cmdRole(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?role <user> <role-id>`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?role <user> <role-id>`").catch(() => {});
@@ -1134,7 +1170,11 @@ async function cmdRole(message, args) {
 
 async function cmdSoftban(message, args) {
   if (!(await requireModerator(message))) return;
-  const arg = args[0] || "";
+  const arg = args[0];
+  if (!arg) {
+    await message.reply("Usage: `?softban <user> [reason]`").catch(() => {});
+    return;
+  }
   const pick = await pickUserSmart(message, arg);
   if (!pick || pick.ambiguous) {
     await message.reply("Usage: `?softban <user> [reason]`").catch(() => {});

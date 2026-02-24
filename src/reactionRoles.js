@@ -33,19 +33,32 @@ async function applyReactionRoleOnAdd(reaction, user) {
 
   if (!message) return;
 
-  const emojiKey = normalizeEmojiKey(emojiKeyFromReaction(reaction));
+  const emojiKey = emojiKeyFromReaction(reaction);
   if (!emojiKey) return;
 
+  console.log(`[ReactionRole] Add - Looking for binding: guild=${guild.id}, msg=${message.id}, emoji=${emojiKey}`);
+  
   const binding = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => null);
-  if (!binding?.role_id) return;
+  if (!binding?.role_id) {
+    console.log(`[ReactionRole] No binding found for emoji: ${emojiKey}`);
+    return;
+  }
+
+  console.log(`[ReactionRole] Found binding for emoji ${emojiKey} -> role ${binding.role_id}`);
 
   const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
 
   const role = guild.roles.cache.get(binding.role_id) || await guild.roles.fetch(binding.role_id).catch(() => null);
-  if (!role) return;
+  if (!role) {
+    console.log(`[ReactionRole] Role ${binding.role_id} not found`);
+    return;
+  }
 
-  await member.roles.add(role).catch(() => {});
+  console.log(`[ReactionRole] Adding role ${role.name} to ${member.user.tag}`);
+  await member.roles.add(role).catch((err) => {
+    console.error(`[ReactionRole] Failed to add role:`, err);
+  });
 }
 
 async function applyReactionRoleOnRemove(reaction, user) {
@@ -58,8 +71,10 @@ async function applyReactionRoleOnRemove(reaction, user) {
 
   if (!message) return;
 
-  const emojiKey = normalizeEmojiKey(emojiKeyFromReaction(reaction));
+  const emojiKey = emojiKeyFromReaction(reaction);
   if (!emojiKey) return;
+
+  console.log(`[ReactionRole] Remove - Looking for binding: guild=${guild.id}, msg=${message.id}, emoji=${emojiKey}`);
 
   const binding = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => null);
   if (!binding?.role_id) return;
@@ -71,7 +86,10 @@ async function applyReactionRoleOnRemove(reaction, user) {
   const role = guild.roles.cache.get(binding.role_id) || await guild.roles.fetch(binding.role_id).catch(() => null);
   if (!role) return;
 
-  await member.roles.remove(role).catch(() => {});
+  console.log(`[ReactionRole] Removing role ${role.name} from ${member.user.tag}`);
+  await member.roles.remove(role).catch((err) => {
+    console.error(`[ReactionRole] Failed to remove role:`, err);
+  });
 }
 
 module.exports = {

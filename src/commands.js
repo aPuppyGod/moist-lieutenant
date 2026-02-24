@@ -1205,6 +1205,8 @@ async function cmdReactionRoleAdd(message, args) {
     return;
   }
 
+  console.log(`[ReactionRole] Saving binding: emoji input="${emojiRaw}" -> normalized key="${emojiKey}"`);
+
   // Parse role
   const roleId = roleRaw.replace(/[<@&>]/g, "");
   const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
@@ -1222,6 +1224,8 @@ async function cmdReactionRoleAdd(message, args) {
     role.id,
     true // remove on unreact
   );
+
+  console.log(`[ReactionRole] Saved: guild=${message.guild.id}, msg=${messageId}, emoji="${emojiKey}", role=${role.id}`);
 
   // React to the message with the emoji to show it's set up
   try {

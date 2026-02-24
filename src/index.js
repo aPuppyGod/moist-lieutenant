@@ -1054,13 +1054,14 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
   );
   if (isPrivateVC) return;
 
+  const executor = await getAuditExecutor(newChannel.guild, AuditLogEvent.ChannelUpdate, newChannel.id);
   const tracked = findRecentModAction({
     guildId: newChannel.guild.id,
     action: "channel_update",
     matcher: (data) => data?.channelId === newChannel.id,
     ttlMs: 60_000
   });
-  const actorLabel = tracked?.actorId ? await labelFromUserId(newChannel.guild, tracked.actorId) : "Unknown";
+  const actorLabel = await resolveActionActorLabel(newChannel.guild, executor, tracked?.actorId);
 
   const changeLines = [];
   if (nameChanged) changeLines.push(`Name: ${oldChannel.name || "(unknown)"} → ${newChannel.name || "(unknown)"}`);
@@ -1069,47 +1070,74 @@ client.on(Events.ChannelUpdate, async (oldChannel, newChannel) => {
 
   await sendGuildLog(newChannel.guild, {
     eventKey: "channel_update",
-    actorUserId: tracked?.actorId || null,
+    actorUserId: tracked?.actorId || executor?.id || null,
     color: LOG_THEME.info,
     title: "🛠️ Channel Updated",
     sourceChannelId: newChannel.id,
     description: `${channelLabel(newChannel)} was updated.`,
     fields: [
       { name: "Changes", value: changeLines.join("\n") || "Updated" },
-      { name: "Updated By", value: actorLabel || "Unknown", inline: true }
+      { name: "Updated By", value: actorLabel, inline: true }
     ]
   });
 });
 
 client.on(Events.RoleCreate, async (role) => {
+  const executor = await getAuditExecutor(role.guild, AuditLogEvent.RoleCreate, role.id);
   await sendGuildLog(role.guild, {
     eventKey: "role_create",
+    actorUserId: executor?.id || null,
     color: LOG_THEME.mod,
     title: "🏷️ Role Created",
-    description: `Role @${role.name} was created.`
+    description: `Role @${role.name} was created.`,
+    fields: executor ? [{ name: "Created By", value: userLabel(executor), inline: true }] : []
   });
 });
 
 client.on(Events.RoleDelete, async (role) => {
+  const executor = await getAuditExecutor(role.guild, AuditLogEvent.RoleDelete, role.id);
   await sendGuildLog(role.guild, {
     eventKey: "role_delete",
+    actorUserId: executor?.id || null,
     color: LOG_THEME.warn,
     title: "🗑️ Role Deleted",
-    description: `Role @${role.name} was deleted.`
+    description: `Role @${role.name} was deleted.`,
+    fields: executor ? [{ name: "Deleted By", value: userLabel(executor), inline: true }] : []
   });
 });
 
 client.on(Events.RoleUpdate, async (oldRole, newRole) => {
-  if (oldRole.name === newRole.name && oldRole.hexColor === newRole.hexColor) return;
+  const changes = [];
+  if (oldRole.name !== newRole.name) {
+    changes.push({ name: "Name", value: `${oldRole.name} → ${newRole.name}`, inline: true });
+  }
+  if (oldRole.hexColor !== newRole.hexColor) {
+    changes.push({ name: "Color", value: `${oldRole.hexColor} → ${newRole.hexColor}`, inline: true });
+  }
+  if (oldRole.permissions.bitfield !== newRole.permissions.bitfield) {
+    changes.push({ name: "Permissions", value: "Changed", inline: true });
+  }
+  if (oldRole.hoist !== newRole.hoist) {
+    changes.push({ name: "Display Separately", value: `${oldRole.hoist} → ${newRole.hoist}`, inline: true });
+  }
+  if (oldRole.mentionable !== newRole.mentionable) {
+    changes.push({ name: "Mentionable", value: `${oldRole.mentionable} → ${newRole.mentionable}`, inline: true });
+  }
+  
+  if (!changes.length) return;
+  
+  const executor = await getAuditExecutor(newRole.guild, AuditLogEvent.RoleUpdate, newRole.id);
+  if (executor) {
+    changes.push({ name: "Updated By", value: userLabel(executor), inline: true });
+  }
+  
   await sendGuildLog(newRole.guild, {
     eventKey: "role_update",
+    actorUserId: executor?.id || null,
     color: LOG_THEME.mod,
     title: "🎨 Role Updated",
     description: `Role @${newRole.name} was updated.`,
-    fields: [
-      { name: "Name", value: `${oldRole.name} → ${newRole.name}`, inline: true },
-      { name: "Color", value: `${oldRole.hexColor} → ${newRole.hexColor}`, inline: true }
-    ]
+    fields: changes
   });
 });
 
@@ -1120,14 +1148,36 @@ client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
   if (oldGuild.name !== newGuild.name) {
     changes.push(`Name: ${oldGuild.name} → ${newGuild.name}`);
   }
+  if (oldGuild.description !== newGuild.description) {
+    changes.push(`Description: ${oldGuild.description || "(none)"} → ${newGuild.description || "(none)"}`);
+  }
   if (oldGuild.icon !== newGuild.icon) {
     changes.push("Server icon changed");
   }
   if (oldGuild.banner !== newGuild.banner) {
     changes.push("Server banner changed");
   }
+  if (oldGuild.splash !== newGuild.splash) {
+    changes.push("Invite splash changed");
+  }
+  if (oldGuild.vanityURLCode !== newGuild.vanityURLCode) {
+    changes.push(`Vanity URL: ${oldGuild.vanityURLCode || "(none)"} → ${newGuild.vanityURLCode || "(none)"}`);
+  }
   if (oldGuild.verificationLevel !== newGuild.verificationLevel) {
     changes.push(`Verification level: ${oldGuild.verificationLevel} → ${newGuild.verificationLevel}`);
+  }
+  if (oldGuild.explicitContentFilter !== newGuild.explicitContentFilter) {
+    changes.push(`Explicit content filter: ${oldGuild.explicitContentFilter} → ${newGuild.explicitContentFilter}`);
+  }
+  if (oldGuild.defaultMessageNotifications !== newGuild.defaultMessageNotifications) {
+    const oldNotif = oldGuild.defaultMessageNotifications === 0 ? "All Messages" : "Only Mentions";
+    const newNotif = newGuild.defaultMessageNotifications === 0 ? "All Messages" : "Only Mentions";
+    changes.push(`Default notifications: ${oldNotif} → ${newNotif}`);
+  }
+  if (oldGuild.mfaLevel !== newGuild.mfaLevel) {
+    const oldMfa = oldGuild.mfaLevel === 0 ? "None" : "Elevated";
+    const newMfa = newGuild.mfaLevel === 0 ? "None" : "Elevated";
+    changes.push(`2FA requirement: ${oldMfa} → ${newMfa}`);
   }
   if (oldGuild.afkChannelId !== newGuild.afkChannelId) {
     changes.push(`AFK channel: ${oldGuild.afkChannelId ? channelLinkFromId(newGuild, oldGuild.afkChannelId) : "none"} → ${newGuild.afkChannelId ? channelLinkFromId(newGuild, newGuild.afkChannelId) : "none"}`);
@@ -1143,6 +1193,9 @@ client.on(Events.GuildUpdate, async (oldGuild, newGuild) => {
   }
   if (oldGuild.publicUpdatesChannelId !== newGuild.publicUpdatesChannelId) {
     changes.push(`Updates channel: ${oldGuild.publicUpdatesChannelId ? channelLinkFromId(newGuild, oldGuild.publicUpdatesChannelId) : "none"} → ${newGuild.publicUpdatesChannelId ? channelLinkFromId(newGuild, newGuild.publicUpdatesChannelId) : "none"}`);
+  }
+  if (oldGuild.preferredLocale !== newGuild.preferredLocale) {
+    changes.push(`Language: ${oldGuild.preferredLocale} → ${newGuild.preferredLocale}`);
   }
 
   if (!changes.length) return;

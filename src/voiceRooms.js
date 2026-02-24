@@ -10,7 +10,7 @@ async function onVoiceStateUpdate(oldState, newState, client) {
   const guild = newState.guild || oldState.guild;
   if (!guild) return;
 
-  const createName = (process.env.CREATE_VC_NAME || "Open private").toLowerCase();
+  const createChannelId = process.env.CREATE_VC_CHANNEL_ID || "1475639255899570306";
   const emptyMinutes = parseInt(process.env.PRIVATE_VC_EMPTY_MINUTES || "5", 10);
   const now = Date.now();
 
@@ -23,7 +23,7 @@ async function onVoiceStateUpdate(oldState, newState, client) {
   if (!oldState.channelId && newState.channelId) {
     const joined = newState.channel;
 
-    if (joined && joined.name.toLowerCase() === createName) {
+    if (joined && joined.id === createChannelId) {
       const owner = newState.member;
       if (!owner) return;
 

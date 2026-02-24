@@ -279,8 +279,7 @@ async function cmdPublicCommands(message) {
     "`!commands` `/commands`",
     "`!rank [user]` `/rank`",
     "`!leaderboard [page]` `/leaderboard`",
-    "`!moist-lieutenant` - Get website URL",
-    "`!voice-limit/lock/unlock/rename/ban` and matching `/voice-*`"
+    "`!moist-lieutenant` - Get website URL"
   ]);
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -292,21 +291,23 @@ async function cmdModCommands(message) {
     await message.reply("Only the configured mod role can use this command list.").catch(() => {});
     return;
   }
+  const settings = await getGuildSettings(message.guild.id);
+  const prefix = settings.command_prefix || LEGACY_PREFIX;
   const embed = compactEmbed("Moderation Commands", [
     "`!mod-role <role-id>` `/mod-role`",
-    "`?ban <user> [reason]` `/ban`",
-    "`?unban <user-id> [reason]` `/unban`",
-    "`?kick <user> [reason]` `/kick`",
-    "`?mute <user> [duration] [reason]` `/mute`",
-    "`?unmute <user> [reason]` `/unmute`",
-    "`?purge <count>` `/purge`",
-    "`?warn <user> [reason]` `/warn`",
-    "`?warnings <user>` `/warnings`",
-    "`?clearwarns <user>` `/clearwarns`",
-    "`?nick <user> <nick>` `/nick`",
-    "`?role <user> <role-id>` `/role`",
-    "`?softban <user> [reason]` `/softban`",
-    "`?lock` `?unlock` `?slowmode <seconds>` and matching `/lock` `/unlock` `/slowmode`"
+    `\`${prefix}ban <user> [reason]\` \`/ban\``,
+    `\`${prefix}unban <user-id> [reason]\` \`/unban\``,
+    `\`${prefix}kick <user> [reason]\` \`/kick\``,
+    `\`${prefix}mute <user> [duration] [reason]\` \`/mute\``,
+    `\`${prefix}unmute <user> [reason]\` \`/unmute\``,
+    `\`${prefix}purge <count>\` \`/purge\``,
+    `\`${prefix}warn <user> [reason]\` \`/warn\``,
+    `\`${prefix}warnings <user>\` \`/warnings\``,
+    `\`${prefix}clearwarns <user>\` \`/clearwarns\``,
+    `\`${prefix}nick <user> <nick>\` \`/nick\``,
+    `\`${prefix}role <user> <role-id>\` \`/role\``,
+    `\`${prefix}softban <user> [reason]\` \`/softban\``,
+    `\`${prefix}lock\` \`${prefix}unlock\` \`${prefix}slowmode <seconds>\` and matching \`/lock\` \`/unlock\` \`/slowmode\``
   ]);
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -574,14 +575,8 @@ async function cmdRank(message, args) {
   };
   let fontFamily = fontMap[fontKey] || "'Open Sans',sans-serif";
   let fontColor = prefs.fontcolor || "#fff";
-  // Nickname or username
-  let displayName = targetMember?.displayName || targetUser.username;
-  // Check if displayName is renderable in font (basic check: all chars in ASCII or fallback)
-  function isRenderable(str, font) {
-    // For simplicity, fallback if non-ASCII and font is not OpenSans
-    return font === "OpenSans" || /^[\x00-\x7F]*$/.test(str);
-  }
-  if (!isRenderable(displayName, fontKey)) displayName = targetUser.username;
+  // Always use username to prevent rendering issues with special characters in display names
+  let displayName = targetUser.username;
   ctx.font = `bold 28px ${fontFamily}`;
   ctx.fillStyle = fontColor;
   ctx.strokeStyle = "rgba(0,0,0,0.6)";
@@ -666,12 +661,26 @@ async function cmdLeaderboard(message, args) {
     const member = await message.guild.members.fetch(r.user_id).catch(() => null);
     if (member?.user?.tag) name = member.user.tag;
 
+    // Medal emojis for top 3
+    let medal = "";
+    if (rank === 1) medal = "🥇 ";
+    else if (rank === 2) medal = "🥈 ";
+    else if (rank === 3) medal = "🥉 ";
+
     lines.push(
-      `**#${rank}** — ${name} — Level **${r.level}** — XP **${r.xp}**`
+      `${medal}**#${rank}** • ${name}\n` +
+      `\`\`\`Level ${r.level} • ${r.xp.toLocaleString()} XP\`\`\``
     );
   }
 
-  await message.reply(`**Leaderboard (page ${page})**\n` + lines.join("\n")).catch(() => {});
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle(`🏆 ${message.guild.name} Leaderboard`)
+    .setDescription(lines.join("\n"))
+    .setFooter({ text: `Page ${page} • Use !leaderboard <page> to view other pages` })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 async function cmdXp(message, args) {

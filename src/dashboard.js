@@ -1158,7 +1158,7 @@ function htmlTemplate(content, opts = {}) {
       const savedStates = JSON.parse(localStorage.getItem('collapsedSections') || '{}');
       
       sections.forEach((section, index) => {
-        const sectionId = section.dataset.sectionId || `section-${index}`;
+        const sectionId = section.dataset.sectionId || 'section-' + index;
         section.dataset.sectionId = sectionId;
         
         // Set initial state (expanded by default, or use saved state)
@@ -1221,10 +1221,7 @@ function htmlTemplate(content, opts = {}) {
         // Create header
         const header = document.createElement('div');
         header.className = 'collapsible-header';
-        header.innerHTML = `
-          <span class="collapsible-toggle">\u25b6</span>
-          <h3>${h3.innerHTML}</h3>
-        `;
+        header.innerHTML = '<span class="collapsible-toggle">▶</span><h3>' + h3.innerHTML + '</h3>';
         
         // Create content container
         const content = document.createElement('div');
@@ -1261,10 +1258,8 @@ function htmlTemplate(content, opts = {}) {
       
       const buttonContainer = document.createElement('div');
       buttonContainer.style.cssText = 'display: flex; gap: 8px; margin: 16px 0; justify-content: flex-end;';
-      buttonContainer.innerHTML = `
-        <button onclick="expandAllSections()" class="btn" style="padding: 6px 12px; margin: 0; font-size: 0.9em;">▼ Expand All</button>
-        <button onclick="collapseAllSections()" class="btn" style="padding: 6px 12px; margin: 0; font-size: 0.9em;">▲ Collapse All</button>
-      `;
+      buttonContainer.innerHTML = '<button onclick="expandAllSections()" class="btn" style="padding: 6px 12px; margin: 0; font-size: 0.9em;">▼ Expand All</button>' +
+        '<button onclick="collapseAllSections()" class="btn" style="padding: 6px 12px; margin: 0; font-size: 0.9em;">▲ Collapse All</button>';
       
       const firstSection = container.querySelector('.collapsible-section');
       if (firstSection) {

@@ -358,6 +358,87 @@ async function getOpenTickets(guildId) {
   );
 }
 
+// ─────────────────────────────────────────────────────
+// Reaction Role Questions
+// ─────────────────────────────────────────────────────
+
+async function getReactionRoleQuestions(guildId) {
+  const rows = await all(
+    `SELECT id, guild_id, question_text, channel_id, message_id, created_at, updated_at
+     FROM reaction_role_questions
+     WHERE guild_id=?
+     ORDER BY created_at DESC`,
+    [guildId]
+  );
+  return rows || [];
+}
+
+async function getReactionRoleQuestion(questionId) {
+  return await get(
+    `SELECT id, guild_id, question_text, channel_id, message_id, created_at, updated_at
+     FROM reaction_role_questions
+     WHERE id=?`,
+    [questionId]
+  );
+}
+
+async function createReactionRoleQuestion(guildId, questionText) {
+  const result = await run(
+    `INSERT INTO reaction_role_questions (guild_id, question_text)
+     VALUES (?, ?)
+     RETURNING id`,
+    [guildId, questionText]
+  );
+  return result?.lastID || result?.id;
+}
+
+async function updateReactionRoleQuestion(questionId, questionText, channelId, messageId) {
+  await run(
+    `UPDATE reaction_role_questions
+     SET question_text=?, channel_id=?, message_id=?, updated_at=?
+     WHERE id=?`,
+    [questionText, channelId, messageId, Date.now(), questionId]
+  );
+}
+
+async function deleteReactionRoleQuestion(questionId) {
+  await run(`DELETE FROM reaction_role_questions WHERE id=?`, [questionId]);
+}
+
+async function getReactionRoleOptions(questionId) {
+  const rows = await all(
+    `SELECT id, question_id, emoji, label, description, role_ids, position
+     FROM reaction_role_options
+     WHERE question_id=?
+     ORDER BY position ASC, id ASC`,
+    [questionId]
+  );
+  return rows || [];
+}
+
+async function createReactionRoleOption(questionId, emoji, label, description, roleIds, position) {
+  const result = await run(
+    `INSERT INTO reaction_role_options (question_id, emoji, label, description, role_ids, position)
+     VALUES (?, ?, ?, ?, ?, ?)
+     RETURNING id`,
+    [questionId, emoji, label, description, roleIds, position || 0]
+  );
+  return result?.lastID || result?.id;
+}
+
+async function updateReactionRoleOption(optionId, emoji, label, description, roleIds, position) {
+  await run(
+    `UPDATE reaction_role_options
+     SET emoji=?, label=?, description=?, role_ids=?, position=?
+     WHERE id=?`,
+    [emoji, label, description, roleIds, position, optionId]
+  );
+}
+
+async function deleteReactionRoleOption(optionId) {
+  await run(`DELETE FROM reaction_role_options WHERE id=?`, [optionId]);
+}
+
 module.exports = {
   getGuildSettings,
   updateGuildSettings,
@@ -379,6 +460,15 @@ module.exports = {
   getReactionRoleBinding,
   upsertReactionRoleBinding,
   removeReactionRoleBinding,
+  getReactionRoleQuestions,
+  getReactionRoleQuestion,
+  createReactionRoleQuestion,
+  updateReactionRoleQuestion,
+  deleteReactionRoleQuestion,
+  getReactionRoleOptions,
+  createReactionRoleOption,
+  updateReactionRoleOption,
+  deleteReactionRoleOption,
   getTicketSettings,
   upsertTicketSettings,
   getOpenTicketByUser,

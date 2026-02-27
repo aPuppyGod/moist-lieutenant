@@ -4218,6 +4218,266 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
+  // ─────────────────────────────────────────────
+  // Reaction Role Questions
+  // ─────────────────────────────────────────────
+
+  // List all reaction role questions
+  app.get("/guild/:guildId/reaction-questions", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questions = await getReactionRoleQuestions(guildId);
+      return res.json({ questions });
+    } catch (e) {
+      console.error("reaction-questions list error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Create new reaction role question
+  app.post("/guild/:guildId/reaction-questions/create", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionText = String(req.body.question_text || "").trim();
+
+      if (!questionText) return res.status(400).send("Question text required.");
+
+      const questionId = await createReactionRoleQuestion(guildId, questionText);
+      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+    } catch (e) {
+      console.error("reaction-questions create error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Get single question with options (for editing)
+  app.get("/guild/:guildId/reaction-questions/:questionId", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      const options = await getReactionRoleOptions(questionId);
+      return res.json({ question, options });
+    } catch (e) {
+      console.error("reaction-questions get error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Update reaction role question
+  app.post("/guild/:guildId/reaction-questions/:questionId/update", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+      const questionText = String(req.body.question_text || "").trim();
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+      if (!questionText) return res.status(400).send("Question text required.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      await updateReactionRoleQuestion(questionId, questionText, question.channel_id, question.message_id);
+      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+    } catch (e) {
+      console.error("reaction-questions update error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Delete reaction role question
+  app.post("/guild/:guildId/reaction-questions/:questionId/delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      await deleteReactionRoleQuestion(questionId);
+      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+    } catch (e) {
+      console.error("reaction-questions delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Create option for a question
+  app.post("/guild/:guildId/reaction-questions/:questionId/options/create", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+      const emoji = String(req.body.emoji || "").trim();
+      const label = String(req.body.label || "").trim();
+      const description = String(req.body.description || "").trim();
+      const roleIds = String(req.body.role_ids || "").trim();
+      const position = parseInt(req.body.position, 10) || 0;
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+      if (!emoji) return res.status(400).send("Emoji required.");
+      if (!label) return res.status(400).send("Label required.");
+      if (!roleIds) return res.status(400).send("At least one role ID required.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      await createReactionRoleOption(questionId, emoji, label, description, roleIds, position);
+      return res.redirect(`/guild/${guildId}?module=reaction-questions&questionId=${questionId}`);
+    } catch (e) {
+      console.error("reaction-questions option create error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Update option
+  app.post("/guild/:guildId/reaction-questions/:questionId/options/:optionId/update", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+      const optionId = parseInt(req.params.optionId, 10);
+      const emoji = String(req.body.emoji || "").trim();
+      const label = String(req.body.label || "").trim();
+      const description = String(req.body.description || "").trim();
+      const roleIds = String(req.body.role_ids || "").trim();
+      const position = parseInt(req.body.position, 10) || 0;
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+      if (!Number.isInteger(optionId)) return res.status(400).send("Invalid option ID.");
+      if (!emoji) return res.status(400).send("Emoji required.");
+      if (!label) return res.status(400).send("Label required.");
+      if (!roleIds) return res.status(400).send("At least one role ID required.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      await updateReactionRoleOption(optionId, emoji, label, description, roleIds, position);
+      return res.redirect(`/guild/${guildId}?module=reaction-questions&questionId=${questionId}`);
+    } catch (e) {
+      console.error("reaction-questions option update error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Delete option
+  app.post("/guild/:guildId/reaction-questions/:questionId/options/:optionId/delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+      const optionId = parseInt(req.params.optionId, 10);
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+      if (!Number.isInteger(optionId)) return res.status(400).send("Invalid option ID.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      await deleteReactionRoleOption(optionId);
+      return res.redirect(`/guild/${guildId}?module=reaction-questions&questionId=${questionId}`);
+    } catch (e) {
+      console.error("reaction-questions option delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // Send/deploy reaction role question to channel
+  app.post("/guild/:guildId/reaction-questions/:questionId/send", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const questionId = parseInt(req.params.questionId, 10);
+      const channelId = String(req.body.channel_id || "").trim();
+
+      if (!Number.isInteger(questionId)) return res.status(400).send("Invalid question ID.");
+      if (!channelId) return res.status(400).send("Channel ID required.");
+
+      const question = await getReactionRoleQuestion(questionId);
+      if (!question || question.guild_id !== guildId) {
+        return res.status(404).send("Question not found.");
+      }
+
+      const guild = client.guilds.cache.get(guildId);
+      if (!guild) return res.status(404).send("Bot is not in that guild.");
+
+      const channel = await guild.channels.fetch(channelId).catch(() => null);
+      if (!channel || !isTextChannelLike(channel)) {
+        return res.status(400).send("Invalid text channel.");
+      }
+
+      const options = await getReactionRoleOptions(questionId);
+      if (options.length === 0) {
+        return res.status(400).send("Question must have at least one option.");
+      }
+      if (options.length > 25) {
+        return res.status(400).send("Maximum 25 options allowed per question.");
+      }
+
+      // Build the embed
+      const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
+      
+      const embed = new EmbedBuilder()
+        .setTitle(question.question_text)
+        .setColor(0x5865f2)
+        .setDescription("Select an option from the dropdown below to receive the associated roles.")
+        .setFooter({ text: "You can change your selection at any time" });
+
+      // Build the select menu
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId(`reaction_role_select_${questionId}`)
+        .setPlaceholder("Choose an option...");
+
+      for (const option of options) {
+        selectMenu.addOptions({
+          label: option.label,
+          description: option.description || undefined,
+          emoji: option.emoji || undefined,
+          value: String(option.id)
+        });
+      }
+
+      const row = new ActionRowBuilder().addComponents(selectMenu);
+
+      // Send or edit the message
+      let message;
+      if (question.message_id) {
+        try {
+          message = await channel.messages.fetch(question.message_id);
+          await message.edit({ embeds: [embed], components: [row] });
+        } catch (err) {
+          // Message not found, send new one
+          message = await channel.send({ embeds: [embed], components: [row] });
+        }
+      } else {
+        message = await channel.send({ embeds: [embed], components: [row] });
+      }
+
+      // Update question with channel and message IDs
+      await updateReactionRoleQuestion(questionId, question.question_text, channelId, message.id);
+
+      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+    } catch (e) {
+      console.error("reaction-questions send error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
   // Render needs 0.0.0.0
   app.listen(port, "0.0.0.0", () => {
     console.log(`Dashboard running on port ${port}`);

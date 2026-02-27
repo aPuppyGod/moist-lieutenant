@@ -20,6 +20,7 @@ const { getIgnoredChannels } = require("./settings");
 const { getLoggingExclusions } = require("./settings");
 const { getLoggingEventConfigs } = require("./settings");
 const { getLoggingActorExclusions } = require("./settings");
+const { getReactionRoleQuestion, getReactionRoleOptions } = require("./settings");
 const { findRecentModAction } = require("./modActionTracker");
 const { startDashboard } = require("./dashboard");
 const { applyReactionRoleOnAdd, applyReactionRoleOnRemove } = require("./reactionRoles");
@@ -692,6 +693,91 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
 });
 
 // ─────────────────────────────────────────────────────
+// Reaction Role Questions Handler
+// ─────────────────────────────────────────────────────
+
+async function handleReactionRoleSelection(interaction) {
+  if (!interaction.isStringSelectMenu()) return false;
+  if (!interaction.customId.startsWith("reaction_role_select_")) return false;
+
+  try {
+    const questionId = parseInt(interaction.customId.replace("reaction_role_select_", ""), 10);
+    if (!Number.isInteger(questionId)) {
+      await interaction.reply({ content: "❌ Invalid question ID.", ephemeral: true });
+      return true;
+    }
+
+    const optionId = parseInt(interaction.values[0], 10);
+    if (!Number.isInteger(optionId)) {
+      await interaction.reply({ content: "❌ Invalid option ID.", ephemeral: true });
+      return true;
+    }
+
+    // Fetch the option from database
+    const options = await getReactionRoleOptions(questionId);
+    const selectedOption = options.find((opt) => opt.id === optionId);
+
+    if (!selectedOption) {
+      await interaction.reply({ content: "❌ Option not found.", ephemeral: true });
+      return true;
+    }
+
+    // Parse role IDs
+    const roleIds = selectedOption.role_ids.split(",").map((id) => id.trim()).filter(Boolean);
+
+    if (roleIds.length === 0) {
+      await interaction.reply({ content: "❌ No roles configured for this option.", ephemeral: true });
+      return true;
+    }
+
+    // Grant roles to the user
+    const member = interaction.member;
+    const grantedRoles = [];
+    const failedRoles = [];
+
+    for (const roleId of roleIds) {
+      try {
+        const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+        if (role) {
+          await member.roles.add(role);
+          grantedRoles.push(role.name);
+        } else {
+          failedRoles.push(roleId);
+        }
+      } catch (err) {
+        console.error(`Failed to grant role ${roleId}:`, err);
+        failedRoles.push(roleId);
+      }
+    }
+
+    // Build response message
+    let responseMessage = "";
+    if (grantedRoles.length > 0) {
+      responseMessage += `✅ **Roles granted:** ${grantedRoles.join(", ")}`;
+    }
+    if (failedRoles.length > 0) {
+      if (responseMessage) responseMessage += "\n";
+      responseMessage += `⚠️ **Failed to grant some roles:** ${failedRoles.join(", ")}`;
+    }
+
+    await interaction.reply({
+      content: responseMessage || "❌ No roles were granted.",
+      ephemeral: true
+    });
+
+    return true;
+  } catch (err) {
+    console.error("Reaction role selection error:", err);
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: "❌ An error occurred while granting roles.", ephemeral: true });
+    } else {
+      await interaction.reply({ content: "❌ An error occurred while granting roles.", ephemeral: true });
+    }
+    return true;
+  }
+}
+
+// ─────────────────────────────────────────────────────
 // Login
 // ─────────────────────────────────────────────────────
 
@@ -709,6 +795,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     const handledTicket = await handleTicketInteraction(interaction);
     if (handledTicket) return;
+
+    const handledReactionRole = await handleReactionRoleSelection(interaction);
+    if (handledReactionRole) return;
 
     await handleSlashCommand(interaction);
   } catch (err) {

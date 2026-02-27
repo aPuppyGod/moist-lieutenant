@@ -345,6 +345,33 @@ async function initDb() {
     )
   `);
 
+  // Reaction role questions (for multi-option role selection)
+  await run(`
+    CREATE TABLE IF NOT EXISTS reaction_role_questions (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      question_text TEXT NOT NULL,
+      channel_id TEXT DEFAULT NULL,
+      message_id TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      updated_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  // Reaction role options (answers to questions)
+  await run(`
+    CREATE TABLE IF NOT EXISTS reaction_role_options (
+      id BIGSERIAL PRIMARY KEY,
+      question_id BIGINT NOT NULL,
+      emoji TEXT NOT NULL,
+      label TEXT NOT NULL,
+      description TEXT,
+      role_ids TEXT NOT NULL,
+      position INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (question_id) REFERENCES reaction_role_questions(id) ON DELETE CASCADE
+    )
+  `);
+
   // Ticket system settings per guild
   await run(`
     CREATE TABLE IF NOT EXISTS ticket_settings (

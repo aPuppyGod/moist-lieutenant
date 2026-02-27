@@ -1100,6 +1100,20 @@ function startDashboard(client) {
       return next();
     }
 
+    // Helper: check if channel is text-like
+    function isTextChannelLike(channel) {
+      if (!channel) return false;
+      return channel.isTextBased && channel.isTextBased();
+    }
+
+    // Helper: get redirect URL with module preserved
+    function getModuleRedirect(guildId, module) {
+      if (module) {
+        return `/guild/${guildId}?module=${encodeURIComponent(module)}`;
+      }
+      return `/guild/${guildId}`;
+    }
+
     function getPrimaryGuild() {
       return client.guilds.cache.first() || null;
     }
@@ -3912,7 +3926,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           await setCustomizationUnlock(guildId, key, val);
         }
       }
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'customization'));
     } catch (e) {
       console.error("customization-unlocks save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -3941,7 +3955,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         command_prefix: commandPrefix,
         new_account_warn_days: newAccountWarnDays
       });
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("mod-settings save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -3974,7 +3988,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const targetId = String(req.body.target_id || "").trim();
       if (!targetId) return res.status(400).send("Target ID required.");
       await removeLoggingExclusion(guildId, targetId);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'logging'));
     } catch (e) {
       console.error("logging-exclusions delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -3989,7 +4003,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         const channelId = String(req.body[`channel_${def.key}`] || "").trim() || null;
         await upsertLoggingEventConfig(guildId, def.key, enabled, channelId);
       }
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'logging'));
     } catch (e) {
       console.error("logging-events save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4003,7 +4017,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const roleId = String(req.body.role_id || "").trim();
       if (userId) await addLoggingActorExclusion(guildId, userId, "user");
       if (roleId) await addLoggingActorExclusion(guildId, roleId, "role");
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'logging'));
     } catch (e) {
       console.error("logging-actors add error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4016,7 +4030,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const targetId = String(req.body.target_id || "").trim();
       if (!targetId) return res.status(400).send("Target ID required.");
       await removeLoggingActorExclusion(guildId, targetId);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'logging'));
     } catch (e) {
       console.error("logging-actors delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4037,7 +4051,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       await upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey, roleId, removeOnUnreact);
-      return res.redirect(`/guild/${guildId}?module=reactionroles`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-roles add error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4052,7 +4066,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!messageId || !emojiKey) return res.status(400).send("Message ID and emoji are required.");
 
       await removeReactionRoleBinding(guildId, messageId, emojiKey);
-      return res.redirect(`/guild/${guildId}?module=reactionroles`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-roles delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4084,7 +4098,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         delete_on_close: deleteOnClose
       });
 
-      return res.redirect(`/guild/${guildId}?module=tickets`);
+      return res.redirect(getModuleRedirect(guildId, 'tickets'));
     } catch (e) {
       console.error("tickets settings save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4100,7 +4114,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const result = await sendTicketPanel(guild);
       if (!result.ok) return res.status(400).send(result.reason || "Could not send ticket panel.");
 
-      return res.redirect(`/guild/${guildId}?module=tickets`);
+      return res.redirect(getModuleRedirect(guildId, 'tickets'));
     } catch (e) {
       console.error("tickets panel send error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4119,7 +4133,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const result = await closeTicketChannel(guild, channelId, req.user?.id || null);
       if (!result.ok) return res.status(400).send(result.reason || "Could not close ticket.");
 
-      return res.redirect(`/guild/${guildId}?module=tickets`);
+      return res.redirect(getModuleRedirect(guildId, 'tickets'));
     } catch (e) {
       console.error("tickets close error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4162,7 +4176,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         [newXp, newLevel, guildId, userId]
       );
 
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("xp manage error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4179,7 +4193,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!Number.isFinite(warningId)) return res.status(400).send("Invalid warning ID.");
 
       await run(`DELETE FROM mod_warnings WHERE guild_id=? AND id=?`, [guildId, warningId]);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("warnings delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4193,7 +4207,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!/^\d{15,21}$/.test(userId)) return res.status(400).send("Invalid user ID.");
 
       await run(`DELETE FROM mod_warnings WHERE guild_id=? AND user_id=?`, [guildId, userId]);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("warnings clear-user error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4213,7 +4227,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
          ON CONFLICT (guild_id) DO UPDATE SET claim_all_done=EXCLUDED.claim_all_done`,
         [guildId, lockValue]
       );
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'voice'));
     } catch (e) {
       console.error("claim-lock save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4233,7 +4247,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         `DELETE FROM private_voice_rooms WHERE guild_id=? AND voice_channel_id=?`,
         [guildId, voiceChannelId]
       );
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'voice'));
     } catch (e) {
       console.error("private room delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4257,7 +4271,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       };
 
       await updateGuildSettings(guildId, patch);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("settings save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4279,7 +4293,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         level_up_message
       });
 
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("levelup-settings error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4325,7 +4339,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         console.error("Failed to send test message:", err);
       });
 
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("test-levelup error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4345,7 +4359,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!roleId) return res.status(400).send("Role ID required.");
 
       await setLevelRole(guildId, level, roleId);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("level-roles save error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4359,7 +4373,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!Number.isInteger(level)) return res.status(400).send("Invalid level.");
 
       await deleteLevelRole(guildId, level);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("level-roles delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4384,7 +4398,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!["text", "voice"].includes(channelType)) return res.status(400).send("Invalid channel type.");
 
       await addIgnoredChannel(guildId, channelId, channelType);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("ignored-channels add error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4399,7 +4413,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!channelId) return res.status(400).send("Channel ID required.");
 
       await removeIgnoredChannel(guildId, channelId);
-      return res.redirect(`/guild/${guildId}`);
+      return res.redirect(getModuleRedirect(guildId, 'xp'));
     } catch (e) {
       console.error("ignored-channels delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4431,7 +4445,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (!questionText) return res.status(400).send("Question text required.");
 
       const questionId = await createReactionRoleQuestion(guildId, questionText);
-      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions create error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4475,7 +4489,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       await updateReactionRoleQuestion(questionId, questionText, question.channel_id, question.message_id);
-      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions update error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4496,7 +4510,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       await deleteReactionRoleQuestion(questionId);
-      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4525,7 +4539,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       await createReactionRoleOption(questionId, emoji, label, description, roleIds, position);
-      return res.redirect(`/guild/${guildId}?module=reaction-questions&questionId=${questionId}`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions option create error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4556,7 +4570,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       await updateReactionRoleOption(optionId, emoji, label, description, roleIds, position);
-      return res.redirect(`/guild/${guildId}?module=reaction-questions&questionId=${questionId}`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions option update error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4579,7 +4593,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       await deleteReactionRoleOption(optionId);
-      return res.redirect(`/guild/${guildId}?module=reaction-questions&questionId=${questionId}`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions option delete error:", e);
       return res.status(500).send("Internal Server Error");
@@ -4659,7 +4673,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       // Update question with channel and message IDs
       await updateReactionRoleQuestion(questionId, question.question_text, channelId, message.id);
 
-      return res.redirect(`/guild/${guildId}?module=reaction-questions`);
+      return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-questions send error:", e);
       return res.status(500).send("Internal Server Error");

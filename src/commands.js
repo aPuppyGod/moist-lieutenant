@@ -1852,7 +1852,9 @@ function buildSlashCommands() {
     { name: "softban", description: "Softban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "lock", description: "Lock channel", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
     { name: "unlock", description: "Unlock channel", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
-    { name: "slowmode", description: "Set channel slowmode", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "seconds", description: "0-21600", required: true }] }
+    { name: "slowmode", description: "Set channel slowmode", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "seconds", description: "0-21600", required: true }] },
+    // Message context menu command
+    { name: "Purge Until Here", type: 3, default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) }
   ];
 }
 
@@ -1888,6 +1890,78 @@ function buildSyntheticMessage(interaction, cmdName, args) {
 }
 
 async function handleSlashCommand(interaction) {
+  // Handle message context menu commands
+  if (interaction.isMessageContextMenuCommand()) {
+    const name = interaction.commandName;
+    
+    if (name === "Purge Until Here") {
+      // Check permissions
+      if (!(await isModerator(interaction.member))) {
+        await interaction.reply({ content: "You need mod permissions to use this command.", ephemeral: true });
+        return true;
+      }
+
+      const targetMessage = interaction.targetMessage;
+      if (!targetMessage) {
+        await interaction.reply({ content: "❌ Could not find the target message.", ephemeral: true });
+        return true;
+      }
+
+      await interaction.deferReply({ ephemeral: true });
+
+      try {
+        // Fetch messages after the target message
+        const messages = await interaction.channel.messages.fetch({ 
+          after: targetMessage.id,
+          limit: 100 
+        });
+
+        if (messages.size === 0) {
+          await interaction.editReply({ content: "⚠️ No messages found after the selected message." });
+          return true;
+        }
+
+        // Filter out messages older than 14 days (Discord API limitation)
+        const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+        const deletableMessages = messages.filter(msg => msg.createdTimestamp > twoWeeksAgo);
+
+        if (deletableMessages.size === 0) {
+          await interaction.editReply({ content: "⚠️ All messages are older than 14 days and cannot be bulk deleted." });
+          return true;
+        }
+
+        // Bulk delete the messages
+        const deleted = await interaction.channel.bulkDelete(deletableMessages, true);
+        
+        // Track moderation action
+        trackModerationAction(
+          { 
+            guild: interaction.guild, 
+            author: interaction.user,
+            member: interaction.member,
+            channel: interaction.channel
+          }, 
+          "message_bulk_delete", 
+          { channelId: interaction.channel.id, count: deleted.size }
+        );
+
+        await interaction.editReply({ 
+          content: `✅ Purged ${deleted.size} message(s) from after the selected message.` 
+        });
+      } catch (err) {
+        console.error("Purge Until Here error:", err);
+        await interaction.editReply({ 
+          content: "❌ An error occurred while purging messages. Some messages may be too old or I may lack permissions." 
+        });
+      }
+
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Handle chat input commands
   if (!interaction.isChatInputCommand()) return false;
 
   const name = interaction.commandName;

@@ -533,6 +533,91 @@ client.on(Events.MessageCreate, async (message) => {
   const isIgnored = ignoredChannels.some(c => c.channel_id === message.channel.id && c.channel_type === "text");
   if (isIgnored) return;
 
+  // ─── Auto-Moderation ───
+  const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [message.guild.id]);
+  if (automodSettings) {
+    let violationReason = null;
+
+    // Check spam (repeated messages)
+    if (automodSettings.spam_enabled) {
+      const spamThreshold = automodSettings.spam_threshold || 5;
+      const recentMessages = [...message.channel.messages.cache.values()]
+        .filter(m => m.author.id === message.author.id && Date.now() - m.createdTimestamp < 10000)
+        .slice(0, 20);
+      
+      if (recentMessages.length >= spamThreshold) {
+        const sameContent = recentMessages.filter(m => m.content === message.content).length;
+        if (sameContent >= 3) {
+          violationReason = "spam (repeated messages)";
+        }
+      }
+    }
+
+    // Check invite links
+    if (!violationReason && automodSettings.invites_enabled) {
+      const inviteRegex = /discord\.gg\/[a-zA-Z0-9]+|discord\.com\/invite\/[a-zA-Z0-9]+|discordapp\.com\/invite\/[a-zA-Z0-9]+/gi;
+      if (inviteRegex.test(message.content)) {
+        violationReason = "Discord invite link";
+      }
+    }
+
+    // Check external links
+    if (!violationReason && automodSettings.links_enabled) {
+      const linkRegex = /https?:\/\/[^\s]+/gi;
+      if (linkRegex.test(message.content)) {
+        violationReason = "external link";
+      }
+    }
+
+    // Check excessive caps
+    if (!violationReason && automodSettings.caps_enabled) {
+      const capsThreshold = automodSettings.caps_threshold || 70;
+      if (message.content.length > 10) {
+        const upperCount = (message.content.match(/[A-Z]/g) || []).length;
+        const letterCount = (message.content.match(/[A-Za-z]/g) || []).length;
+        if (letterCount > 0 && (upperCount / letterCount) * 100 > capsThreshold) {
+          violationReason = "excessive caps";
+        }
+      }
+    }
+
+    // Check excessive mentions
+    if (!violationReason && automodSettings.mentions_enabled) {
+      const mentionThreshold = automodSettings.mentions_threshold || 5;
+      const mentionCount = (message.mentions.users.size || 0) + (message.mentions.roles.size || 0);
+      if (mentionCount >= mentionThreshold) {
+        violationReason = "excessive mentions";
+      }
+    }
+
+    // Check attachments
+    if (!violationReason && automodSettings.attachments_enabled) {
+      if (message.attachments.size > 0) {
+        violationReason = "attachments not allowed";
+      }
+    }
+
+    // If violation found, delete message and warn user
+    if (violationReason) {
+      try {
+        await message.delete();
+        const warningEmbed = new EmbedBuilder()
+          .setColor("#ff4444")
+          .setTitle("⚠️ Auto-Moderation")
+          .setDescription(`${message.author}, your message was deleted: **${violationReason}**`)
+          .setTimestamp();
+        
+        const warningMsg = await message.channel.send({ embeds: [warningEmbed] });
+        setTimeout(() => warningMsg.delete().catch(() => {}), 5000);
+        
+        console.log(`[AUTOMOD] Deleted message from ${message.author.tag} in ${message.guild.name}: ${violationReason}`);
+        return; // Don't process XP for deleted messages
+      } catch (err) {
+        console.error("Auto-mod deletion error:", err);
+      }
+    }
+  }
+
   const guildId = message.guild.id;
   const userId = message.author.id;
 

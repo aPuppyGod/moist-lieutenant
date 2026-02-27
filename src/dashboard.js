@@ -3270,6 +3270,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const openTickets = await getOpenTickets(guildId);
     const welcomeSettings = await get(`SELECT * FROM welcome_goodbye_settings WHERE guild_id=?`, [guildId]);
     const autoRoles = await all(`SELECT * FROM auto_roles WHERE guild_id=?`, [guildId]);
+    const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [guildId]);
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
     const activeModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
@@ -3387,6 +3388,56 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </tr>
         `).join("")}
       </table>
+
+      <h3>🤖 Auto-Moderation</h3>
+      <form method="post" action="/guild/${guildId}/automod-settings">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="spam_enabled" ${automodSettings?.spam_enabled ? "checked" : ""} />
+          <span>Block Spam (repeated messages)</span>
+        </label>
+        <label style="margin-left:24px;">Messages in 10s:
+          <input type="number" name="spam_threshold" value="${automodSettings?.spam_threshold || 5}" min="2" max="20" style="width:80px;" />
+        </label>
+        <br/><br/>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="invites_enabled" ${automodSettings?.invites_enabled ? "checked" : ""} />
+          <span>Block Discord Invite Links</span>
+        </label>
+        <br/>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="links_enabled" ${automodSettings?.links_enabled ? "checked" : ""} />
+          <span>Block External Links</span>
+        </label>
+        <br/>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="caps_enabled" ${automodSettings?.caps_enabled ? "checked" : ""} />
+          <span>Block Excessive Caps</span>
+        </label>
+        <label style="margin-left:24px;">Caps % threshold:
+          <input type="number" name="caps_threshold" value="${automodSettings?.caps_threshold || 70}" min="50" max="100" style="width:80px;" />
+        </label>
+        <br/><br/>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="mentions_enabled" ${automodSettings?.mentions_enabled ? "checked" : ""} />
+          <span>Block Excessive Mentions</span>
+        </label>
+        <label style="margin-left:24px;">Max mentions:
+          <input type="number" name="mentions_threshold" value="${automodSettings?.mentions_threshold || 5}" min="2" max="20" style="width:80px;" />
+        </label>
+        <br/><br/>
+
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="attachments_enabled" ${automodSettings?.attachments_enabled ? "checked" : ""} />
+          <span>Block All Attachments</span>
+        </label>
+        <br/><br/>
+
+        <button type="submit">Save Auto-Mod Settings</button>
+      </form>
       ` : ""}
 
       ${activeModule === "welcome" ? `
@@ -4151,6 +4202,47 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'welcome'));
     } catch (e) {
       console.error("auto-roles delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/automod-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const spamEnabled = req.body.spam_enabled === "on" ? 1 : 0;
+      const spamThreshold = parseInt(req.body.spam_threshold || "5", 10);
+      const invitesEnabled = req.body.invites_enabled === "on" ? 1 : 0;
+      const linksEnabled = req.body.links_enabled === "on" ? 1 : 0;
+      const capsEnabled = req.body.caps_enabled === "on" ? 1 : 0;
+      const capsThreshold = parseInt(req.body.caps_threshold || "70", 10);
+      const mentionsEnabled = req.body.mentions_enabled === "on" ? 1 : 0;
+      const mentionsThreshold = parseInt(req.body.mentions_threshold || "5", 10);
+      const attachmentsEnabled = req.body.attachments_enabled === "on" ? 1 : 0;
+
+      await run(`
+        INSERT INTO automod_settings (
+          guild_id, spam_enabled, spam_threshold, invites_enabled, links_enabled,
+          caps_enabled, caps_threshold, mentions_enabled, mentions_threshold, attachments_enabled
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          spam_enabled=excluded.spam_enabled,
+          spam_threshold=excluded.spam_threshold,
+          invites_enabled=excluded.invites_enabled,
+          links_enabled=excluded.links_enabled,
+          caps_enabled=excluded.caps_enabled,
+          caps_threshold=excluded.caps_threshold,
+          mentions_enabled=excluded.mentions_enabled,
+          mentions_threshold=excluded.mentions_threshold,
+          attachments_enabled=excluded.attachments_enabled
+      `, [
+        guildId, spamEnabled, spamThreshold, invitesEnabled, linksEnabled,
+        capsEnabled, capsThreshold, mentionsEnabled, mentionsThreshold, attachmentsEnabled
+      ]);
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("automod-settings save error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

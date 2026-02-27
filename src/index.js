@@ -713,7 +713,7 @@ async function handleReactionRoleSelection(interaction) {
       return true;
     }
 
-    // Fetch the option from database
+    // Fetch all options for this question
     const options = await getReactionRoleOptions(questionId);
     // PostgreSQL returns BIGINT as strings, so compare as integers
     const selectedOption = options.find((opt) => parseInt(opt.id, 10) === optionId);
@@ -723,25 +723,48 @@ async function handleReactionRoleSelection(interaction) {
       return true;
     }
 
-    // Parse role IDs
-    const roleIds = selectedOption.role_ids.split(",").map((id) => id.trim()).filter(Boolean);
+    // Parse role IDs for selected option
+    const selectedRoleIds = selectedOption.role_ids.split(",").map((id) => id.trim()).filter(Boolean);
 
-    if (roleIds.length === 0) {
+    if (selectedRoleIds.length === 0) {
       await interaction.reply({ content: "❌ No roles configured for this option.", ephemeral: true });
       return true;
     }
 
-    // Grant roles to the user
     const member = interaction.member;
-    const grantedRoles = [];
+    const removedRoles = [];
+    const addedRoles = [];
     const failedRoles = [];
 
-    for (const roleId of roleIds) {
+    // First, remove roles from all OTHER options
+    for (const option of options) {
+      if (parseInt(option.id, 10) === optionId) continue; // Skip the selected option
+      
+      const otherRoleIds = option.role_ids.split(",").map((id) => id.trim()).filter(Boolean);
+      for (const roleId of otherRoleIds) {
+        try {
+          const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
+          if (role && member.roles.cache.has(roleId)) {
+            await member.roles.remove(role);
+            removedRoles.push(role.name);
+          }
+        } catch (err) {
+          console.error(`Failed to remove role ${roleId}:`, err);
+        }
+      }
+    }
+
+    // Now add roles from the selected option
+    for (const roleId of selectedRoleIds) {
       try {
         const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
         if (role) {
-          await member.roles.add(role);
-          grantedRoles.push(role.name);
+          if (!member.roles.cache.has(roleId)) {
+            await member.roles.add(role);
+            addedRoles.push(role.name);
+          } else {
+            addedRoles.push(`${role.name} (already had)`);
+          }
         } else {
           failedRoles.push(roleId);
         }
@@ -751,18 +774,23 @@ async function handleReactionRoleSelection(interaction) {
       }
     }
 
-    // Build response message
-    let responseMessage = "";
-    if (grantedRoles.length > 0) {
-      responseMessage += `✅ **Roles granted:** ${grantedRoles.join(", ")}`;
+    // Build detailed response message
+    let responseMessage = `✅ **Selected:** ${selectedOption.label}`;
+    
+    if (addedRoles.length > 0) {
+      responseMessage += `\n\n**Added roles:** ${addedRoles.join(", ")}`;
     }
+    
+    if (removedRoles.length > 0) {
+      responseMessage += `\n**Removed roles from other options:** ${removedRoles.join(", ")}`;
+    }
+    
     if (failedRoles.length > 0) {
-      if (responseMessage) responseMessage += "\n";
-      responseMessage += `⚠️ **Failed to grant some roles:** ${failedRoles.join(", ")}`;
+      responseMessage += `\n\n⚠️ **Failed to process some roles:** ${failedRoles.join(", ")}`;
     }
 
     await interaction.reply({
-      content: responseMessage || "❌ No roles were granted.",
+      content: responseMessage,
       ephemeral: true
     });
 

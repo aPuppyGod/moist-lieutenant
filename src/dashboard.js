@@ -864,6 +864,61 @@ function htmlTemplate(content, opts = {}) {
       justify-content: center;
       margin-top: 16px;
     }
+    
+    /* Reaction Role Questions Styling */
+    .reaction-question-card {
+      border: 1px solid #c8e0c8;
+      padding: 16px;
+      border-radius: 6px;
+      background: #f5f9f5;
+    }
+    body[data-theme="dark"] .reaction-question-card {
+      border-color: #444;
+      background: #2a2a2a;
+    }
+    
+    .reaction-summary {
+      cursor: pointer;
+      padding: 8px;
+      background: #e8f3e8;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    body[data-theme="dark"] .reaction-summary {
+      background: #333;
+    }
+    
+    .reaction-option-form {
+      border: 1px solid #c8e0c8;
+      padding: 12px;
+      border-radius: 4px;
+      background: #ffffff;
+    }
+    body[data-theme="dark"] .reaction-option-form {
+      border-color: #555;
+      background: #222;
+    }
+    
+    .reaction-option-item {
+      padding: 8px;
+      background: #e8f3e8;
+      border-radius: 4px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    body[data-theme="dark"] .reaction-option-item {
+      background: #333;
+    }
+    
+    .reaction-send-form {
+      border-top: 1px solid #c8e0c8;
+      padding-top: 12px;
+      margin-top: 12px;
+    }
+    body[data-theme="dark"] .reaction-send-form {
+      border-top-color: #444;
+    }
   </style>
   <script>
     // Initialize theme from localStorage or dark mode default
@@ -909,7 +964,7 @@ function htmlTemplate(content, opts = {}) {
     </div>
     <span class="nav-right">
       <button id="themeToggle" onclick="toggleTheme()">☀️ Light</button>
-      ${user?`<span class="user"><img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64" alt="avatar" />${escapeHtml(user.username)}#${escapeHtml(user.discriminator)} <a href="/logout" class="btn" style="margin-left:10px;">Logout</a></span>`:`<a href="/login" class="btn">Login with Discord</a>`}
+      ${user?`<span class="user"><img src="https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64" alt="avatar" />${escapeHtml(user.username)} <a href="/logout" class="btn" style="margin-left:10px;">Logout</a></span>`:`<a href="/login" class="btn">Login with Discord</a>`}
     </span>
   </nav>
   <div class="container">
@@ -3245,10 +3300,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <div class="admin-section" style="display:flex;flex-wrap:wrap;gap:8px;">
         ${moduleTabs.map((tab) => `
-          <a class="btn" style="padding:8px 12px;${activeModule === tab.key ? "opacity:1;" : "opacity:0.8;"}" href="/dashboard/${tab.key}">${escapeHtml(tab.label)}</a>
+          <a class="btn" style="padding:8px 12px;${activeModule === tab.key ? "opacity:1;font-weight:700;border-bottom:2px solid #7bc96f;" : "opacity:0.8;"}" href="/guild/${guildId}?module=${tab.key}">${escapeHtml(tab.label)}</a>
         `).join("")}
       </div>
 
+      ${activeModule === "overview" ? `
       <div class="admin-section">
       <h3>Quick Overview</h3>
       <ul>
@@ -3259,8 +3315,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <li>Claim-all lock: <b>${claimLocked ? "Locked" : "Unlocked"}</b></li>
       </ul>
       </div>
+      ` : ""}
 
-      <hr/>
+      ${activeModule === "moderation" ? `
 
       <h3>Moderation Settings</h3>
       <form method="post" action="/guild/${guildId}/mod-settings">
@@ -3290,6 +3347,32 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <br/><br/>
         <button type="submit">Save Moderation Settings</button>
       </form>
+
+      <h3>Warnings</h3>
+      <table>
+        <tr><th>Target</th><th>Moderator</th><th>Reason</th><th>Date</th><th>Actions</th></tr>
+        ${warningRows.map((w) => `
+          <tr>
+            <td>${escapeHtml(w.targetName)}</td>
+            <td>${escapeHtml(w.moderatorName)}</td>
+            <td>${escapeHtml(w.reason)}</td>
+            <td>${escapeHtml(w.createdAt)}</td>
+            <td>
+              <form method="post" action="/guild/${guildId}/warnings/delete" style="display:inline;">
+                <input type="hidden" name="warning_id" value="${w.id}" />
+                <button type="submit">Delete</button>
+              </form>
+              <form method="post" action="/guild/${guildId}/warnings/clear-user" style="display:inline;">
+                <input type="hidden" name="user_id" value="${escapeHtml(w.userId)}" />
+                <button type="submit">Clear User</button>
+              </form>
+            </td>
+          </tr>
+        `).join("")}
+      </table>
+      ` : ""}
+
+      ${activeModule === "logging" ? `
 
       <h3>Event Logging Controls</h3>
       <form method="post" action="/guild/${guildId}/logging-events">
@@ -3381,9 +3464,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           `;
         }).join("")}
       </ul>
+      ` : ""}
 
-      <hr/>
-
+      ${activeModule === "reactionroles" ? `
       <h3>Reaction Roles</h3>
       <form class="admin-grid-form" method="post" action="/guild/${guildId}/reaction-roles/add">
         <label>Channel
@@ -3448,7 +3531,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             const isDeployed = !!question.channel_id;
             
             return `
-              <div style="border:1px solid #444;padding:16px;border-radius:6px;background:#2a2a2a;">
+              <div class="reaction-question-card">
                 <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
                   <div>
                     <h4 style="margin:0 0 4px 0;">${escapeHtml(question.question_text)}</h4>
@@ -3462,13 +3545,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                 </div>
 
                 <details style="margin-bottom:12px;">
-                  <summary style="cursor:pointer;padding:8px;background:#333;border-radius:4px;margin-bottom:8px;">Manage Options</summary>
+                  <summary class="reaction-summary">Manage Options</summary>
                   
                   <div id="question-${questionId}-options" style="margin:12px 0;">
                     <!-- Options will be loaded here -->
                   </div>
 
-                  <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/options/create" style="border:1px solid #555;padding:12px;border-radius:4px;background:#222;">
+                  <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/options/create" class="reaction-option-form">
                     <h5 style="margin:0 0 8px 0;">Add New Option</h5>
                     <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;margin-bottom:8px;">
                       <label style="display:flex;flex-direction:column;">
@@ -3496,7 +3579,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                   </form>
                 </details>
 
-                <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/send" style="border-top:1px solid #444;padding-top:12px;margin-top:12px;">
+                <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/send" class="reaction-send-form">
                   <div style="display:flex;gap:8px;align-items:end;">
                     <label style="flex:1;">
                       <span style="font-size:0.85em;margin-bottom:4px;display:block;">Send to Channel</span>
@@ -3529,7 +3612,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                     return found ? '@' + found.name : id;
                   }).join(', ');
                   return \`
-                    <div style="padding:8px;background:#333;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+                    <div class="reaction-option-item">
                       <div>
                         <span style="font-size:1.2em;margin-right:8px;">\${opt.emoji}</span>
                         <strong>\${opt.label}</strong>
@@ -3548,9 +3631,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             });
         `).join("")}
       </script>
+      ` : ""}
 
-      <hr/>
-
+      ${activeModule === "tickets" ? `
       <h3>Ticket System</h3>
       <form class="admin-grid-form" method="post" action="/guild/${guildId}/tickets/settings">
         <label style="min-width:120px;flex:0 0 120px;">
@@ -3627,9 +3710,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           `;
         }).join("") || `<tr><td colspan="4">No open tickets.</td></tr>`}
       </table>
+      ` : ""}
 
-      <hr/>
-
+      ${activeModule === "xp" ? `
       <h3>XP Settings</h3>
       <form method="post" action="/guild/${guildId}/settings">
         <label>Message XP Min <input name="message_xp_min" value="${escapeHtml(settings.message_xp_min)}" /></label><br/>
@@ -3653,24 +3736,6 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <label>Amount <input name="amount" /></label>
         <button type="submit">Apply XP</button>
       </form>
-
-      <hr/>
-
-      <h3>Rank Card Customization Unlocks</h3>
-      <form method="post" action="/guild/${guildId}/customization-unlocks">
-        <table style="border-collapse:collapse;">
-          <tr><th style="text-align:left;">Feature</th><th style="text-align:left;">Required Level</th></tr>
-          ${customizationOptions.map(opt => `
-            <tr>
-              <td>${escapeHtml(opt.label)}</td>
-              <td><input type="number" min="1" max="1000" name="${opt.key}" value="${unlocks[opt.key] ?? 1}" style="width:60px" /></td>
-            </tr>
-          `).join("")}
-        </table>
-        <button type="submit">Save Customization Unlocks</button>
-      </form>
-
-      <hr/>
 
       <h3>Level-up Messages</h3>
       <form method="post" action="/guild/${guildId}/levelup-settings">
@@ -3770,34 +3835,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         `;
         }).join("")}
       </ul>
+      ` : ""}
 
-      <hr/>
-
-      <h3>Warnings</h3>
-      <table>
-        <tr><th>Target</th><th>Moderator</th><th>Reason</th><th>Date</th><th>Actions</th></tr>
-        ${warningRows.map((w) => `
-          <tr>
-            <td>${escapeHtml(w.targetName)}</td>
-            <td>${escapeHtml(w.moderatorName)}</td>
-            <td>${escapeHtml(w.reason)}</td>
-            <td>${escapeHtml(w.createdAt)}</td>
-            <td>
-              <form method="post" action="/guild/${guildId}/warnings/delete" style="display:inline;">
-                <input type="hidden" name="warning_id" value="${w.id}" />
-                <button type="submit">Delete</button>
-              </form>
-              <form method="post" action="/guild/${guildId}/warnings/clear-user" style="display:inline;">
-                <input type="hidden" name="user_id" value="${escapeHtml(w.userId)}" />
-                <button type="submit">Clear User</button>
-              </form>
-            </td>
-          </tr>
-        `).join("")}
-      </table>
-
-      <hr/>
-
+      ${activeModule === "voice" ? `
       <h3>Claim-All Lock</h3>
       <p>Current status: <b>${claimLocked ? "Locked" : "Unlocked"}</b></p>
       <form method="post" action="/guild/${guildId}/claim-lock" style="display:inline;">
@@ -3836,6 +3876,23 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           `;
         }).join("")}
       </table>
+      ` : ""}
+
+      ${activeModule === "customization" ? `
+      <h3>Rank Card Customization Unlocks</h3>
+      <form method="post" action="/guild/${guildId}/customization-unlocks">
+        <table style="border-collapse:collapse;">
+          <tr><th style="text-align:left;">Feature</th><th style="text-align:left;">Required Level</th></tr>
+          ${customizationOptions.map(opt => `
+            <tr>
+              <td>${escapeHtml(opt.label)}</td>
+              <td><input type="number" min="1" max="1000" name="${opt.key}" value="${unlocks[opt.key] ?? 1}" style="width:60px" /></td>
+            </tr>
+          `).join("")}
+        </table>
+        <button type="submit">Save Customization Unlocks</button>
+      </form>
+      ` : ""}
     `));
   });
 

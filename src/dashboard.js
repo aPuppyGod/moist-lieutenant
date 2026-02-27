@@ -3268,11 +3268,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const reactionRoleQuestions = await getReactionRoleQuestions(guildId);
     const ticketSettings = await getTicketSettings(guildId);
     const openTickets = await getOpenTickets(guildId);
+    const welcomeSettings = await get(`SELECT * FROM welcome_goodbye_settings WHERE guild_id=?`, [guildId]);
+    const autoRoles = await all(`SELECT * FROM auto_roles WHERE guild_id=?`, [guildId]);
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
     const activeModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
       { key: "overview", label: "Overview" },
       { key: "moderation", label: "Moderation" },
+      { key: "welcome", label: "Welcome & Auto-Roles" },
       { key: "logging", label: "Logging" },
       { key: "xp", label: "XP" },
       { key: "tickets", label: "Tickets" },
@@ -3384,6 +3387,103 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </tr>
         `).join("")}
       </table>
+      ` : ""}
+
+      ${activeModule === "welcome" ? `
+
+      <h3>🎉 Welcome Messages</h3>
+      <form method="post" action="/guild/${guildId}/welcome-settings">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="welcome_enabled" ${welcomeSettings?.welcome_enabled ? "checked" : ""} />
+          <span>Enable Welcome Messages</span>
+        </label>
+        <br/>
+        <label>Welcome Channel
+          <select name="welcome_channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${welcomeSettings?.welcome_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <label>Welcome Message <span style="font-size:0.85em;opacity:0.8;">(Use {user}, {server}, {count} as placeholders)</span>
+          <textarea name="welcome_message" rows="3" style="width:100%;max-width:600px;font-family:inherit;">${escapeHtml(welcomeSettings?.welcome_message || "Welcome {user} to {server}!")}</textarea>
+        </label>
+        <br/>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="welcome_embed" ${welcomeSettings?.welcome_embed !== 0 ? "checked" : ""} />
+          <span>Send as Embed</span>
+        </label>
+        <br/>
+        <label>Embed Color
+          <input type="color" name="welcome_embed_color" value="${welcomeSettings?.welcome_embed_color || "#7bc96f"}" style="height:32px;" />
+        </label>
+        <br/><br/>
+        <button type="submit">Save Welcome Settings</button>
+      </form>
+
+      <h3>👋 Goodbye Messages</h3>
+      <form method="post" action="/guild/${guildId}/goodbye-settings">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="goodbye_enabled" ${welcomeSettings?.goodbye_enabled ? "checked" : ""} />
+          <span>Enable Goodbye Messages</span>
+        </label>
+        <br/>
+        <label>Goodbye Channel
+          <select name="goodbye_channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${welcomeSettings?.goodbye_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <label>Goodbye Message <span style="font-size:0.85em;opacity:0.8;">(Use {user}, {server}, {count} as placeholders)</span>
+          <textarea name="goodbye_message" rows="3" style="width:100%;max-width:600px;font-family:inherit;">${escapeHtml(welcomeSettings?.goodbye_message || "Goodbye {user}!")}</textarea>
+        </label>
+        <br/>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="goodbye_embed" ${welcomeSettings?.goodbye_embed !== 0 ? "checked" : ""} />
+          <span>Send as Embed</span>
+        </label>
+        <br/>
+        <label>Embed Color
+          <input type="color" name="goodbye_embed_color" value="${welcomeSettings?.goodbye_embed_color || "#8b7355"}" style="height:32px;" />
+        </label>
+        <br/><br/>
+        <button type="submit">Save Goodbye Settings</button>
+      </form>
+
+      <h3>🎭 Auto-Roles</h3>
+      <p style="opacity:0.8;">Roles automatically given to new members when they join.</p>
+      
+      <form method="post" action="/guild/${guildId}/auto-roles/add">
+        <label>Add Auto-Role
+          <select name="role_id" required>
+            <option value="">Select a role...</option>
+            ${roleOptions.map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="submit">Add Role</button>
+      </form>
+      <br/>
+      
+      ${autoRoles.length > 0 ? `
+      <table>
+        <tr><th>Role</th><th>Actions</th></tr>
+        ${autoRoles.map((ar) => {
+          const role = roleOptions.find(r => r.id === ar.role_id);
+          return `
+          <tr>
+            <td>@${escapeHtml(role?.name || ar.role_id)}</td>
+            <td>
+              <form method="post" action="/guild/${guildId}/auto-roles/delete" style="display:inline;">
+                <input type="hidden" name="role_id" value="${ar.role_id}" />
+                <button type="submit">Remove</button>
+              </form>
+            </td>
+          </tr>
+          `;
+        }).join("")}
+      </table>
+      ` : "<p style=\"opacity:0.7;\">No auto-roles configured.</p>"}
       ` : ""}
 
       ${activeModule === "logging" ? `
@@ -3958,6 +4058,99 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("mod-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/welcome-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const welcomeEnabled = req.body.welcome_enabled === "on" ? 1 : 0;
+      const welcomeChannelId = String(req.body.welcome_channel_id || "").trim() || null;
+      const welcomeMessage = String(req.body.welcome_message || "Welcome {user} to {server}!").trim();
+      const welcomeEmbed = req.body.welcome_embed === "on" ? 1 : 0;
+      const welcomeEmbedColor = String(req.body.welcome_embed_color || "#7bc96f").trim();
+
+      await run(`
+        INSERT INTO welcome_goodbye_settings (guild_id, welcome_enabled, welcome_channel_id, welcome_message, welcome_embed, welcome_embed_color)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          welcome_enabled=excluded.welcome_enabled,
+          welcome_channel_id=excluded.welcome_channel_id,
+          welcome_message=excluded.welcome_message,
+          welcome_embed=excluded.welcome_embed,
+          welcome_embed_color=excluded.welcome_embed_color
+      `, [guildId, welcomeEnabled, welcomeChannelId, welcomeMessage, welcomeEmbed, welcomeEmbedColor]);
+
+      return res.redirect(getModuleRedirect(guildId, 'welcome'));
+    } catch (e) {
+      console.error("welcome-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/goodbye-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const goodbyeEnabled = req.body.goodbye_enabled === "on" ? 1 : 0;
+      const goodbyeChannelId = String(req.body.goodbye_channel_id || "").trim() || null;
+      const goodbyeMessage = String(req.body.goodbye_message || "Goodbye {user}!").trim();
+      const goodbyeEmbed = req.body.goodbye_embed === "on" ? 1 : 0;
+      const goodbyeEmbedColor = String(req.body.goodbye_embed_color || "#8b7355").trim();
+
+      await run(`
+        INSERT INTO welcome_goodbye_settings (guild_id, goodbye_enabled, goodbye_channel_id, goodbye_message, goodbye_embed, goodbye_embed_color)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          goodbye_enabled=excluded.goodbye_enabled,
+          goodbye_channel_id=excluded.goodbye_channel_id,
+          goodbye_message=excluded.goodbye_message,
+          goodbye_embed=excluded.goodbye_embed,
+          goodbye_embed_color=excluded.goodbye_embed_color
+      `, [guildId, goodbyeEnabled, goodbyeChannelId, goodbyeMessage, goodbyeEmbed, goodbyeEmbedColor]);
+
+      return res.redirect(getModuleRedirect(guildId, 'welcome'));
+    } catch (e) {
+      console.error("goodbye-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-roles/add", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const roleId = String(req.body.role_id || "").trim();
+
+      if (!roleId) {
+        return res.status(400).send("Role ID required.");
+      }
+
+      const existing = await get(`SELECT * FROM auto_roles WHERE guild_id=? AND role_id=?`, [guildId, roleId]);
+      if (!existing) {
+        await run(`INSERT INTO auto_roles (guild_id, role_id) VALUES (?, ?)`, [guildId, roleId]);
+      }
+
+      return res.redirect(getModuleRedirect(guildId, 'welcome'));
+    } catch (e) {
+      console.error("auto-roles add error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-roles/delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const roleId = String(req.body.role_id || "").trim();
+
+      if (!roleId) {
+        return res.status(400).send("Role ID required.");
+      }
+
+      await run(`DELETE FROM auto_roles WHERE guild_id=? AND role_id=?`, [guildId, roleId]);
+
+      return res.redirect(getModuleRedirect(guildId, 'welcome'));
+    } catch (e) {
+      console.error("auto-roles delete error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

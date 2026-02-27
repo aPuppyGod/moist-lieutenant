@@ -339,11 +339,26 @@ async function initDb() {
       message_id TEXT NOT NULL,
       emoji_key TEXT NOT NULL,
       role_id TEXT NOT NULL,
-      remove_on_unreact INTEGER NOT NULL DEFAULT 1,
+      mode TEXT NOT NULL DEFAULT 'toggle',
       created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
       PRIMARY KEY (guild_id, message_id, emoji_key)
     )
   `);
+
+  // Migrate old remove_on_unreact column to mode column if it exists
+  await run(`
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'reaction_role_bindings' AND column_name = 'remove_on_unreact'
+      ) THEN
+        ALTER TABLE reaction_role_bindings ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'toggle';
+        UPDATE reaction_role_bindings SET mode = CASE WHEN remove_on_unreact = 1 THEN 'toggle' ELSE 'add' END WHERE mode IS NULL OR mode = 'toggle';
+        ALTER TABLE reaction_role_bindings DROP COLUMN IF EXISTS remove_on_unreact;
+      END IF;
+    END $$;
+  `).catch(() => {});
 
   // Reaction role questions (for multi-option role selection)
   await run(`

@@ -3724,9 +3724,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             ${roleOptions.map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`).join("")}
           </select>
         </label>
-        <label style="min-width:140px;flex:0 0 140px;">
-          <span>Remove on unreact</span>
-          <input type="checkbox" name="remove_on_unreact" checked />
+        <label style="min-width:180px;flex:0 0 180px;">
+          <span>Reaction Mode</span>
+          <select name="mode">
+            <option value="toggle">Add & Remove (Toggle)</option>
+            <option value="add">Add Only</option>
+            <option value="remove">Remove Only</option>
+          </select>
         </label>
         <button type="submit">Save Reaction Role</button>
       </form>
@@ -3735,9 +3739,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         ${reactionRoleBindings.map((row) => {
           const channelName = guild.channels.cache.get(row.channel_id)?.name || row.channel_id;
           const roleName = guild.roles.cache.get(row.role_id)?.name || row.role_id;
+          const modeLabel = row.mode === 'add' ? '(add only)' : row.mode === 'remove' ? '(remove only)' : '(toggle)';
           return `
             <li>
-              #${escapeHtml(channelName)} • message ${escapeHtml(row.message_id)} • emoji ${escapeHtml(row.emoji_key)} → @${escapeHtml(roleName)} ${Number(row.remove_on_unreact) === 1 ? "(removes on unreact)" : ""}
+              #${escapeHtml(channelName)} • message ${escapeHtml(row.message_id)} • emoji ${escapeHtml(row.emoji_key)} → @${escapeHtml(roleName)} ${modeLabel}
               <form style="display:inline" method="post" action="/guild/${guildId}/reaction-roles/delete">
                 <input type="hidden" name="message_id" value="${escapeHtml(row.message_id)}" />
                 <input type="hidden" name="emoji_key" value="${escapeHtml(row.emoji_key)}" />
@@ -4496,13 +4501,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const messageId = String(req.body.message_id || "").trim();
       const emojiKey = normalizeEmojiKey(String(req.body.emoji_key || "").trim());
       const roleId = String(req.body.role_id || "").trim();
-      const removeOnUnreact = req.body.remove_on_unreact === "on";
+      const mode = String(req.body.mode || "toggle").trim();
 
       if (!channelId || !messageId || !emojiKey || !roleId) {
         return res.status(400).send("Channel, message ID, emoji, and role are required.");
       }
 
-      await upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey, roleId, removeOnUnreact);
+      await upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey, roleId, mode);
       return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-roles add error:", e);

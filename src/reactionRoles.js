@@ -44,7 +44,14 @@ async function applyReactionRoleOnAdd(reaction, user) {
     return;
   }
 
-  console.log(`[ReactionRole] Found binding for emoji ${emojiKey} -> role ${binding.role_id}`);
+  const mode = binding.mode || 'toggle';
+  console.log(`[ReactionRole] Found binding for emoji ${emojiKey} -> role ${binding.role_id} (mode: ${mode})`);
+
+  // Only process if mode is 'add' or 'toggle'
+  if (mode !== 'add' && mode !== 'toggle') {
+    console.log(`[ReactionRole] Mode is '${mode}', skipping add`);
+    return;
+  }
 
   const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
@@ -78,7 +85,15 @@ async function applyReactionRoleOnRemove(reaction, user) {
 
   const binding = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => null);
   if (!binding?.role_id) return;
-  if (Number(binding.remove_on_unreact) !== 1) return;
+
+  const mode = binding.mode || 'toggle';
+  console.log(`[ReactionRole] Found binding with mode: ${mode}`);
+  
+  // Only process if mode is 'remove' or 'toggle'
+  if (mode !== 'remove' && mode !== 'toggle') {
+    console.log(`[ReactionRole] Mode is '${mode}', skipping remove`);
+    return;
+  }
 
   const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
   if (!member) return;

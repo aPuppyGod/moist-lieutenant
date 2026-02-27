@@ -214,13 +214,17 @@ async function getReactionRoleBinding(guildId, messageId, emojiKey) {
   );
 }
 
-async function upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey, roleId, removeOnUnreact = true) {
+async function upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey, roleId, mode = 'toggle') {
+  // Validate mode
+  const validModes = ['add', 'toggle', 'remove'];
+  const finalMode = validModes.includes(mode) ? mode : 'toggle';
+  
   await run(
-    `INSERT INTO reaction_role_bindings (guild_id, channel_id, message_id, emoji_key, role_id, remove_on_unreact)
+    `INSERT INTO reaction_role_bindings (guild_id, channel_id, message_id, emoji_key, role_id, mode)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (guild_id, message_id, emoji_key)
-     DO UPDATE SET channel_id=EXCLUDED.channel_id, role_id=EXCLUDED.role_id, remove_on_unreact=EXCLUDED.remove_on_unreact`,
-    [guildId, channelId, messageId, emojiKey, roleId, removeOnUnreact ? 1 : 0]
+     DO UPDATE SET channel_id=EXCLUDED.channel_id, role_id=EXCLUDED.role_id, mode=EXCLUDED.mode`,
+    [guildId, channelId, messageId, emojiKey, roleId, finalMode]
   );
 }
 

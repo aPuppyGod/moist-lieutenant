@@ -980,6 +980,60 @@ async function cmdChoose(message, args) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
+async function cmdSuggest(message, args) {
+  if (args.length === 0) {
+    await message.reply("Usage: `!suggest <your suggestion>`").catch(() => {});
+    return;
+  }
+
+  const guild = message.guild;
+  if (!guild) return;
+
+  // Get suggestion settings
+  const settings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guild.id]);
+  if (!settings || !settings.suggestions_enabled) {
+    await message.reply("Suggestions are not enabled on this server.").catch(() => {});
+    return;
+  }
+
+  const channel = guild.channels.cache.get(settings.channel_id);
+  if (!channel || !channel.isTextBased()) {
+    await message.reply("Suggestion channel not found or invalid.").catch(() => {});
+    return;
+  }
+
+  const suggestion = args.join(" ");
+
+  // Create suggestion in database
+  const result = await run(`
+    INSERT INTO suggestions (guild_id, user_id, suggestion, status)
+    VALUES (?, ?, ?, ?)
+  `, [guild.id, message.author.id, suggestion, "pending"]);
+
+  const suggestionId = result.lastID;
+
+  // Create embed
+  const embed = new EmbedBuilder()
+    .setColor("#7bc96f")
+    .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
+    .setTitle(`💡 Suggestion #${suggestionId}`)
+    .setDescription(suggestion)
+    .addFields({ name: "Status", value: "🟡 Pending", inline: true })
+    .setFooter({ text: `👍 0 | 👎 0` })
+    .setTimestamp();
+
+  const suggestionMsg = await channel.send({ embeds: [embed] });
+
+  // React with voting emojis
+  await suggestionMsg.react("👍");
+  await suggestionMsg.react("👎");
+
+  // Update database with message ID
+  await run(`UPDATE suggestions SET message_id=?, upvotes=0, downvotes=0 WHERE id=?`, [suggestionMsg.id, suggestionId]);
+
+  await message.reply(`✅ Your suggestion has been submitted! Check <#${channel.id}>`).catch(() => {});
+}
+
 // ─────────────────────────────────────────────────────
 // Moderation commands
 // ─────────────────────────────────────────────────────
@@ -1900,6 +1954,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "suggest") {
+    await cmdSuggest(message, args);
+    return true;
+  }
+
   if (cmd === "ban") {
     await cmdBan(message, args);
     return true;
@@ -2016,6 +2075,7 @@ function buildSlashCommands() {
     { name: "roll", description: "Roll dice", options: [{ type: 4, name: "sides", description: "Number of sides (default: 6)", required: false }, { type: 4, name: "count", description: "Number of dice (default: 1)", required: false }] },
     { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
+    { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
     // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
@@ -2202,6 +2262,9 @@ async function handleSlashCommand(interaction) {
   } else if (name === "choose") {
     const options = optionValue(interaction, "options");
     if (options) args.push(...String(options).split(/\s+/));
+  } else if (name === "suggest") {
+    const suggestion = optionValue(interaction, "suggestion");
+    if (suggestion) args.push(...String(suggestion).split(/\s+/));
   } else {
     const keys = ["page", "limit", "name", "count", "seconds"];
     for (const key of keys) {

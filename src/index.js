@@ -700,6 +700,26 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     await handleLevelUp(msg.guild, userId, res.oldLevel, res.newLevel);
   }
 
+  // ─── Suggestion Voting ───
+  const suggestion = await get(`SELECT * FROM suggestions WHERE message_id=?`, [msg.id]);
+  if (suggestion && (reaction.emoji.name === "👍" || reaction.emoji.name === "👎")) {
+    const upvotes = msg.reactions.cache.get("👍")?.count || 0;
+    const downvotes = msg.reactions.cache.get("👎")?.count || 0;
+    
+    // Subtract bot reactions
+    const actualUpvotes = Math.max(0, upvotes - 1);
+    const actualDownvotes = Math.max(0, downvotes - 1);
+    
+    await run(`UPDATE suggestions SET upvotes=?, downvotes=? WHERE id=?`, [actualUpvotes, actualDownvotes, suggestion.id]);
+    
+    // Update embed footer with new counts
+    if (msg.embeds.length > 0) {
+      const embed = EmbedBuilder.from(msg.embeds[0]);
+      embed.setFooter({ text: `👍 ${actualUpvotes} | 👎 ${actualDownvotes}` });
+      await msg.edit({ embeds: [embed] }).catch(() => {});
+    }
+  }
+
   await applyReactionRoleOnAdd(reaction, user).catch((err) => {
     console.error("Reaction role add failed:", err);
   });
@@ -723,6 +743,26 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
     : reaction.message;
   
   if (!msg) return;
+  
+  // ─── Suggestion Voting (removal) ───
+  const suggestion = await get(`SELECT * FROM suggestions WHERE message_id=?`, [msg.id]);
+  if (suggestion && (reaction.emoji.name === "👍" || reaction.emoji.name === "👎")) {
+    const upvotes = msg.reactions.cache.get("👍")?.count || 0;
+    const downvotes = msg.reactions.cache.get("👎")?.count || 0;
+    
+    // Subtract bot reactions
+    const actualUpvotes = Math.max(0, upvotes - 1);
+    const actualDownvotes = Math.max(0, downvotes - 1);
+    
+    await run(`UPDATE suggestions SET upvotes=?, downvotes=? WHERE id=?`, [actualUpvotes, actualDownvotes, suggestion.id]);
+    
+    // Update embed footer with new counts
+    if (msg.embeds.length > 0) {
+      const embed = EmbedBuilder.from(msg.embeds[0]);
+      embed.setFooter({ text: `👍 ${actualUpvotes} | 👎 ${actualDownvotes}` });
+      await msg.edit({ embeds: [embed] }).catch(() => {});
+    }
+  }
   
   await applyReactionRoleOnRemove(reaction, user).catch((err) => {
     console.error("Reaction role remove failed:", err);

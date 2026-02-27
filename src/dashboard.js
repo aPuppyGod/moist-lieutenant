@@ -3271,6 +3271,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const welcomeSettings = await get(`SELECT * FROM welcome_goodbye_settings WHERE guild_id=?`, [guildId]);
     const autoRoles = await all(`SELECT * FROM auto_roles WHERE guild_id=?`, [guildId]);
     const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [guildId]);
+    const suggestionSettings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guildId]);
+    const allSuggestions = await all(`SELECT * FROM suggestions WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
     const activeModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
@@ -3438,6 +3440,50 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
         <button type="submit">Save Auto-Mod Settings</button>
       </form>
+
+      <h3>💡 Suggestions System</h3>
+      <form method="post" action="/guild/${guildId}/suggestions-settings">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="suggestions_enabled" ${suggestionSettings?.suggestions_enabled ? "checked" : ""} />
+          <span>Enable Suggestions</span>
+        </label>
+        <br/>
+        <label>Suggestions Channel
+          <select name="channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${suggestionSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <button type="submit">Save Suggestions Settings</button>
+      </form>
+
+      ${allSuggestions.length > 0 ? `
+      <h4>Recent Suggestions</h4>
+      <table>
+        <tr><th>ID</th><th>User</th><th>Suggestion</th><th>Votes</th><th>Status</th><th>Actions</th></tr>
+        ${allSuggestions.slice(0, 10).map((s) => `
+          <tr>
+            <td>#${s.id}</td>
+            <td>${escapeHtml(s.user_id)}</td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.suggestion)}</td>
+            <td>👍 ${s.upvotes || 0} | 👎 ${s.downvotes || 0}</td>
+            <td>${s.status === "approved" ? "✅" : s.status === "denied" ? "❌" : "🟡"} ${escapeHtml(s.status)}</td>
+            <td>
+              <form method="post" action="/guild/${guildId}/suggestions/update" style="display:inline;">
+                <input type="hidden" name="suggestion_id" value="${s.id}" />
+                <select name="status" style="padding:2px;">
+                  <option value="pending" ${s.status === "pending" ? "selected" : ""}>Pending</option>
+                  <option value="approved" ${s.status === "approved" ? "selected" : ""}>Approved</option>
+                  <option value="denied" ${s.status === "denied" ? "selected" : ""}>Denied</option>
+                </select>
+                <button type="submit">Update</button>
+              </form>
+            </td>
+          </tr>
+        `).join("")}
+      </table>
+      ` : ""}
       ` : ""}
 
       ${activeModule === "welcome" ? `
@@ -4243,6 +4289,76 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("automod-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/suggestions-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const enabled = req.body.suggestions_enabled === "on" ? 1 : 0;
+      const channelId = String(req.body.channel_id || "").trim() || null;
+
+      await run(`
+        INSERT INTO suggestion_settings (guild_id, suggestions_enabled, channel_id)
+        VALUES (?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          suggestions_enabled=excluded.suggestions_enabled,
+          channel_id=excluded.channel_id
+      `, [guildId, enabled, channelId]);
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("suggestions-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/suggestions/update", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const suggestionId = parseInt(req.body.suggestion_id, 10);
+      const status = String(req.body.status || "pending").trim();
+
+      if (!suggestionId) {
+        return res.status(400).send("Suggestion ID required.");
+      }
+
+      // Update status in database
+      await run(`UPDATE suggestions SET status=? WHERE id=? AND guild_id=?`, [status, suggestionId, guildId]);
+
+      // Update the embed in Discord
+      const suggestion = await get(`SELECT * FROM suggestions WHERE id=?`, [suggestionId]);
+      if (suggestion && suggestion.message_id) {
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        if (guild) {
+          const settings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guildId]);
+          if (settings && settings.channel_id) {
+            const channel = guild.channels.cache.get(settings.channel_id);
+            if (channel && channel.isTextBased()) {
+              const message = await channel.messages.fetch(suggestion.message_id).catch(() => null);
+              if (message && message.embeds.length > 0) {
+                const embed = EmbedBuilder.from(message.embeds[0]);
+                const statusText = status === "approved" ? "✅ Approved" : status === "denied" ? "❌ Denied" : "🟡 Pending";
+                const statusColor = status === "approved" ? "#7bc96f" : status === "denied" ? "#ff4444" : "#ffaa00";
+                embed.setColor(statusColor);
+                embed.data.fields = embed.data.fields || [];
+                const statusFieldIndex = embed.data.fields.findIndex(f => f.name === "Status");
+                if (statusFieldIndex >= 0) {
+                  embed.data.fields[statusFieldIndex].value = statusText;
+                } else {
+                  embed.addFields({ name: "Status", value: statusText, inline: true });
+                }
+                await message.edit({ embeds: [embed] }).catch(() => {});
+              }
+            }
+          }
+        }
+      }
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("suggestions update error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

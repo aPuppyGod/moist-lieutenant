@@ -197,7 +197,7 @@ async function removeLoggingActorExclusion(guildId, targetId) {
 
 async function getReactionRoleBindings(guildId) {
   return await all(
-    `SELECT channel_id, message_id, emoji_key, role_id, remove_on_unreact
+    `SELECT channel_id, message_id, emoji_key, role_id, mode
      FROM reaction_role_bindings
      WHERE guild_id=?
      ORDER BY message_id, emoji_key`,
@@ -207,7 +207,7 @@ async function getReactionRoleBindings(guildId) {
 
 async function getReactionRoleBinding(guildId, messageId, emojiKey) {
   return await get(
-    `SELECT channel_id, message_id, emoji_key, role_id, remove_on_unreact
+    `SELECT channel_id, message_id, emoji_key, role_id, mode
      FROM reaction_role_bindings
      WHERE guild_id=? AND message_id=? AND emoji_key=?`,
     [guildId, messageId, emojiKey]

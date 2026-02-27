@@ -3273,6 +3273,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [guildId]);
     const suggestionSettings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guildId]);
     const allSuggestions = await all(`SELECT * FROM suggestions WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
+    const starboardSettings = await get(`SELECT * FROM starboard_settings WHERE guild_id=?`, [guildId]);
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
     const activeModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
@@ -3335,6 +3336,31 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <li>Claim-all lock: <b>${claimLocked ? "Locked" : "Unlocked"}</b></li>
       </ul>
       </div>
+
+      <h3>⭐ Starboard</h3>
+      <form method="post" action="/guild/${guildId}/starboard-settings">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="enabled" ${starboardSettings?.enabled ? "checked" : ""} />
+          <span>Enable Starboard</span>
+        </label>
+        <br/>
+        <label>Starboard Channel
+          <select name="channel_id">
+            <option value="">None</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${starboardSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <label>Star Emoji (default: ⭐)
+          <input name="emoji" value="${escapeHtml(starboardSettings?.emoji || "⭐")}" style="max-width:80px;" />
+        </label>
+        <br/><br/>
+        <label>Star Threshold (minimum stars to post)
+          <input type="number" name="threshold" value="${starboardSettings?.threshold || 5}" min="1" max="50" style="max-width:120px;" />
+        </label>
+        <br/><br/>
+        <button type="submit">Save Starboard Settings</button>
+      </form>
       ` : ""}
 
       ${activeModule === "moderation" ? `
@@ -4359,6 +4385,31 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("suggestions update error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/starboard-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const enabled = req.body.enabled === "on" ? 1 : 0;
+      const channelId = String(req.body.channel_id || "").trim() || null;
+      const emoji = String(req.body.emoji || "⭐").trim();
+      const threshold = parseInt(req.body.threshold || "5", 10);
+
+      await run(`
+        INSERT INTO starboard_settings (guild_id, enabled, channel_id, emoji, threshold)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          enabled=excluded.enabled,
+          channel_id=excluded.channel_id,
+          emoji=excluded.emoji,
+          threshold=excluded.threshold
+      `, [guildId, enabled, channelId, emoji, threshold]);
+
+      return res.redirect(getModuleRedirect(guildId, 'overview'));
+    } catch (e) {
+      console.error("starboard-settings save error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

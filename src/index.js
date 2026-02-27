@@ -720,6 +720,71 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     }
   }
 
+  // ─── Starboard ───
+  if (reaction.emoji.name === "⭐") {
+    const starboardSettings = await get(`SELECT * FROM starboard_settings WHERE guild_id=?`, [msg.guild.id]);
+    if (starboardSettings && starboardSettings.enabled) {
+      const starCount = reaction.count || 0;
+      const threshold = starboardSettings.threshold || 5;
+      
+      if (starCount >= threshold) {
+        const starboardChannel = msg.guild.channels.cache.get(starboardSettings.channel_id);
+        if (starboardChannel && starboardChannel.isTextBased()) {
+          // Check if already posted
+          const existing = await get(`SELECT * FROM starboard_messages WHERE source_message_id=?`, [msg.id]);
+          
+          if (!existing) {
+            // Create starboard embed
+            const embed = new EmbedBuilder()
+              .setColor("#ffaa00")
+              .setAuthor({ name: msg.author.tag, iconURL: msg.author.displayAvatarURL() })
+              .setDescription(msg.content || "*No text content*")
+              .addFields({ name: "Channel", value: `<#${msg.channel.id}>`, inline: true })
+              .addFields({ name: "Stars", value: `⭐ ${starCount}`, inline: true })
+              .setFooter({ text: `ID: ${msg.id}` })
+              .setTimestamp(msg.createdAt);
+            
+            // Add image if present
+            const attachment = msg.attachments.first();
+            if (attachment && attachment.contentType?.startsWith("image/")) {
+              embed.setImage(attachment.url);
+            }
+            
+            const starboardMsg = await starboardChannel.send({
+              content: `⭐ **${starCount}** ${msg.url}`,
+              embeds: [embed]
+            });
+            
+            // Track in database
+            await run(`
+              INSERT INTO starboard_messages (guild_id, source_message_id, starboard_message_id, star_count)
+              VALUES (?, ?, ?, ?)
+            `, [msg.guild.id, msg.id, starboardMsg.id, starCount]);
+          } else {
+            // Update star count
+            await run(`UPDATE starboard_messages SET star_count=? WHERE source_message_id=?`, [starCount, msg.id]);
+            
+            // Update starboard message
+            const starboardMsg = await starboardChannel.messages.fetch(existing.starboard_message_id).catch(() => null);
+            if (starboardMsg) {
+              const updatedContent = `⭐ **${starCount}** ${msg.url}`;
+              const embed = starboardMsg.embeds[0];
+              if (embed) {
+                const updatedEmbed = EmbedBuilder.from(embed);
+                updatedEmbed.data.fields = updatedEmbed.data.fields || [];
+                const starFieldIndex = updatedEmbed.data.fields.findIndex(f => f.name === "Stars");
+                if (starFieldIndex >= 0) {
+                  updatedEmbed.data.fields[starFieldIndex].value = `⭐ ${starCount}`;
+                }
+                await starboardMsg.edit({ content: updatedContent, embeds: [updatedEmbed] }).catch(() => {});
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   await applyReactionRoleOnAdd(reaction, user).catch((err) => {
     console.error("Reaction role add failed:", err);
   });
@@ -761,6 +826,52 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
       const embed = EmbedBuilder.from(msg.embeds[0]);
       embed.setFooter({ text: `👍 ${actualUpvotes} | 👎 ${actualDownvotes}` });
       await msg.edit({ embeds: [embed] }).catch(() => {});
+    }
+  }
+  
+  // ─── Starboard (removal) ───
+  if (reaction.emoji.name === "⭐") {
+    const starboardSettings = await get(`SELECT * FROM starboard_settings WHERE guild_id=?`, [msg.guild.id]);
+    if (starboardSettings && starboardSettings.enabled) {
+      const starCount = reaction.count || 0;
+      const threshold = starboardSettings.threshold || 5;
+      
+      const existing = await get(`SELECT * FROM starboard_messages WHERE source_message_id=?`, [msg.id]);
+      
+      if (existing) {
+        if (starCount < threshold) {
+          // Remove from starboard if below threshold
+          const starboardChannel = msg.guild.channels.cache.get(starboardSettings.channel_id);
+          if (starboardChannel && starboardChannel.isTextBased()) {
+            const starboardMsg = await starboardChannel.messages.fetch(existing.starboard_message_id).catch(() => null);
+            if (starboardMsg) {
+              await starboardMsg.delete().catch(() => {});
+            }
+          }
+          await run(`DELETE FROM starboard_messages WHERE source_message_id=?`, [msg.id]);
+        } else {
+          // Update star count
+          await run(`UPDATE starboard_messages SET star_count=? WHERE source_message_id=?`, [starCount, msg.id]);
+          
+          const starboardChannel = msg.guild.channels.cache.get(starboardSettings.channel_id);
+          if (starboardChannel && starboardChannel.isTextBased()) {
+            const starboardMsg = await starboardChannel.messages.fetch(existing.starboard_message_id).catch(() => null);
+            if (starboardMsg) {
+              const updatedContent = `⭐ **${starCount}** ${msg.url}`;
+              const embed = starboardMsg.embeds[0];
+              if (embed) {
+                const updatedEmbed = EmbedBuilder.from(embed);
+                updatedEmbed.data.fields = updatedEmbed.data.fields || [];
+                const starFieldIndex = updatedEmbed.data.fields.findIndex(f => f.name === "Stars");
+                if (starFieldIndex >= 0) {
+                  updatedEmbed.data.fields[starFieldIndex].value = `⭐ ${starCount}`;
+                }
+                await starboardMsg.edit({ content: updatedContent, embeds: [updatedEmbed] }).catch(() => {});
+              }
+            }
+          }
+        }
+      }
     }
   }
   

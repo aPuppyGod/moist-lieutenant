@@ -715,7 +715,8 @@ async function handleReactionRoleSelection(interaction) {
 
     // Fetch the option from database
     const options = await getReactionRoleOptions(questionId);
-    const selectedOption = options.find((opt) => opt.id === optionId);
+    // PostgreSQL returns BIGINT as strings, so compare as integers
+    const selectedOption = options.find((opt) => parseInt(opt.id, 10) === optionId);
 
     if (!selectedOption) {
       await interaction.reply({ content: "❌ Option not found.", ephemeral: true });

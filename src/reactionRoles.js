@@ -36,36 +36,40 @@ async function applyReactionRoleOnAdd(reaction, user) {
   const emojiKey = emojiKeyFromReaction(reaction);
   if (!emojiKey) return;
 
-  console.log(`[ReactionRole] Add - Looking for binding: guild=${guild.id}, msg=${message.id}, emoji=${emojiKey}`);
+  console.log(`[ReactionRole] Add - Looking for bindings: guild=${guild.id}, msg=${message.id}, emoji=${emojiKey}`);
   
-  const binding = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => null);
-  if (!binding?.role_id) {
-    console.log(`[ReactionRole] No binding found for emoji: ${emojiKey}`);
+  const bindings = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => []);
+  if (!bindings || bindings.length === 0) {
+    console.log(`[ReactionRole] No bindings found for emoji: ${emojiKey}`);
     return;
   }
 
-  const mode = binding.mode || 'toggle';
-  console.log(`[ReactionRole] Found binding for emoji ${emojiKey} -> role ${binding.role_id} (mode: ${mode})`);
-
-  // Only process if mode is 'add' or 'toggle'
-  if (mode !== 'add' && mode !== 'toggle') {
-    console.log(`[ReactionRole] Mode is '${mode}', skipping add`);
-    return;
-  }
+  console.log(`[ReactionRole] Found ${bindings.length} binding(s) for emoji ${emojiKey}`);
 
   const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
 
-  const role = guild.roles.cache.get(binding.role_id) || await guild.roles.fetch(binding.role_id).catch(() => null);
-  if (!role) {
-    console.log(`[ReactionRole] Role ${binding.role_id} not found`);
-    return;
-  }
+  // Process all bindings
+  for (const binding of bindings) {
+    const mode = binding.mode || 'toggle';
+    
+    // Only process if mode is 'add' or 'toggle'
+    if (mode !== 'add' && mode !== 'toggle') {
+      console.log(`[ReactionRole] Role ${binding.role_id} mode is '${mode}', skipping add`);
+      continue;
+    }
 
-  console.log(`[ReactionRole] Adding role ${role.name} to ${member.user.tag}`);
-  await member.roles.add(role).catch((err) => {
-    console.error(`[ReactionRole] Failed to add role:`, err);
-  });
+    const role = guild.roles.cache.get(binding.role_id) || await guild.roles.fetch(binding.role_id).catch(() => null);
+    if (!role) {
+      console.log(`[ReactionRole] Role ${binding.role_id} not found`);
+      continue;
+    }
+
+    console.log(`[ReactionRole] Adding role ${role.name} to ${member.user.tag} (mode: ${mode})`);
+    await member.roles.add(role).catch((err) => {
+      console.error(`[ReactionRole] Failed to add role ${role.name}:`, err);
+    });
+  }
 }
 
 async function applyReactionRoleOnRemove(reaction, user) {
@@ -81,30 +85,34 @@ async function applyReactionRoleOnRemove(reaction, user) {
   const emojiKey = emojiKeyFromReaction(reaction);
   if (!emojiKey) return;
 
-  console.log(`[ReactionRole] Remove - Looking for binding: guild=${guild.id}, msg=${message.id}, emoji=${emojiKey}`);
+  console.log(`[ReactionRole] Remove - Looking for bindings: guild=${guild.id}, msg=${message.id}, emoji=${emojiKey}`);
 
-  const binding = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => null);
-  if (!binding?.role_id) return;
+  const bindings = await getReactionRoleBinding(guild.id, message.id, emojiKey).catch(() => []);
+  if (!bindings || bindings.length === 0) return;
 
-  const mode = binding.mode || 'toggle';
-  console.log(`[ReactionRole] Found binding with mode: ${mode}`);
-  
-  // Only process if mode is 'remove' or 'toggle'
-  if (mode !== 'remove' && mode !== 'toggle') {
-    console.log(`[ReactionRole] Mode is '${mode}', skipping remove`);
-    return;
-  }
+  console.log(`[ReactionRole] Found ${bindings.length} binding(s) for emoji ${emojiKey}`);
 
   const member = guild.members.cache.get(user.id) || await guild.members.fetch(user.id).catch(() => null);
   if (!member) return;
 
-  const role = guild.roles.cache.get(binding.role_id) || await guild.roles.fetch(binding.role_id).catch(() => null);
-  if (!role) return;
+  // Process all bindings
+  for (const binding of bindings) {
+    const mode = binding.mode || 'toggle';
+    
+    // Only process if mode is 'remove' or 'toggle'
+    if (mode !== 'remove' && mode !== 'toggle') {
+      console.log(`[ReactionRole] Role ${binding.role_id} mode is '${mode}', skipping remove`);
+      continue;
+    }
 
-  console.log(`[ReactionRole] Removing role ${role.name} from ${member.user.tag}`);
-  await member.roles.remove(role).catch((err) => {
-    console.error(`[ReactionRole] Failed to remove role:`, err);
-  });
+    const role = guild.roles.cache.get(binding.role_id) || await guild.roles.fetch(binding.role_id).catch(() => null);
+    if (!role) continue;
+
+    console.log(`[ReactionRole] Removing role ${role.name} from ${member.user.tag} (mode: ${mode})`);
+    await member.roles.remove(role).catch((err) => {
+      console.error(`[ReactionRole] Failed to remove role ${role.name}:`, err);
+    });
+  }
 }
 
 module.exports = {

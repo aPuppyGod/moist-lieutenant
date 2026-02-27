@@ -341,9 +341,34 @@ async function initDb() {
       role_id TEXT NOT NULL,
       mode TEXT NOT NULL DEFAULT 'toggle',
       created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
-      PRIMARY KEY (guild_id, message_id, emoji_key)
+      PRIMARY KEY (guild_id, message_id, emoji_key, role_id)
     )
   `);
+
+  // Migrate old PRIMARY KEY if needed
+  try {
+    await run(`
+      DO $$
+      BEGIN
+        -- Check if old constraint exists and update it
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint 
+          WHERE conname = 'reaction_role_bindings_pkey' 
+          AND conkey = ARRAY[
+            (SELECT attnum FROM pg_attribute WHERE attrelid = 'reaction_role_bindings'::regclass AND attname = 'guild_id'),
+            (SELECT attnum FROM pg_attribute WHERE attrelid = 'reaction_role_bindings'::regclass AND attname = 'message_id'),
+            (SELECT attnum FROM pg_attribute WHERE attrelid = 'reaction_role_bindings'::regclass AND attname = 'emoji_key')
+          ]
+        ) THEN
+          -- Drop old constraint and add new one
+          ALTER TABLE reaction_role_bindings DROP CONSTRAINT reaction_role_bindings_pkey;
+          ALTER TABLE reaction_role_bindings ADD PRIMARY KEY (guild_id, message_id, emoji_key, role_id);
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.error('Primary key migration info:', err.message);
+  }
 
   // Migrate old remove_on_unreact column to mode column if it exists
   try {

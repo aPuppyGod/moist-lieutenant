@@ -3746,6 +3746,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
               <form style="display:inline" method="post" action="/guild/${guildId}/reaction-roles/delete">
                 <input type="hidden" name="message_id" value="${escapeHtml(row.message_id)}" />
                 <input type="hidden" name="emoji_key" value="${escapeHtml(row.emoji_key)}" />
+                <input type="hidden" name="role_id" value="${escapeHtml(row.role_id)}" />
                 <button type="submit">Delete</button>
               </form>
             </li>
@@ -4520,9 +4521,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const guildId = req.params.guildId;
       const messageId = String(req.body.message_id || "").trim();
       const emojiKey = normalizeEmojiKey(String(req.body.emoji_key || "").trim());
+      const roleId = String(req.body.role_id || "").trim() || null;
       if (!messageId || !emojiKey) return res.status(400).send("Message ID and emoji are required.");
 
-      await removeReactionRoleBinding(guildId, messageId, emojiKey);
+      await removeReactionRoleBinding(guildId, messageId, emojiKey, roleId);
       return res.redirect(getModuleRedirect(guildId, 'reactionroles'));
     } catch (e) {
       console.error("reaction-roles delete error:", e);

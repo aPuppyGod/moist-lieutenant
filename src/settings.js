@@ -206,7 +206,8 @@ async function getReactionRoleBindings(guildId) {
 }
 
 async function getReactionRoleBinding(guildId, messageId, emojiKey) {
-  return await get(
+  // Return all bindings for this emoji (can be multiple roles)
+  return await all(
     `SELECT channel_id, message_id, emoji_key, role_id, mode
      FROM reaction_role_bindings
      WHERE guild_id=? AND message_id=? AND emoji_key=?`,
@@ -222,18 +223,28 @@ async function upsertReactionRoleBinding(guildId, channelId, messageId, emojiKey
   await run(
     `INSERT INTO reaction_role_bindings (guild_id, channel_id, message_id, emoji_key, role_id, mode)
      VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (guild_id, message_id, emoji_key)
-     DO UPDATE SET channel_id=EXCLUDED.channel_id, role_id=EXCLUDED.role_id, mode=EXCLUDED.mode`,
+     ON CONFLICT (guild_id, message_id, emoji_key, role_id)
+     DO UPDATE SET channel_id=EXCLUDED.channel_id, mode=EXCLUDED.mode`,
     [guildId, channelId, messageId, emojiKey, roleId, finalMode]
   );
 }
 
-async function removeReactionRoleBinding(guildId, messageId, emojiKey) {
-  await run(
-    `DELETE FROM reaction_role_bindings
-     WHERE guild_id=? AND message_id=? AND emoji_key=?`,
-    [guildId, messageId, emojiKey]
-  );
+async function removeReactionRoleBinding(guildId, messageId, emojiKey, roleId = null) {
+  if (roleId) {
+    // Delete specific role binding
+    await run(
+      `DELETE FROM reaction_role_bindings
+       WHERE guild_id=? AND message_id=? AND emoji_key=? AND role_id=?`,
+      [guildId, messageId, emojiKey, roleId]
+    );
+  } else {
+    // Delete all bindings for this emoji (backwards compatibility)
+    await run(
+      `DELETE FROM reaction_role_bindings
+       WHERE guild_id=? AND message_id=? AND emoji_key=?`,
+      [guildId, messageId, emojiKey]
+    );
+  }
 }
 
 async function getTicketSettings(guildId) {

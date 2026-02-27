@@ -919,6 +919,204 @@ function htmlTemplate(content, opts = {}) {
     body[data-theme="dark"] .reaction-send-form {
       border-top-color: #444;
     }
+
+    /* Collapsible Section Styles */
+    .collapsible-section {
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 10px;
+      margin: 16px 0;
+      border: 2px solid rgba(123, 201, 111, 0.25);
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+    body[data-theme="dark"] .collapsible-section {
+      background: rgba(13, 38, 38, 0.6);
+      border-color: rgba(168, 213, 168, 0.25);
+    }
+    .collapsible-section:hover {
+      border-color: rgba(123, 201, 111, 0.5);
+      box-shadow: 0 4px 12px rgba(123, 201, 111, 0.15);
+    }
+    body[data-theme="dark"] .collapsible-section:hover {
+      border-color: rgba(168, 213, 168, 0.5);
+      box-shadow: 0 4px 12px rgba(168, 213, 168, 0.15);
+    }
+    
+    .collapsible-header {
+      padding: 16px 20px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(123, 201, 111, 0.1);
+      transition: all 0.3s ease;
+      user-select: none;
+    }
+    body[data-theme="dark"] .collapsible-header {
+      background: rgba(168, 213, 168, 0.1);
+    }
+    .collapsible-header:hover {
+      background: rgba(123, 201, 111, 0.2);
+    }
+    body[data-theme="dark"] .collapsible-header:hover {
+      background: rgba(168, 213, 168, 0.2);
+    }
+    
+    .collapsible-header h3 {
+      margin: 0;
+      flex: 1;
+      font-size: 1.15em;
+      font-weight: 600;
+    }
+    
+    .collapsible-toggle {
+      font-size: 1.2em;
+      transition: transform 0.3s ease;
+      color: #7bc96f;
+      font-weight: bold;
+    }
+    body[data-theme="dark"] .collapsible-toggle {
+      color: #a8d5a8;
+    }
+    .collapsible-section.expanded .collapsible-toggle {
+      transform: rotate(90deg);
+    }
+    
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.4s ease, padding 0.4s ease;
+      padding: 0 20px;
+    }
+    .collapsible-section.expanded .collapsible-content {
+      max-height: 5000px;
+      padding: 20px;
+    }
+    
+    .section-description {
+      opacity: 0.75;
+      font-size: 0.9em;
+      margin: 8px 0 16px 0;
+      font-style: italic;
+    }
+
+    /* Improved Form Layouts */
+    .form-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .form-row label {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-row label span {
+      font-weight: 600;
+      font-size: 0.95em;
+    }
+    .form-row button {
+      margin: 0;
+      white-space: nowrap;
+    }
+    
+    /* Better Table Styling */
+    .enhanced-table {
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+    .enhanced-table th {
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 12px 8px;
+    }
+    .enhanced-table td {
+      padding: 10px 8px;
+    }
+    .enhanced-table tr:hover {
+      background: rgba(123, 201, 111, 0.05);
+    }
+    body[data-theme="dark"] .enhanced-table tr:hover {
+      background: rgba(168, 213, 168, 0.05);
+    }
+
+    /* Badge Improvements */
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 0.85em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .status-badge.active {
+      background: rgba(123, 201, 111, 0.3);
+      color: #4a7c4a;
+      border: 1px solid #7bc96f;
+    }
+    .status-badge.inactive {
+      background: rgba(139, 115, 85, 0.2);
+      color: #8b7355;
+      border: 1px solid #8b7355;
+    }
+    body[data-theme="dark"] .status-badge.active {
+      background: rgba(168, 213, 168, 0.3);
+      color: #a8d5a8;
+    }
+
+    /* Empty State Styling */
+    .empty-state {
+      text-align: center;
+      padding: 32px 20px;
+      opacity: 0.6;
+      font-style: italic;
+    }
+    .empty-state::before {
+      content: '📭';
+      display: block;
+      font-size: 2.5em;
+      margin-bottom: 12px;
+    }
+
+    /* Quick Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin: 16px 0;
+    }
+    .stat-card {
+      background: rgba(123, 201, 111, 0.15);
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(123, 201, 111, 0.3);
+      text-align: center;
+    }
+    body[data-theme="dark"] .stat-card {
+      background: rgba(168, 213, 168, 0.15);
+      border-color: rgba(168, 213, 168, 0.3);
+    }
+    .stat-card .stat-value {
+      font-size: 1.8em;
+      font-weight: 700;
+      color: #7bc96f;
+      display: block;
+    }
+    body[data-theme="dark"] .stat-card .stat-value {
+      color: #a8d5a8;
+    }
+    .stat-card .stat-label {
+      font-size: 0.9em;
+      opacity: 0.8;
+      margin-top: 4px;
+    }
   </style>
   <script>
     // Initialize theme from localStorage or dark mode default
@@ -949,8 +1147,162 @@ function htmlTemplate(content, opts = {}) {
       updateThemeButton(newTheme);
     }
     
+    // Collapsible section functionality
+    function initCollapsible() {
+      // Auto-convert existing h3 sections to collapsible
+      autoConvertSections();
+      
+      const sections = document.querySelectorAll('.collapsible-section');
+      
+      // Load saved collapsed states from localStorage
+      const savedStates = JSON.parse(localStorage.getItem('collapsedSections') || '{}');
+      
+      sections.forEach((section, index) => {
+        const sectionId = section.dataset.sectionId || `section-${index}`;
+        section.dataset.sectionId = sectionId;
+        
+        // Set initial state (expanded by default, or use saved state)
+        const isExpanded = savedStates[sectionId] !== false;
+        if (isExpanded) {
+          section.classList.add('expanded');
+          const content = section.querySelector('.collapsible-content');
+          if (content) content.style.maxHeight = content.scrollHeight + 'px';
+        }
+        
+        const header = section.querySelector('.collapsible-header');
+        if (header) {
+          header.addEventListener('click', function() {
+            const content = section.querySelector('.collapsible-content');
+            const isCurrentlyExpanded = section.classList.contains('expanded');
+            
+            if (isCurrentlyExpanded) {
+              // Collapse
+              section.classList.remove('expanded');
+              content.style.maxHeight = '0';
+              savedStates[sectionId] = false;
+            } else {
+              // Expand
+              section.classList.add('expanded');
+              content.style.maxHeight = content.scrollHeight + 'px';
+              savedStates[sectionId] = true;
+            }
+            
+            // Save state to localStorage
+            localStorage.setItem('collapsedSections', JSON.stringify(savedStates));
+          });
+        }
+      });
+      
+      // Add expand/collapse all buttons if there are multiple sections
+      if (sections.length > 2) {
+        addExpandCollapseButtons();
+      }
+    }
+    
+    // Auto-convert h3 sections to collapsible format
+    function autoConvertSections() {
+      const container = document.querySelector('.container');
+      if (!container) return;
+      
+      const h3Elements = container.querySelectorAll('h3:not(.no-collapse)');
+      
+      h3Elements.forEach((h3, index) => {
+        // Skip if already wrapped
+        if (h3.closest('.collapsible-section')) return;
+        
+        // Get the section ID from h3 text for persistence
+        const sectionId = h3.textContent.trim().replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
+        
+        // Create wrapper
+        const wrapper = document.createElement('div');
+        wrapper.className = 'collapsible-section';
+        wrapper.dataset.sectionId = sectionId;
+        
+        // Create header
+        const header = document.createElement('div');
+        header.className = 'collapsible-header';
+        header.innerHTML = `
+          <span class="collapsible-toggle">\u25b6</span>
+          <h3>${h3.innerHTML}</h3>
+        `;
+        
+        // Create content container
+        const content = document.createElement('div');
+        content.className = 'collapsible-content';
+        
+        // Find all content between this h3 and the next h3 (or end of container)
+        let currentElement = h3.nextElementSibling;
+        const elementsToMove = [];
+        
+        while (currentElement && currentElement.tagName !== 'H3' && currentElement.tagName !== 'H2') {
+          elementsToMove.push(currentElement);
+          currentElement = currentElement.nextElementSibling;
+        }
+        
+        // Only create collapsible if there's content
+        if (elementsToMove.length > 0) {
+          // Insert wrapper before h3
+          h3.parentNode.insertBefore(wrapper, h3);
+          
+          // Move elements into content
+          elementsToMove.forEach(el => content.appendChild(el));
+          
+          // Remove original h3 and add new structure
+          h3.remove();
+          wrapper.appendChild(header);
+          wrapper.appendChild(content);
+        }
+      });
+    }
+    
+    function addExpandCollapseButtons() {
+      const container = document.querySelector('.container');
+      if (!container) return;
+      
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.cssText = 'display: flex; gap: 8px; margin: 16px 0; justify-content: flex-end;';
+      buttonContainer.innerHTML = `
+        <button onclick="expandAllSections()" class="btn" style="padding: 6px 12px; margin: 0; font-size: 0.9em;">▼ Expand All</button>
+        <button onclick="collapseAllSections()" class="btn" style="padding: 6px 12px; margin: 0; font-size: 0.9em;">▲ Collapse All</button>
+      `;
+      
+      const firstSection = container.querySelector('.collapsible-section');
+      if (firstSection) {
+        firstSection.parentNode.insertBefore(buttonContainer, firstSection);
+      }
+    }
+    
+    function expandAllSections() {
+      const sections = document.querySelectorAll('.collapsible-section');
+      const savedStates = {};
+      sections.forEach(section => {
+        section.classList.add('expanded');
+        const content = section.querySelector('.collapsible-content');
+        if (content) content.style.maxHeight = content.scrollHeight + 'px';
+        const sectionId = section.dataset.sectionId;
+        if (sectionId) savedStates[sectionId] = true;
+      });
+      localStorage.setItem('collapsedSections', JSON.stringify(savedStates));
+    }
+    
+    function collapseAllSections() {
+      const sections = document.querySelectorAll('.collapsible-section');
+      const savedStates = {};
+      sections.forEach(section => {
+        section.classList.remove('expanded');
+        const content = section.querySelector('.collapsible-content');
+        if (content) content.style.maxHeight = '0';
+        const sectionId = section.dataset.sectionId;
+        if (sectionId) savedStates[sectionId] = false;
+      });
+      localStorage.setItem('collapsedSections', JSON.stringify(savedStates));
+    }
+    
     // Initialize on page load
-    document.addEventListener('DOMContentLoaded', initTheme);
+    document.addEventListener('DOMContentLoaded', function() {
+      initTheme();
+      initCollapsible();
+    });
   </script>
 </head>
 <body data-theme="dark">
@@ -3328,37 +3680,55 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${activeModule === "overview" ? `
       <div class="admin-section">
       <h3>Quick Overview</h3>
-      <ul>
-        <li>Members tracked by XP: <b>${trackedXpUsers}</b></li>
-        <li>Configured mod role: <b>${settings.mod_role_id ? `@${escapeHtml(guild.roles.cache.get(settings.mod_role_id)?.name || "Unknown role")}` : "Not set"}</b></li>
-        <li>Warnings stored: <b>${warningRows.length}</b></li>
-        <li>Private VC rooms tracked: <b>${privateRooms.length}</b></li>
-        <li>Claim-all lock: <b>${claimLocked ? "Locked" : "Unlocked"}</b></li>
-      </ul>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value">${trackedXpUsers}</span>
+          <span class="stat-label">Members Tracked by XP</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${warningRows.length}</span>
+          <span class="stat-label">Warnings Stored</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${privateRooms.length}</span>
+          <span class="stat-label">Private VC Rooms</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${claimLocked ? "🔒" : "🔓"}</span>
+          <span class="stat-label">Claim-All ${claimLocked ? "Locked" : "Unlocked"}</span>
+        </div>
+      </div>
+      <p style="margin-top: 16px; opacity: 0.8;">
+        <strong>Mod Role:</strong> ${settings.mod_role_id ? `@${escapeHtml(guild.roles.cache.get(settings.mod_role_id)?.name || "Unknown role")}` : "<span style='opacity:0.7;'>Not configured</span>"}
+      </p>
       </div>
 
       <h3>⭐ Starboard</h3>
+      <p class="section-description">Highlight popular messages by reacting with stars</p>
       <form method="post" action="/guild/${guildId}/starboard-settings">
-        <label style="display:flex;align-items:center;gap:8px;">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
           <input type="checkbox" name="enabled" ${starboardSettings?.enabled ? "checked" : ""} />
-          <span>Enable Starboard</span>
+          <span style="font-weight:600;">Enable Starboard</span>
         </label>
-        <br/>
-        <label>Starboard Channel
-          <select name="channel_id">
-            <option value="">None</option>
-            ${textChannels.map((c) => `<option value="${c.id}" ${starboardSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
-          </select>
-        </label>
-        <br/><br/>
-        <label>Star Emoji (default: ⭐)
-          <input name="emoji" value="${escapeHtml(starboardSettings?.emoji || "⭐")}" style="max-width:80px;" />
-        </label>
-        <br/><br/>
-        <label>Star Threshold (minimum stars to post)
-          <input type="number" name="threshold" value="${starboardSettings?.threshold || 5}" min="1" max="50" style="max-width:120px;" />
-        </label>
-        <br/><br/>
+        
+        <div class="form-row">
+          <label>
+            <span>Starboard Channel</span>
+            <select name="channel_id">
+              <option value="">None</option>
+              ${textChannels.map((c) => `<option value="${c.id}" ${starboardSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            <span>Star Emoji</span>
+            <input name="emoji" value="${escapeHtml(starboardSettings?.emoji || "⭐")}" style="max-width:120px;" placeholder="⭐" />
+          </label>
+          <label>
+            <span>Star Threshold</span>
+            <input type="number" name="threshold" value="${starboardSettings?.threshold || 5}" min="1" max="50" style="max-width:120px;" />
+          </label>
+        </div>
+        
         <button type="submit">Save Starboard Settings</button>
       </form>
       ` : ""}
@@ -3395,7 +3765,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </form>
 
       <h3>Warnings</h3>
-      <table>
+      <p class="section-description">View and manage user warnings issued by moderators</p>
+      ${warningRows.length > 0 ? `
+      <table class="enhanced-table">
         <tr><th>Target</th><th>Moderator</th><th>Reason</th><th>Date</th><th>Actions</th></tr>
         ${warningRows.map((w) => `
           <tr>
@@ -3416,8 +3788,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </tr>
         `).join("")}
       </table>
+      ` : `<div class="empty-state">No warnings issued yet</div>`}
 
       <h3>🤖 Auto-Moderation</h3>
+      <p class="section-description">Automatically moderate spam, links, and unwanted content</p>
       <form method="post" action="/guild/${guildId}/automod-settings">
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="spam_enabled" ${automodSettings?.spam_enabled ? "checked" : ""} />
@@ -3468,25 +3842,28 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </form>
 
       <h3>💡 Suggestions System</h3>
+      <p class="section-description">Let members submit and vote on suggestions for your server</p>
       <form method="post" action="/guild/${guildId}/suggestions-settings">
-        <label style="display:flex;align-items:center;gap:8px;">
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
           <input type="checkbox" name="suggestions_enabled" ${suggestionSettings?.suggestions_enabled ? "checked" : ""} />
-          <span>Enable Suggestions</span>
+          <span style="font-weight:600;">Enable Suggestions</span>
         </label>
-        <br/>
-        <label>Suggestions Channel
-          <select name="channel_id">
-            <option value="">None</option>
-            ${textChannels.map((c) => `<option value="${c.id}" ${suggestionSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
-          </select>
-        </label>
-        <br/><br/>
-        <button type="submit">Save Suggestions Settings</button>
+        
+        <div class="form-row">
+          <label>
+            <span>Suggestions Channel</span>
+            <select name="channel_id">
+              <option value="">None</option>
+              ${textChannels.map((c) => `<option value="${c.id}" ${suggestionSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <button type="submit">Save Suggestions Settings</button>
+        </div>
       </form>
 
       ${allSuggestions.length > 0 ? `
-      <h4>Recent Suggestions</h4>
-      <table>
+      <h4 style="margin-top:24px;">Recent Suggestions</h4>
+      <table class="enhanced-table">
         <tr><th>ID</th><th>User</th><th>Suggestion</th><th>Votes</th><th>Status</th><th>Actions</th></tr>
         ${allSuggestions.slice(0, 10).map((s) => `
           <tr>
@@ -3515,6 +3892,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${activeModule === "welcome" ? `
 
       <h3>🎉 Welcome Messages</h3>
+      <p class="section-description">Greet new members with a custom message when they join your server</p>
       <form method="post" action="/guild/${guildId}/welcome-settings">
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="welcome_enabled" ${welcomeSettings?.welcome_enabled ? "checked" : ""} />
@@ -3545,6 +3923,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </form>
 
       <h3>👋 Goodbye Messages</h3>
+      <p class="section-description">Send a message when members leave your server</p>
       <form method="post" action="/guild/${guildId}/goodbye-settings">
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="goodbye_enabled" ${welcomeSettings?.goodbye_enabled ? "checked" : ""} />
@@ -3575,21 +3954,24 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </form>
 
       <h3>🎭 Auto-Roles</h3>
-      <p style="opacity:0.8;">Roles automatically given to new members when they join.</p>
+      <p class="section-description">Roles automatically given to new members when they join</p>
       
       <form method="post" action="/guild/${guildId}/auto-roles/add">
-        <label>Add Auto-Role
-          <select name="role_id" required>
-            <option value="">Select a role...</option>
-            ${roleOptions.map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`).join("")}
-          </select>
-        </label>
-        <button type="submit">Add Role</button>
+        <div class="form-row">
+          <label>
+            <span>Add Auto-Role</span>
+            <select name="role_id" required>
+              <option value="">Select a role...</option>
+              ${roleOptions.map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`).join("")}
+            </select>
+          </label>
+          <button type="submit">Add Role</button>
+        </div>
       </form>
       <br/>
       
       ${autoRoles.length > 0 ? `
-      <table>
+      <table class="enhanced-table">
         <tr><th>Role</th><th>Actions</th></tr>
         ${autoRoles.map((ar) => {
           const role = roleOptions.find(r => r.id === ar.role_id);
@@ -3606,7 +3988,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           `;
         }).join("")}
       </table>
-      ` : "<p style=\"opacity:0.7;\">No auto-roles configured.</p>"}
+      ` : `<div class="empty-state">No auto-roles configured</div>`}
       ` : ""}
 
       ${activeModule === "logging" ? `
@@ -3705,6 +4087,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       ${activeModule === "reactionroles" ? `
       <h3>Reaction Roles</h3>
+      <p class="section-description">Add or remove roles when members react to specific messages</p>
       <form class="admin-grid-form" method="post" action="/guild/${guildId}/reaction-roles/add">
         <label>Channel
           <select name="channel_id">
@@ -3751,7 +4134,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
               </form>
             </li>
           `;
-        }).join("") || "<li>No reaction roles configured.</li>"}
+        }).join("") || '<li class="empty-state" style="list-style:none;">No reaction roles configured</li>'}
       </ul>
 
       <hr/>

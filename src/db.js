@@ -346,19 +346,35 @@ async function initDb() {
   `);
 
   // Migrate old remove_on_unreact column to mode column if it exists
-  await run(`
-    DO $$
-    BEGIN
-      IF EXISTS (
-        SELECT 1 FROM information_schema.columns 
-        WHERE table_name = 'reaction_role_bindings' AND column_name = 'remove_on_unreact'
-      ) THEN
-        ALTER TABLE reaction_role_bindings ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'toggle';
-        UPDATE reaction_role_bindings SET mode = CASE WHEN remove_on_unreact = 1 THEN 'toggle' ELSE 'add' END WHERE mode IS NULL OR mode = 'toggle';
-        ALTER TABLE reaction_role_bindings DROP COLUMN IF EXISTS remove_on_unreact;
-      END IF;
-    END $$;
-  `).catch(() => {});
+  try {
+    await run(`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'reaction_role_bindings' AND column_name = 'remove_on_unreact'
+        ) THEN
+          -- Add mode column if needed (shouldn't be needed in fresh installs)
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns 
+            WHERE table_name = 'reaction_role_bindings' AND column_name = 'mode'
+          ) THEN
+            ALTER TABLE reaction_role_bindings ADD COLUMN mode TEXT DEFAULT 'toggle';
+          END IF;
+          
+          -- Migrate data: remove_on_unreact=1 -> toggle, remove_on_unreact=0 -> add
+          UPDATE reaction_role_bindings 
+          SET mode = CASE WHEN remove_on_unreact = 1 THEN 'toggle' ELSE 'add' END 
+          WHERE mode IS NULL;
+          
+          -- Drop old column
+          ALTER TABLE reaction_role_bindings DROP COLUMN remove_on_unreact;
+        END IF;
+      END $$;
+    `);
+  } catch (err) {
+    console.error('Migration warning (non-critical):', err.message);
+  }
 
   // Reaction role questions (for multi-option role selection)
   await run(`

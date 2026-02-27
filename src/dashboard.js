@@ -954,6 +954,15 @@ const {
   getReactionRoleBindings,
   upsertReactionRoleBinding,
   removeReactionRoleBinding,
+  getReactionRoleQuestions,
+  getReactionRoleQuestion,
+  createReactionRoleQuestion,
+  updateReactionRoleQuestion,
+  deleteReactionRoleQuestion,
+  getReactionRoleOptions,
+  createReactionRoleOption,
+  updateReactionRoleOption,
+  deleteReactionRoleOption,
   getTicketSettings,
   upsertTicketSettings,
   getOpenTickets
@@ -3187,6 +3196,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const eventConfigs = await getLoggingEventConfigs(guildId);
     const actorExclusions = await getLoggingActorExclusions(guildId);
     const reactionRoleBindings = await getReactionRoleBindings(guildId);
+    const reactionRoleQuestions = await getReactionRoleQuestions(guildId);
     const ticketSettings = await getTicketSettings(guildId);
     const openTickets = await getOpenTickets(guildId);
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
@@ -3417,6 +3427,127 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           `;
         }).join("") || "<li>No reaction roles configured.</li>"}
       </ul>
+
+      <hr/>
+
+      <h3>Reaction Role Questions</h3>
+      <p style="opacity:0.8;margin-bottom:12px;">Create dropdown selection menus for users to choose roles. Each question can have up to 25 options.</p>
+      
+      <form method="post" action="/guild/${guildId}/reaction-questions/create" style="margin-bottom:16px;">
+        <label>Question Text
+          <input name="question_text" placeholder="Select your roles" style="min-width:300px;" required />
+        </label>
+        <button type="submit">Create New Question</button>
+      </form>
+
+      ${reactionRoleQuestions.length > 0 ? `
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          ${reactionRoleQuestions.map((question) => {
+            const questionId = question.id;
+            const channelName = question.channel_id ? (guild.channels.cache.get(question.channel_id)?.name || question.channel_id) : "Not sent";
+            const isDeployed = !!question.channel_id;
+            
+            return `
+              <div style="border:1px solid #444;padding:16px;border-radius:6px;background:#2a2a2a;">
+                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px;">
+                  <div>
+                    <h4 style="margin:0 0 4px 0;">${escapeHtml(question.question_text)}</h4>
+                    <p style="margin:0;font-size:0.9em;opacity:0.7;">
+                      ${isDeployed ? `Deployed to #${escapeHtml(channelName)}` : "Not deployed yet"}
+                    </p>
+                  </div>
+                  <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/delete" style="display:inline;">
+                    <button type="submit" onclick="return confirm('Delete this question and all its options?')" style="background:#d9534f;">Delete</button>
+                  </form>
+                </div>
+
+                <details style="margin-bottom:12px;">
+                  <summary style="cursor:pointer;padding:8px;background:#333;border-radius:4px;margin-bottom:8px;">Manage Options</summary>
+                  
+                  <div id="question-${questionId}-options" style="margin:12px 0;">
+                    <!-- Options will be loaded here -->
+                  </div>
+
+                  <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/options/create" style="border:1px solid #555;padding:12px;border-radius:4px;background:#222;">
+                    <h5 style="margin:0 0 8px 0;">Add New Option</h5>
+                    <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:8px;margin-bottom:8px;">
+                      <label style="display:flex;flex-direction:column;">
+                        <span style="font-size:0.85em;margin-bottom:4px;">Emoji</span>
+                        <input name="emoji" placeholder="😀" required />
+                      </label>
+                      <label style="display:flex;flex-direction:column;">
+                        <span style="font-size:0.85em;margin-bottom:4px;">Label</span>
+                        <input name="label" placeholder="Option name" required />
+                      </label>
+                      <label style="display:flex;flex-direction:column;">
+                        <span style="font-size:0.85em;margin-bottom:4px;">Position</span>
+                        <input name="position" type="number" value="0" style="max-width:80px;" />
+                      </label>
+                    </div>
+                    <label style="display:flex;flex-direction:column;margin-bottom:8px;">
+                      <span style="font-size:0.85em;margin-bottom:4px;">Description (optional)</span>
+                      <input name="description" placeholder="Description shown in dropdown" />
+                    </label>
+                    <label style="display:flex;flex-direction:column;margin-bottom:8px;">
+                      <span style="font-size:0.85em;margin-bottom:4px;">Role IDs (comma-separated)</span>
+                      <input name="role_ids" placeholder="123456789,987654321" required />
+                    </label>
+                    <button type="submit">Add Option</button>
+                  </form>
+                </details>
+
+                <form method="post" action="/guild/${guildId}/reaction-questions/${questionId}/send" style="border-top:1px solid #444;padding-top:12px;margin-top:12px;">
+                  <div style="display:flex;gap:8px;align-items:end;">
+                    <label style="flex:1;">
+                      <span style="font-size:0.85em;margin-bottom:4px;display:block;">Send to Channel</span>
+                      <select name="channel_id" required>
+                        <option value="">Select channel</option>
+                        ${textChannels.map((c) => `<option value="${c.id}" ${question.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+                      </select>
+                    </label>
+                    <button type="submit" style="background:#5cb85c;">${isDeployed ? "Update" : "Send"} Message</button>
+                  </div>
+                </form>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : `<p style="opacity:0.7;">No questions created yet.</p>`}
+
+      <script>
+        // Load options for each question
+        ${reactionRoleQuestions.map((q) => `
+          fetch('/guild/${guildId}/reaction-questions/${q.id}')
+            .then(r => r.json())
+            .then(data => {
+              const container = document.getElementById('question-${q.id}-options');
+              if (data.options && data.options.length > 0) {
+                container.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' + data.options.map(opt => {
+                  const roleNames = opt.role_ids.split(',').map(id => {
+                    const role = ${JSON.stringify(roleOptions.map(r => ({ id: r.id, name: r.name })))};
+                    const found = role.find(r => r.id === id.trim());
+                    return found ? '@' + found.name : id;
+                  }).join(', ');
+                  return \`
+                    <div style="padding:8px;background:#333;border-radius:4px;display:flex;justify-content:space-between;align-items:center;">
+                      <div>
+                        <span style="font-size:1.2em;margin-right:8px;">\${opt.emoji}</span>
+                        <strong>\${opt.label}</strong>
+                        \${opt.description ? '<span style="opacity:0.7;margin-left:8px;"> - ' + opt.description + '</span>' : ''}
+                        <div style="font-size:0.85em;opacity:0.7;margin-top:4px;">Roles: \${roleNames} • Position: \${opt.position}</div>
+                      </div>
+                      <form method="post" action="/guild/${guildId}/reaction-questions/${q.id}/options/\${opt.id}/delete" style="display:inline;">
+                        <button type="submit" style="background:#d9534f;padding:6px 12px;font-size:0.9em;">Delete</button>
+                      </form>
+                    </div>
+                  \`;
+                }).join('') + '</div>';
+              } else {
+                container.innerHTML = '<p style="opacity:0.7;font-style:italic;">No options yet. Add one below.</p>';
+              }
+            });
+        `).join("")}
+      </script>
 
       <hr/>
 

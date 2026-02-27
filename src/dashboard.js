@@ -3793,7 +3793,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <span>Block Spam (repeated messages)</span>
         </label>
         <label style="margin-left:24px;">Messages in 10s:
-          <input type="number" name="spam_threshold" value="${automodSettings?.spam_threshold || 5}" min="2" max="20" style="width:80px;" />
+          <input type="number" name="spam_threshold" value="${automodSettings?.spam_messages || 5}" min="2" max="20" style="width:80px;" />
         </label>
         <br/><br/>
 
@@ -3814,7 +3814,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <span>Block Excessive Caps</span>
         </label>
         <label style="margin-left:24px;">Caps % threshold:
-          <input type="number" name="caps_threshold" value="${automodSettings?.caps_threshold || 70}" min="50" max="100" style="width:80px;" />
+          <input type="number" name="caps_threshold" value="${automodSettings?.caps_percentage || 70}" min="50" max="100" style="width:80px;" />
         </label>
         <br/><br/>
 
@@ -3823,12 +3823,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <span>Block Excessive Mentions</span>
         </label>
         <label style="margin-left:24px;">Max mentions:
-          <input type="number" name="mentions_threshold" value="${automodSettings?.mentions_threshold || 5}" min="2" max="20" style="width:80px;" />
+          <input type="number" name="mentions_threshold" value="${automodSettings?.mentions_max || 5}" min="2" max="20" style="width:80px;" />
         </label>
         <br/><br/>
 
         <label style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" name="attachments_enabled" ${automodSettings?.attachments_enabled ? "checked" : ""} />
+          <input type="checkbox" name="attachments_enabled" ${automodSettings?.attach_spam_enabled ? "checked" : ""} />
           <span>Block All Attachments</span>
         </label>
         <br/><br/>
@@ -4666,34 +4666,34 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const spamEnabled = req.body.spam_enabled === "on" ? 1 : 0;
-      const spamThreshold = parseInt(req.body.spam_threshold || "5", 10);
+      const spamMessages = parseInt(req.body.spam_threshold || "5", 10);
       const invitesEnabled = req.body.invites_enabled === "on" ? 1 : 0;
       const linksEnabled = req.body.links_enabled === "on" ? 1 : 0;
       const capsEnabled = req.body.caps_enabled === "on" ? 1 : 0;
-      const capsThreshold = parseInt(req.body.caps_threshold || "70", 10);
+      const capsPercentage = parseInt(req.body.caps_threshold || "70", 10);
       const mentionsEnabled = req.body.mentions_enabled === "on" ? 1 : 0;
-      const mentionsThreshold = parseInt(req.body.mentions_threshold || "5", 10);
-      const attachmentsEnabled = req.body.attachments_enabled === "on" ? 1 : 0;
+      const mentionsMax = parseInt(req.body.mentions_threshold || "5", 10);
+      const attachSpamEnabled = req.body.attachments_enabled === "on" ? 1 : 0;
 
       await run(`
         INSERT INTO automod_settings (
-          guild_id, spam_enabled, spam_threshold, invites_enabled, links_enabled,
-          caps_enabled, caps_threshold, mentions_enabled, mentions_threshold, attachments_enabled
+          guild_id, spam_enabled, spam_messages, invites_enabled, links_enabled,
+          caps_enabled, caps_percentage, mentions_enabled, mentions_max, attach_spam_enabled
         )
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
           spam_enabled=excluded.spam_enabled,
-          spam_threshold=excluded.spam_threshold,
+          spam_messages=excluded.spam_messages,
           invites_enabled=excluded.invites_enabled,
           links_enabled=excluded.links_enabled,
           caps_enabled=excluded.caps_enabled,
-          caps_threshold=excluded.caps_threshold,
+          caps_percentage=excluded.caps_percentage,
           mentions_enabled=excluded.mentions_enabled,
-          mentions_threshold=excluded.mentions_threshold,
-          attachments_enabled=excluded.attachments_enabled
+          mentions_max=excluded.mentions_max,
+          attach_spam_enabled=excluded.attach_spam_enabled
       `, [
-        guildId, spamEnabled, spamThreshold, invitesEnabled, linksEnabled,
-        capsEnabled, capsThreshold, mentionsEnabled, mentionsThreshold, attachmentsEnabled
+        guildId, spamEnabled, spamMessages, invitesEnabled, linksEnabled,
+        capsEnabled, capsPercentage, mentionsEnabled, mentionsMax, attachSpamEnabled
       ]);
 
       return res.redirect(getModuleRedirect(guildId, 'moderation'));

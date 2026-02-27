@@ -4635,15 +4635,27 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
       
       const embed = new EmbedBuilder()
-        .setTitle(question.question_text)
-        .setColor(0x5865f2)
-        .setDescription("Select an option from the dropdown below to receive the associated roles.")
-        .setFooter({ text: "You can change your selection at any time" });
+        .setTitle(`🎭 ${question.question_text}`)
+        .setColor(0x7bc96f)
+        .setDescription("**Choose your role from the dropdown menu below!**\n\n> Select an option to receive the corresponding roles. You can change your selection at any time.\n\n**Available Options:**")
+        .setFooter({ text: "Moist Lieutenant • Role Selection", iconURL: guild.iconURL() || undefined })
+        .setTimestamp();
+
+      // Add fields for each option
+      for (const option of options) {
+        const optionEmoji = option.emoji || "•";
+        const optionDesc = option.description || "No description provided";
+        embed.addFields({
+          name: `${optionEmoji} ${option.label}`,
+          value: optionDesc,
+          inline: true
+        });
+      }
 
       // Build the select menu
       const selectMenu = new StringSelectMenuBuilder()
         .setCustomId(`reaction_role_select_${questionId}`)
-        .setPlaceholder("Choose an option...");
+        .setPlaceholder("🎯 Select your role...");
 
       for (const option of options) {
         selectMenu.addOptions({

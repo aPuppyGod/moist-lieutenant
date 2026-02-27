@@ -835,6 +835,152 @@ async function cmdSyncRoles(message) {
 }
 
 // ─────────────────────────────────────────────────────
+// Fun commands
+// ─────────────────────────────────────────────────────
+
+async function cmd8Ball(message, args) {
+  const question = args.join(" ").trim();
+  if (!question) {
+    await message.reply("❓ Ask me a question! Usage: `!8ball <question>`").catch(() => {});
+    return;
+  }
+
+  const responses = [
+    "It is certain.", "It is decidedly so.", "Without a doubt.", "Yes definitely.",
+    "You may rely on it.", "As I see it, yes.", "Most likely.", "Outlook good.",
+    "Yes.", "Signs point to yes.", "Reply hazy, try again.", "Ask again later.",
+    "Better not tell you now.", "Cannot predict now.", "Concentrate and ask again.",
+    "Don't count on it.", "My reply is no.", "My sources say no.",
+    "Outlook not so good.", "Very doubtful."
+  ];
+  
+  const answer = responses[Math.floor(Math.random() * responses.length)];
+  
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("🎱 Magic 8-Ball")
+    .addFields(
+      { name: "Question", value: question, inline: false },
+      { name: "Answer", value: answer, inline: false }
+    )
+    .setFooter({ text: `Asked by ${message.author.tag}` })
+    .setTimestamp();
+  
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdCoinFlip(message) {
+  const result = Math.random() < 0.5 ? "Heads" : "Tails";
+  const emoji = result === "Heads" ? "🟡" : "⚪";
+  
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("🪙 Coin Flip")
+    .setDescription(`${emoji} **${result}**!`)
+    .setTimestamp();
+  
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdRoll(message, args) {
+  let sides = 6;
+  let count = 1;
+  
+  if (args.length > 0) {
+    const parsed = parseInt(args[0], 10);
+    if (Number.isFinite(parsed) && parsed > 0 && parsed <= 1000) {
+      sides = parsed;
+    }
+  }
+  
+  if (args.length > 1) {
+    const parsedCount = parseInt(args[1], 10);
+    if (Number.isFinite(parsedCount) && parsedCount > 0 && parsedCount <= 20) {
+      count = parsedCount;
+    }
+  }
+  
+  const rolls = [];
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    const roll = Math.floor(Math.random() * sides) + 1;
+    rolls.push(roll);
+    total += roll;
+  }
+  
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("🎲 Dice Roll")
+    .addFields(
+      { name: "Configuration", value: `${count} × d${sides}`, inline: true },
+      { name: "Results", value: rolls.join(", "), inline: false }
+    );
+  
+  if (count > 1) {
+    embed.addFields({ name: "Total", value: String(total), inline: true });
+  }
+  
+  embed.setTimestamp();
+  
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdPoll(message, args) {
+  if (args.length < 3) {
+    await message.reply("Usage: `!poll <question> | <option1> | <option2> [| option3...]`").catch(() => {});
+    return;
+  }
+  
+  const parts = args.join(" ").split("|").map(p => p.trim());
+  if (parts.length < 3) {
+    await message.reply("Usage: `!poll <question> | <option1> | <option2> [| option3...]`").catch(() => {});
+    return;
+  }
+  
+  const question = parts[0];
+  const options = parts.slice(1);
+  
+  if (options.length > 10) {
+    await message.reply("❌ Maximum 10 options allowed.").catch(() => {});
+    return;
+  }
+  
+  const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+  
+  const optionsText = options.map((opt, i) => `${emojis[i]} ${opt}`).join("\n");
+  
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("📊 " + question)
+    .setDescription(optionsText)
+    .setFooter({ text: `Poll by ${message.author.tag}` })
+    .setTimestamp();
+  
+  const pollMessage = await message.channel.send({ embeds: [embed] });
+  
+  for (let i = 0; i < options.length; i++) {
+    await pollMessage.react(emojis[i]).catch(() => {});
+  }
+}
+
+async function cmdChoose(message, args) {
+  if (args.length < 2) {
+    await message.reply("Usage: `!choose <option1> <option2> [option3...]`").catch(() => {});
+    return;
+  }
+  
+  const choice = args[Math.floor(Math.random() * args.length)];
+  
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("🤔 I choose...")
+    .setDescription(`**${choice}**`)
+    .setTimestamp();
+  
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
 // Moderation commands
 // ─────────────────────────────────────────────────────
 
@@ -1728,6 +1874,32 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  // Fun commands
+  if (cmd === "8ball") {
+    await cmd8Ball(message, args);
+    return true;
+  }
+
+  if (cmd === "flip" || cmd === "coinflip") {
+    await cmdCoinFlip(message);
+    return true;
+  }
+
+  if (cmd === "roll" || cmd === "dice") {
+    await cmdRoll(message, args);
+    return true;
+  }
+
+  if (cmd === "poll") {
+    await cmdPoll(message, args);
+    return true;
+  }
+
+  if (cmd === "choose") {
+    await cmdChoose(message, args);
+    return true;
+  }
+
   if (cmd === "ban") {
     await cmdBan(message, args);
     return true;
@@ -1838,6 +2010,13 @@ function buildSlashCommands() {
     { name: "voice-unlock", description: "Unlock private voice" },
     { name: "voice-rename", description: "Rename private voice", options: [{ type: 3, name: "name", description: "New name", required: true }] },
     { name: "voice-ban", description: "Ban user from private voice", options: [{ type: 6, name: "user", description: "User", required: true }] },
+    // Fun commands
+    { name: "8ball", description: "Ask the magic 8-ball", options: [{ type: 3, name: "question", description: "Your question", required: true }] },
+    { name: "flip", description: "Flip a coin" },
+    { name: "roll", description: "Roll dice", options: [{ type: 4, name: "sides", description: "Number of sides (default: 6)", required: false }, { type: 4, name: "count", description: "Number of dice (default: 1)", required: false }] },
+    { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
+    { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
+    // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "kick", description: "Kick member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
@@ -2006,6 +2185,23 @@ async function handleSlashCommand(interaction) {
   } else if (name === "prefix") {
     const value = optionValue(interaction, "value");
     if (value) args.push(String(value));
+  } else if (name === "8ball") {
+    const question = optionValue(interaction, "question");
+    if (question) args.push(...String(question).split(/\s+/));
+  } else if (name === "roll") {
+    const sides = optionValue(interaction, "sides");
+    const count = optionValue(interaction, "count");
+    if (sides) args.push(String(sides));
+    if (count) args.push(String(count));
+  } else if (name === "poll") {
+    const question = optionValue(interaction, "question");
+    const options = optionValue(interaction, "options");
+    if (question && options) {
+      args.push(`${question} | ${options}`);
+    }
+  } else if (name === "choose") {
+    const options = optionValue(interaction, "options");
+    if (options) args.push(...String(options).split(/\s+/));
   } else {
     const keys = ["page", "limit", "name", "count", "seconds"];
     for (const key of keys) {

@@ -10,7 +10,7 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const { initDb, get, run } = require("./db");
+const { initDb, get, run, all } = require("./db");
 const { levelFromXp } = require("./xp");
 const { handleCommands, handleSlashCommand, registerSlashCommands } = require("./commands");
 const { onVoiceStateUpdate, cleanupPrivateRooms } = require("./voiceRooms");
@@ -979,6 +979,7 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
+  // Logging
   await sendGuildLog(member.guild, {
     eventKey: "member_join",
     actorUserId: member.id,
@@ -990,24 +991,73 @@ client.on(Events.GuildMemberAdd, async (member) => {
 
   const settings = await getGuildSettings(member.guild.id).catch(() => null);
   const thresholdDays = Number(settings?.new_account_warn_days ?? 1);
-  if (thresholdDays <= 0) return;
+  if (thresholdDays > 0) {
+    const accountAgeMs = Date.now() - Number(member.user?.createdTimestamp || 0);
+    const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
+    if (accountAgeMs <= thresholdMs) {
+      const accountAgeDays = Math.max(0, Math.floor(accountAgeMs / (24 * 60 * 60 * 1000)));
+      await sendGuildLog(member.guild, {
+        eventKey: "member_join_new_account",
+        actorUserId: member.id,
+        color: LOG_THEME.warn,
+        title: "⚠️ New Account Joined",
+        description: `${userLabel(member.user)} joined with a recently created account.`,
+        fields: [
+          { name: "User", value: userLabel(member.user), inline: true },
+          { name: "Account Age", value: `${accountAgeDays} day(s)`, inline: true },
+          { name: "Threshold", value: `${thresholdDays} day(s)`, inline: true }
+        ]
+      });
+    }
+  }
 
-  const accountAgeMs = Date.now() - Number(member.user?.createdTimestamp || 0);
-  const thresholdMs = thresholdDays * 24 * 60 * 60 * 1000;
-  if (accountAgeMs <= thresholdMs) {
-    const accountAgeDays = Math.max(0, Math.floor(accountAgeMs / (24 * 60 * 60 * 1000)));
-    await sendGuildLog(member.guild, {
-      eventKey: "member_join_new_account",
-      actorUserId: member.id,
-      color: LOG_THEME.warn,
-      title: "⚠️ New Account Joined",
-      description: `${userLabel(member.user)} joined with a recently created account.`,
-      fields: [
-        { name: "User", value: userLabel(member.user), inline: true },
-        { name: "Account Age", value: `${accountAgeDays} day(s)`, inline: true },
-        { name: "Threshold", value: `${thresholdDays} day(s)`, inline: true }
-      ]
-    });
+  // Welcome message
+  try {
+    const welcomeSettings = await get(
+      `SELECT * FROM welcome_goodbye_settings WHERE guild_id=?`,
+      [member.guild.id]
+    );
+    if (welcomeSettings?.welcome_enabled && welcomeSettings?.welcome_channel_id) {
+      const channel = member.guild.channels.cache.get(welcomeSettings.welcome_channel_id);
+      if (channel?.isTextBased()) {
+        let message = (welcomeSettings.welcome_message || 'Welcome {user} to {server}!')
+          .replace(/{user}/g, `<@${member.id}>`)
+          .replace(/{server}/g, member.guild.name)
+          .replace(/{count}/g, String(member.guild.memberCount));
+        
+        if (welcomeSettings.welcome_embed) {
+          const embed = new EmbedBuilder()
+            .setColor(welcomeSettings.welcome_embed_color || '#7bc96f')
+            .setDescription(message)
+            .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+            .setFooter({ text: `Member #${member.guild.memberCount}` })
+            .setTimestamp();
+          await channel.send({ embeds: [embed] }).catch(() => {});
+        } else {
+          await channel.send(message).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Welcome message error:', err);
+  }
+
+  // Auto-roles
+  try {
+    const autoRoles = await all(
+      `SELECT role_id FROM auto_roles WHERE guild_id=?`,
+      [member.guild.id]
+    ).catch(() => []);
+    
+    const roles = await member.guild.roles.fetch();
+    for (const row of autoRoles) {
+      const role = roles.get(row.role_id);
+      if (role && !member.roles.cache.has(role.id)) {
+        await member.roles.add(role).catch(() => {});
+      }
+    }
+  } catch (err) {
+    // Auto-roles might not be set up yet
   }
 });
 
@@ -1034,6 +1084,37 @@ client.on(Events.GuildMemberRemove, async (member) => {
       { name: "Action By", value: actorLabel, inline: true }
     ]
   });
+
+  // Goodbye message
+  try {
+    const goodbyeSettings = await get(
+      `SELECT * FROM welcome_goodbye_settings WHERE guild_id=?`,
+      [member.guild.id]
+    );
+    if (goodbyeSettings?.goodbye_enabled && goodbyeSettings?.goodbye_channel_id) {
+      const channel = member.guild.channels.cache.get(goodbyeSettings.goodbye_channel_id);
+      if (channel?.isTextBased()) {
+        let message = (goodbyeSettings.goodbye_message || 'Goodbye {user}!')
+          .replace(/{user}/g, member.user.tag)
+          .replace(/{server}/g, member.guild.name)
+          .replace(/{count}/g, String(member.guild.memberCount));
+        
+        if (goodbyeSettings.goodbye_embed) {
+          const embed = new EmbedBuilder()
+            .setColor(goodbyeSettings.goodbye_embed_color || '#8b7355')
+            .setDescription(message)
+            .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
+            .setFooter({ text: `Members: ${member.guild.memberCount}` })
+            .setTimestamp();
+          await channel.send({ embeds: [embed] }).catch(() => {});
+        } else {
+          await channel.send(message).catch(() => {});
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Goodbye message error:', err);
+  }
 });
 
 client.on(Events.GuildBanAdd, async (ban) => {

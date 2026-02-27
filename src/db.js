@@ -424,6 +424,108 @@ async function initDb() {
     )
   `);
 
+  // Welcome/Goodbye messages
+  await run(`
+    CREATE TABLE IF NOT EXISTS welcome_goodbye_settings (
+      guild_id TEXT PRIMARY KEY,
+      welcome_enabled INTEGER NOT NULL DEFAULT 0,
+      welcome_channel_id TEXT DEFAULT NULL,
+      welcome_message TEXT DEFAULT 'Welcome {user} to {server}!',
+      welcome_embed INTEGER NOT NULL DEFAULT 1,
+      welcome_embed_color TEXT DEFAULT '#7bc96f',
+      goodbye_enabled INTEGER NOT NULL DEFAULT 0,
+      goodbye_channel_id TEXT DEFAULT NULL,
+      goodbye_message TEXT DEFAULT 'Goodbye {user}!',
+      goodbye_embed INTEGER NOT NULL DEFAULT 1,
+      goodbye_embed_color TEXT DEFAULT '#8b7355'
+    )
+  `);
+
+  // Auto-roles (roles given on join)
+  await run(`
+    CREATE TABLE IF NOT EXISTS auto_roles (
+      guild_id TEXT NOT NULL,
+      role_id TEXT NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (guild_id, role_id)
+    )
+  `);
+
+  // Auto-moderation settings
+  await run(`
+    CREATE TABLE IF NOT EXISTS automod_settings (
+      guild_id TEXT PRIMARY KEY,
+      spam_enabled INTEGER NOT NULL DEFAULT 0,
+      spam_messages INTEGER DEFAULT 5,
+      spam_interval INTEGER DEFAULT 5,
+      spam_action TEXT DEFAULT 'warn',
+      invites_enabled INTEGER NOT NULL DEFAULT 0,
+      invites_action TEXT DEFAULT 'delete',
+      invites_whitelist TEXT DEFAULT NULL,
+      links_enabled INTEGER NOT NULL DEFAULT 0,
+      links_action TEXT DEFAULT 'delete',
+      links_whitelist TEXT DEFAULT NULL,
+      caps_enabled INTEGER NOT NULL DEFAULT 0,
+      caps_percentage INTEGER DEFAULT 70,
+      caps_action TEXT DEFAULT 'delete',
+      mentions_enabled INTEGER NOT NULL DEFAULT 0,
+      mentions_max INTEGER DEFAULT 5,
+      mentions_action TEXT DEFAULT 'warn',
+      attach_spam_enabled INTEGER NOT NULL DEFAULT 0,
+      attach_spam_max INTEGER DEFAULT 3,
+      attach_spam_interval INTEGER DEFAULT 5,
+      attach_spam_action TEXT DEFAULT 'warn'
+    )
+  `);
+
+  // Suggestions system
+  await run(`
+    CREATE TABLE IF NOT EXISTS suggestion_settings (
+      guild_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      channel_id TEXT DEFAULT NULL,
+      review_channel_id TEXT DEFAULT NULL,
+      require_review INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS suggestions (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      content TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      message_id TEXT DEFAULT NULL,
+      upvotes INTEGER DEFAULT 0,
+      downvotes INTEGER DEFAULT 0,
+      staff_response TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  // Starboard
+  await run(`
+    CREATE TABLE IF NOT EXISTS starboard_settings (
+      guild_id TEXT PRIMARY KEY,
+      enabled INTEGER NOT NULL DEFAULT 0,
+      channel_id TEXT DEFAULT NULL,
+      threshold INTEGER DEFAULT 3,
+      emoji TEXT DEFAULT '⭐',
+      self_star INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS starboard_messages (
+      guild_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      starboard_message_id TEXT DEFAULT NULL,
+      star_count INTEGER DEFAULT 0,
+      PRIMARY KEY (guild_id, message_id)
+    )
+  `);
+
   // Migrations: Add missing columns to existing tables
   try {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarborder INTEGER DEFAULT 3`);

@@ -4575,13 +4575,33 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </label>
           
           <label>
-            <span>Daily Reward Amount</span>
+            <span>Economy Prefix (for economy commands)</span>
+            <input name="economy_prefix" value="${escapeHtml(economySettings?.economy_prefix || "$")}" style="max-width:100px;" />
+          </label>
+          
+          <label>
+            <span>Daily Reward Amount (base)</span>
             <input type="number" name="daily_amount" value="${economySettings?.daily_amount || 100}" min="1" max="100000" style="max-width:150px;" />
+          </label>
+          
+          <label>
+            <span>Daily Streak Bonus (per day)</span>
+            <input type="number" name="daily_streak_bonus" value="${economySettings?.daily_streak_bonus || 10}" min="0" max="10000" style="max-width:150px;" />
           </label>
           
           <label>
             <span>Weekly Reward Amount</span>
             <input type="number" name="weekly_amount" value="${economySettings?.weekly_amount || 500}" min="1" max="500000" style="max-width:150px;" />
+          </label>
+          
+          <label>
+            <input type="checkbox" name="rob_enabled" ${economySettings?.rob_enabled ? "checked" : ""} />
+            <span>Enable Robbing</span>
+          </label>
+          
+          <label>
+            <span>Rob Cooldown (seconds)</span>
+            <input type="number" name="rob_cooldown" value="${economySettings?.rob_cooldown || 3600}" min="60" max="86400" style="max-width:150px;" />
           </label>
         </div>
         <button type="submit" style="margin-top:16px;">Save Economy Settings</button>
@@ -4994,17 +5014,46 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const currencySymbol = String(req.body.currency_symbol || "🪙").trim();
       const dailyAmount = parseInt(req.body.daily_amount || "100", 10);
       const weeklyAmount = parseInt(req.body.weekly_amount || "500", 10);
+      const economyPrefix = String(req.body.economy_prefix || "$").trim();
+      const dailyStreakBonus = parseInt(req.body.daily_streak_bonus || "10", 10);
+      const robEnabled = req.body.rob_enabled === "on" ? 1 : 0;
+      const robCooldown = parseInt(req.body.rob_cooldown || "3600", 10);
+
+      const existing = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
 
       await run(`
-        INSERT INTO economy_settings (guild_id, enabled, currency_name, currency_symbol, daily_amount, weekly_amount)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO economy_settings (guild_id, enabled, currency_name, currency_symbol, daily_amount, weekly_amount, economy_prefix, daily_streak_bonus, rob_enabled, rob_cooldown)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
           enabled=excluded.enabled,
           currency_name=excluded.currency_name,
           currency_symbol=excluded.currency_symbol,
           daily_amount=excluded.daily_amount,
-          weekly_amount=excluded.weekly_amount
-      `, [guildId, enabled, currencyName, currencySymbol, dailyAmount, weeklyAmount]);
+          weekly_amount=excluded.weekly_amount,
+          economy_prefix=excluded.economy_prefix,
+          daily_streak_bonus=excluded.daily_streak_bonus,
+          rob_enabled=excluded.rob_enabled,
+          rob_cooldown=excluded.rob_cooldown
+      `, [guildId, enabled, currencyName, currencySymbol, dailyAmount, weeklyAmount, economyPrefix, dailyStreakBonus, robEnabled, robCooldown]);
+
+      // Add default jobs and shop items if this is the first time enabling economy
+      if (!existing && enabled) {
+        // Add default jobs
+        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+          [guildId, "Street Cleaner", 50, 100, 0, 3]);
+        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+          [guildId, "Cashier", 100, 200, 10, 4]);
+        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+          [guildId, "Manager", 200, 400, 30, 5]);
+        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+          [guildId, "Developer", 400, 800, 60, 5]);
+
+        // Add default shop items
+        await run(`INSERT INTO economy_shop_items (guild_id, item_id, name, description, price, item_type) VALUES (?, ?, ?, ?, ?, ?)`,
+          [guildId, "padlock", "🔒 Padlock", "Protects your wallet from robberies (single use)", 250, "consumable"]);
+        await run(`INSERT INTO economy_shop_items (guild_id, item_id, name, description, price, item_type) VALUES (?, ?, ?, ?, ?, ?)`,
+          [guildId, "trophy", "🏆 Trophy", "Show off your wealth with this collectible", 1000, "collectible"]);
+      }
 
       return res.redirect(getModuleRedirect(guildId, 'economy'));
     } catch (e) {

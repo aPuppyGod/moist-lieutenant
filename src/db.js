@@ -649,6 +649,13 @@ async function initDb() {
       bank BIGINT DEFAULT 0,
       last_daily BIGINT DEFAULT 0,
       last_weekly BIGINT DEFAULT 0,
+      daily_streak INTEGER DEFAULT 0,
+      daily_streak_date TEXT DEFAULT NULL,
+      job_id TEXT DEFAULT NULL,
+      job_shifts_completed INTEGER DEFAULT 0,
+      job_weekly_shifts INTEGER DEFAULT 0,
+      job_last_shift BIGINT DEFAULT 0,
+      job_week_reset BIGINT DEFAULT 0,
       created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
       PRIMARY KEY (guild_id, user_id)
     )
@@ -672,8 +679,50 @@ async function initDb() {
       currency_name TEXT DEFAULT 'coins',
       currency_symbol TEXT DEFAULT '🪙',
       daily_amount INTEGER DEFAULT 100,
+      daily_streak_bonus INTEGER DEFAULT 10,
       weekly_amount INTEGER DEFAULT 500,
+      rob_enabled INTEGER DEFAULT 1,
+      rob_cooldown INTEGER DEFAULT 3600,
+      economy_prefix TEXT DEFAULT '$',
       enabled INTEGER DEFAULT 1
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS economy_jobs (
+      id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      pay_min INTEGER DEFAULT 50,
+      pay_max INTEGER DEFAULT 100,
+      required_shifts INTEGER DEFAULT 0,
+      weekly_shifts_required INTEGER DEFAULT 3,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS economy_shop_items (
+      id TEXT PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT,
+      price INTEGER NOT NULL,
+      item_type TEXT DEFAULT 'misc',
+      item_data TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_inventory (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      quantity INTEGER DEFAULT 1,
+      acquired_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (guild_id, user_id, item_id)
     )
   `);
 
@@ -730,6 +779,19 @@ async function initDb() {
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_transcript_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS save_transcript INTEGER DEFAULT 1`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS delete_on_close INTEGER DEFAULT 0`);
+    
+    // Economy system migrations
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS daily_streak INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS daily_streak_date TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS job_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS job_shifts_completed INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS job_weekly_shifts INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS job_last_shift BIGINT DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS job_week_reset BIGINT DEFAULT 0`);
+    await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS daily_streak_bonus INTEGER DEFAULT 10`);
+    await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_cooldown INTEGER DEFAULT 3600`);
+    await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS economy_prefix TEXT DEFAULT '$'`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

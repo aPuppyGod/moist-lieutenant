@@ -1425,7 +1425,7 @@ async function cmdUnlock(message) {
   if (!(await requireModerator(message))) return;
   trackModerationAction(message, "channel_update", { channelId: message.channel.id });
   await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
-    SendMessages: true
+    SendMessages: null
   }).catch(() => {});
   await message.reply("🔓 Channel unlocked.").catch(() => {});
 }

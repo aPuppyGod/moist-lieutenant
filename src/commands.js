@@ -991,7 +991,7 @@ async function cmdSuggest(message, args) {
 
   // Get suggestion settings
   const settings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guild.id]);
-  if (!settings || !settings.suggestions_enabled) {
+  if (!settings || !settings.enabled) {
     await message.reply("Suggestions are not enabled on this server.").catch(() => {});
     return;
   }
@@ -1006,7 +1006,7 @@ async function cmdSuggest(message, args) {
 
   // Create suggestion in database
   const result = await run(`
-    INSERT INTO suggestions (guild_id, user_id, suggestion, status)
+    INSERT INTO suggestions (guild_id, user_id, content, status)
     VALUES (?, ?, ?, ?)
   `, [guild.id, message.author.id, suggestion, "pending"]);
 

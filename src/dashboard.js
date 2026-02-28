@@ -3840,7 +3840,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <p class="section-description">Let members submit and vote on suggestions for your server</p>
       <form method="post" action="/guild/${guildId}/suggestions-settings">
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <input type="checkbox" name="suggestions_enabled" ${suggestionSettings?.suggestions_enabled ? "checked" : ""} />
+          <input type="checkbox" name="suggestions_enabled" ${suggestionSettings?.enabled ? "checked" : ""} />
           <span style="font-weight:600;">Enable Suggestions</span>
         </label>
         
@@ -3864,7 +3864,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <tr>
             <td>#${s.id}</td>
             <td>${escapeHtml(s.user_id)}</td>
-            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.suggestion)}</td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.content)}</td>
             <td>👍 ${s.upvotes || 0} | 👎 ${s.downvotes || 0}</td>
             <td>${s.status === "approved" ? "✅" : s.status === "denied" ? "❌" : "🟡"} ${escapeHtml(s.status)}</td>
             <td>
@@ -4710,10 +4710,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const channelId = String(req.body.channel_id || "").trim() || null;
 
       await run(`
-        INSERT INTO suggestion_settings (guild_id, suggestions_enabled, channel_id)
+        INSERT INTO suggestion_settings (guild_id, enabled, channel_id)
         VALUES (?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
-          suggestions_enabled=excluded.suggestions_enabled,
+          enabled=excluded.enabled,
           channel_id=excluded.channel_id
       `, [guildId, enabled, channelId]);
 

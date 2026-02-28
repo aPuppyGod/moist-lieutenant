@@ -2244,8 +2244,12 @@ async function cmdPay(message, args) {
     return;
   }
 
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const senderEcon = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
   if (args.length < 2) {
-    await message.reply("Usage: `!pay <user> <amount>`").catch(() => {});
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    await message.reply(`💸 **Pay Another User**\n\nTransfer money from your wallet to another user.\n\n**Usage:** \`${ecoPrefix}pay @user <amount>\`\n**Example:** \`${ecoPrefix}pay @John 500\`\n\n**Your Balance:** ${senderEcon.balance} ${economySettings.currency_name}`).catch(() => {});
     return;
   }
 
@@ -2261,10 +2265,7 @@ async function cmdPay(message, args) {
     return;
   }
 
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
   await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.member.id]);
-
-  const senderEcon = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
   
   if (senderEcon.balance < amount) {
     await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
@@ -2326,6 +2327,12 @@ async function cmdDeposit(message, args) {
   await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
+  if (!args[0]) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    await message.reply(`💰 **Deposit Money to Bank**\n\nMove money from your wallet to your bank for safekeeping.\n\n**Usage:**\n\`${ecoPrefix}deposit <amount>\` - Deposit specific amount\n\`${ecoPrefix}deposit all\` - Deposit everything\n\n**Your Balance:**\n💵 Wallet: ${economy.balance} ${economySettings.currency_name}\n🏦 Bank: ${economy.bank} ${economySettings.currency_name}`).catch(() => {});
+    return;
+  }
+
   let amount;
   if (args[0]?.toLowerCase() === "all") {
     amount = economy.balance;
@@ -2360,6 +2367,12 @@ async function cmdWithdraw(message, args) {
   await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
+  if (!args[0]) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    await message.reply(`💰 **Withdraw Money from Bank**\n\nMove money from your bank to your wallet.\n\n**Usage:**\n\`${ecoPrefix}withdraw <amount>\` - Withdraw specific amount\n\`${ecoPrefix}withdraw all\` - Withdraw everything\n\n**Your Balance:**\n💵 Wallet: ${economy.balance} ${economySettings.currency_name}\n🏦 Bank: ${economy.bank} ${economySettings.currency_name}`).catch(() => {});
+    return;
+  }
+
   let amount;
   if (args[0]?.toLowerCase() === "all") {
     amount = economy.bank;
@@ -2388,6 +2401,13 @@ async function cmdRob(message, args) {
   const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
   if (!economySettings || !economySettings.enabled || !economySettings.rob_enabled) {
     await message.reply("❌ Robbing is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  if (!args[0]) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    const cooldownMins = Math.floor((economySettings.rob_cooldown || 3600) / 60);
+    await message.reply(`💰 **Rob Another User**\n\nAttempt to steal money from another user's wallet! (50% success rate)\n\n**Usage:** \`${ecoPrefix}rob @user\`\n\n**Rules:**\n• 50% chance to succeed\n• If caught, you pay a fine\n• Users with 🔒 Padlock are protected\n• Cooldown: ${cooldownMins} minutes\n• Target must have at least 50 ${economySettings.currency_name}\n\n**Tip:** Buy a padlock from the shop to protect yourself!`).catch(() => {});
     return;
   }
 
@@ -2461,14 +2481,20 @@ async function cmdSlots(message, args) {
     return;
   }
 
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  if (!args[0]) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    await message.reply(`🎰 **Slot Machine**\n\nSpin the slots and win big!\n\n**Usage:** \`${ecoPrefix}slots <bet>\`\n\n**Payouts:**\n🎉 Triple Match: 3x\n💎 Triple Diamonds: 5x\n7️⃣ Triple Sevens: 10x (JACKPOT!)\n🎯 Double Match: 1.5x\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
+    return;
+  }
+
   const bet = parseInt(args[0]);
   if (isNaN(bet) || bet <= 0) {
     await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
     return;
   }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (economy.balance < bet) {
     await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
@@ -2530,6 +2556,15 @@ async function cmdCoinflip(message, args) {
     return;
   }
 
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  if (!args[0] || !args[1]) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    await message.reply(`🪙 **Coinflip**\n\nBet on heads or tails! Double your money or lose it all.\n\n**Usage:** \`${ecoPrefix}coinflip <bet> <heads/tails>\`\n**Example:** \`${ecoPrefix}coinflip 100 h\`\n\n**Choices:** heads, tails, h, t\n**Payout:** 2x your bet\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
+    return;
+  }
+
   const bet = parseInt(args[0]);
   const choice = args[1]?.toLowerCase();
   
@@ -2542,9 +2577,6 @@ async function cmdCoinflip(message, args) {
     await message.reply("❌ Please choose heads (h) or tails (t).").catch(() => {});
     return;
   }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (economy.balance < bet) {
     await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
@@ -2582,6 +2614,15 @@ async function cmdDice(message, args) {
     return;
   }
 
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  if (!args[0] || !args[1]) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    await message.reply(`🎲 **Dice Roll**\n\nGuess the dice roll (1-6) and win 6x your bet!\n\n**Usage:** \`${ecoPrefix}dice <bet> <guess>\`\n**Example:** \`${ecoPrefix}dice 100 5\`\n\n**Payout:** 6x your bet if you guess correctly\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
+    return;
+  }
+
   const bet = parseInt(args[0]);
   const guess = parseInt(args[1]);
   
@@ -2594,9 +2635,6 @@ async function cmdDice(message, args) {
     await message.reply("❌ Please guess a number between 1 and 6.").catch(() => {});
     return;
   }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (economy.balance < bet) {
     await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
@@ -2868,6 +2906,12 @@ async function cmdBuy(message, args) {
   const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  if (!args[0]) {
+    // Show shop instead
+    await cmdShop(message);
     return;
   }
 

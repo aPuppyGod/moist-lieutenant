@@ -1031,7 +1031,7 @@ async function cmdSuggest(message, args) {
   // Update database with message ID
   await run(`UPDATE suggestions SET message_id=?, upvotes=0, downvotes=0 WHERE id=?`, [suggestionMsg.id, suggestionId]);
 
-  await message.reply(`✅ Your suggestion has been submitted! Check <#${channel.id}>`).catch(() => {});
+  await message.react("✅").catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────

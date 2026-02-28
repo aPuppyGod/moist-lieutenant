@@ -667,13 +667,14 @@ async function cmdLeaderboard(message, args) {
 
     // Medal emojis for top 3
     let medal = "";
-    if (rank === 1) medal = "🥇 ";
-    else if (rank === 2) medal = "🥈 ";
-    else if (rank === 3) medal = "🥉 ";
+    if (rank === 1) medal = "🥇";
+    else if (rank === 2) medal = "🥈";
+    else if (rank === 3) medal = "🥉";
+    else medal = `\`${rank}\``;
 
+    // Compact format: rank emoji • name • level • XP
     lines.push(
-      `${medal}**#${rank}** • ${name}\n` +
-      `\`\`\`Level ${r.level} • ${r.xp.toLocaleString()} XP\`\`\``
+      `${medal} **${name}** • Lv.${r.level} • \`${r.xp.toLocaleString()} XP\``
     );
   }
 

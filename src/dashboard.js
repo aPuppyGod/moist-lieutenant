@@ -3621,6 +3621,15 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const suggestionSettings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guildId]);
     const allSuggestions = await all(`SELECT * FROM suggestions WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const starboardSettings = await get(`SELECT * FROM starboard_settings WHERE guild_id=?`, [guildId]);
+    
+    // New systems data
+    const giveaways = await all(`SELECT * FROM giveaways WHERE guild_id=? ORDER BY end_time DESC LIMIT 20`, [guildId]);
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
+    const topEconomy = await all(`SELECT user_id, balance, bank, (balance + bank) as total FROM user_economy WHERE guild_id=? ORDER BY total DESC LIMIT 10`, [guildId]);
+    const reactionRolesConfig = await all(`SELECT * FROM reaction_roles WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
+    const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
+    const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
+    
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
     const activeModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
@@ -3632,6 +3641,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "tickets", label: "Tickets" },
       { key: "reactionroles", label: "Reaction Roles" },
       { key: "voice", label: "Voice" },
+      { key: "giveaways", label: "Giveaways" },
+      { key: "economy", label: "Economy" },
+      { key: "birthdays", label: "Birthdays" },
       { key: "customization", label: "Customization" }
     ];
 
@@ -4499,6 +4511,179 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </table>
       ` : ""}
 
+      ${activeModule === "giveaways" ? `
+      <h3>🎉 Giveaways</h3>
+      <p class="section-description">Create and manage server giveaways</p>
+      
+      ${giveaways.length > 0 ? `
+      <h4>Active & Recent Giveaways</h4>
+      <table>
+        <tr>
+          <th>Prize</th>
+          <th>Winners</th>
+          <th>Ends</th>
+          <th>Status</th>
+          <th>Host</th>
+        </tr>
+        ${giveaways.map(g => {
+          const endDate = new Date(Number(g.end_time));
+          const status = g.ended ? "Ended" : Date.now() > g.end_time ? "Ending..." : "Active";
+          const statusColor = g.ended ? "#e74c3c" : Date.now() > g.end_time ? "#f39c12" : "#2ecc71";
+          const winnersList = g.winner_ids ? g.winner_ids.split(",").map(id => `<@${id}>`).join(", ") : "TBD";
+          return `
+            <tr>
+              <td>${escapeHtml(g.prize)}</td>
+              <td>${g.winners_count}</td>
+              <td>${endDate.toLocaleString()}</td>
+              <td style="color:${statusColor};font-weight:bold;">${status}</td>
+              <td><@${g.host_id}></td>
+            </tr>
+          `;
+        }).join("")}
+      </table>
+      ` : `<p>No giveaways yet! Use <code>!giveaway start &lt;duration&gt; &lt;winners&gt; &lt;prize&gt;</code> to create one.</p>`}
+      
+      <div style="margin-top:20px; padding:12px; background:#f8f9fa; border-radius:6px;">
+        <strong>Commands:</strong>
+        <ul style="margin:8px 0;">
+          <li><code>!giveaway start &lt;duration&gt; &lt;winners&gt; &lt;prize&gt;</code> - Start a giveaway (e.g., <code>!giveaway start 1d 1 Discord Nitro</code>)</li>
+          <li><code>!giveaway end &lt;message_id&gt;</code> - End a giveaway early</li>
+          <li><code>!giveaway reroll &lt;message_id&gt;</code> - Reroll winners</li>
+        </ul>
+      </div>
+      ` : ""}
+
+      ${activeModule === "economy" ? `
+      <h3>💰 Economy System</h3>
+      <p class="section-description">Virtual currency system for your server</p>
+      
+      <form method="post" action="/guild/${guildId}/economy-settings">
+        <div style="display:grid; gap:12px;">
+          <label>
+            <input type="checkbox" name="enabled" ${economySettings?.enabled ? "checked" : ""} />
+            <span style="font-weight:600;">Enable Economy</span>
+          </label>
+          
+          <label>
+            <span>Currency Name</span>
+            <input name="currency_name" value="${escapeHtml(economySettings?.currency_name || "coins")}" style="max-width:200px;" />
+          </label>
+          
+          <label>
+            <span>Currency Symbol</span>
+            <input name="currency_symbol" value="${escapeHtml(economySettings?.currency_symbol || "🪙")}" style="max-width:100px;" />
+          </label>
+          
+          <label>
+            <span>Daily Reward Amount</span>
+            <input type="number" name="daily_amount" value="${economySettings?.daily_amount || 100}" min="1" max="100000" style="max-width:150px;" />
+          </label>
+          
+          <label>
+            <span>Weekly Reward Amount</span>
+            <input type="number" name="weekly_amount" value="${economySettings?.weekly_amount || 500}" min="1" max="500000" style="max-width:150px;" />
+          </label>
+        </div>
+        <button type="submit" style="margin-top:16px;">Save Economy Settings</button>
+      </form>
+
+      ${topEconomy.length > 0 ? `
+      <h4 style="margin-top:24px;">Top 10 Richest Members</h4>
+      <table>
+        <tr>
+          <th>Rank</th>
+          <th>User</th>
+          <th>Balance</th>
+        </tr>
+        ${topEconomy.map((row, i) => {
+          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+          return `
+            <tr>
+              <td>${medal}</td>
+              <td><@${row.user_id}></td>
+              <td>${row.total} ${economySettings?.currency_name || "coins"}</td>
+            </tr>
+          `;
+        }).join("")}
+      </table>
+      ` : ""}
+      
+      <div style="margin-top:20px; padding:12px; background:#f8f9fa; border-radius:6px;">
+        <strong>Commands:</strong>
+        <ul style="margin:8px 0;">
+          <li><code>!balance [@user]</code> or <code>!bal</code> - Check balance</li>
+          <li><code>!daily</code> - Claim daily reward</li>
+          <li><code>!weekly</code> - Claim weekly reward</li>
+          <li><code>!pay &lt;user&gt; &lt;amount&gt;</code> - Send money to another user</li>
+          <li><code>!baltop</code> or <code>!richest</code> - View leaderboard</li>
+        </ul>
+      </div>
+      ` : ""}
+
+      ${activeModule === "birthdays" ? `
+      <h3>🎂 Birthday System</h3>
+      <p class="section-description">Automatically celebrate member birthdays</p>
+      
+      <form method="post" action="/guild/${guildId}/birthday-settings">
+        <div style="display:grid; gap:12px;">
+          <label>
+            <input type="checkbox" name="enabled" ${birthdaySettings?.enabled ? "checked" : ""} />
+            <span style="font-weight:600;">Enable Birthday Announcements</span>
+          </label>
+          
+          <label>
+            <span>Birthday Channel</span>
+            <select name="channel_id" style="max-width:300px;">
+              <option value="">Select Channel</option>
+              ${textChannels.map((c) => `<option value="${c.id}" ${birthdaySettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          
+          <label>
+            <span>Birthday Message (use {user} for mention, {server} for server name)</span>
+            <textarea name="message" rows="2" style="width:100%;max-width:500px;font-family:inherit;">${escapeHtml(birthdaySettings?.message || "Happy birthday {user}! 🎂🎉")}</textarea>
+          </label>
+          
+          <label>
+            <span>Birthday Role (optional - auto-removed after 24h)</span>
+            <select name="role_id" style="max-width:300px;">
+              <option value="">No Role</option>
+              ${guild.roles.cache.sort((a, b) => b.position - a.position).filter(r => !r.managed && r.name !== "@everyone").map((r) => `<option value="${r.id}" ${birthdaySettings?.role_id === r.id ? "selected" : ""}>${escapeHtml(r.name)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <button type="submit" style="margin-top:16px;">Save Birthday Settings</button>
+      </form>
+
+      ${upcomingBirthdays.length > 0 ? `
+      <h4 style="margin-top:24px;">Registered Birthdays</h4>
+      <table>
+        <tr>
+          <th>User</th>
+          <th>Birthday</th>
+        </tr>
+        ${upcomingBirthdays.map(b => {
+          const date = `${b.birth_month}/${b.birth_day}${b.birth_year ? `/${b.birth_year}` : ""}`;
+          return `
+            <tr>
+              <td><@${b.user_id}></td>
+              <td>${date}</td>
+            </tr>
+          `;
+        }).join("")}
+      </table>
+      ` : ""}
+      
+      <div style="margin-top:20px; padding:12px; background:#f8f9fa; border-radius:6px;">
+        <strong>Commands:</strong>
+        <ul style="margin:8px 0;">
+          <li><code>!birthday set &lt;MM/DD&gt;</code> or <code>!birthday set &lt;MM/DD/YYYY&gt;</code> - Set your birthday</li>
+          <li><code>!birthday remove</code> - Remove your birthday</li>
+          <li><code>!birthday list</code> - View all birthdays</li>
+        </ul>
+      </div>
+      ` : ""}
+
       ${activeModule === "customization" ? `
       <h3>Rank Card Customization Unlocks</h3>
       <form method="post" action="/guild/${guildId}/customization-unlocks">
@@ -4794,6 +4979,64 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'overview'));
     } catch (e) {
       console.error("starboard-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Economy Settings
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/economy-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const enabled = req.body.enabled === "on" ? 1 : 0;
+      const currencyName = String(req.body.currency_name || "coins").trim();
+      const currencySymbol = String(req.body.currency_symbol || "🪙").trim();
+      const dailyAmount = parseInt(req.body.daily_amount || "100", 10);
+      const weeklyAmount = parseInt(req.body.weekly_amount || "500", 10);
+
+      await run(`
+        INSERT INTO economy_settings (guild_id, enabled, currency_name, currency_symbol, daily_amount, weekly_amount)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          enabled=excluded.enabled,
+          currency_name=excluded.currency_name,
+          currency_symbol=excluded.currency_symbol,
+          daily_amount=excluded.daily_amount,
+          weekly_amount=excluded.weekly_amount
+      `, [guildId, enabled, currencyName, currencySymbol, dailyAmount, weeklyAmount]);
+
+      return res.redirect(getModuleRedirect(guildId, 'economy'));
+    } catch (e) {
+      console.error("economy-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Birthday Settings
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/birthday-settings", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const enabled = req.body.enabled === "on" ? 1 : 0;
+      const channelId = String(req.body.channel_id || "").trim() || null;
+      const message = String(req.body.message || "Happy birthday {user}! 🎂🎉").trim();
+      const roleId = String(req.body.role_id || "").trim() || null;
+
+      await run(`
+        INSERT INTO birthday_settings (guild_id, enabled, channel_id, message, role_id)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          enabled=excluded.enabled,
+          channel_id=excluded.channel_id,
+          message=excluded.message,
+          role_id=excluded.role_id
+      `, [guildId, enabled, channelId, message, roleId]);
+
+      return res.redirect(getModuleRedirect(guildId, 'birthdays'));
+    } catch (e) {
+      console.error("birthday-settings save error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

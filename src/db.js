@@ -582,6 +582,138 @@ async function initDb() {
     )
   `);
 
+  // Giveaways
+  await run(`
+    CREATE TABLE IF NOT EXISTS giveaways (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT DEFAULT NULL,
+      host_id TEXT NOT NULL,
+      prize TEXT NOT NULL,
+      winners_count INTEGER DEFAULT 1,
+      end_time BIGINT NOT NULL,
+      ended INTEGER DEFAULT 0,
+      winner_ids TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  // Polls
+  await run(`
+    CREATE TABLE IF NOT EXISTS polls (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT DEFAULT NULL,
+      creator_id TEXT NOT NULL,
+      question TEXT NOT NULL,
+      options TEXT NOT NULL,
+      end_time BIGINT DEFAULT NULL,
+      ended INTEGER DEFAULT 0,
+      allow_multiple INTEGER DEFAULT 0,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS poll_votes (
+      poll_id BIGINT NOT NULL,
+      user_id TEXT NOT NULL,
+      option_index INTEGER NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (poll_id, user_id, option_index)
+    )
+  `);
+
+  // Reaction Roles
+  await run(`
+    CREATE TABLE IF NOT EXISTS reaction_roles (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      role_id TEXT NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      UNIQUE (message_id, emoji)
+    )
+  `);
+
+  // Economy
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_economy (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      balance BIGINT DEFAULT 0,
+      bank BIGINT DEFAULT 0,
+      last_daily BIGINT DEFAULT 0,
+      last_weekly BIGINT DEFAULT 0,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (guild_id, user_id)
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS economy_transactions (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      amount BIGINT NOT NULL,
+      description TEXT,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS economy_settings (
+      guild_id TEXT PRIMARY KEY,
+      currency_name TEXT DEFAULT 'coins',
+      currency_symbol TEXT DEFAULT '🪙',
+      daily_amount INTEGER DEFAULT 100,
+      weekly_amount INTEGER DEFAULT 500,
+      enabled INTEGER DEFAULT 1
+    )
+  `);
+
+  // Reminders
+  await run(`
+    CREATE TABLE IF NOT EXISTS reminders (
+      id BIGSERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      guild_id TEXT DEFAULT NULL,
+      channel_id TEXT DEFAULT NULL,
+      reminder_text TEXT NOT NULL,
+      remind_at BIGINT NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      completed INTEGER DEFAULT 0
+    )
+  `);
+
+  // Birthdays
+  await run(`
+    CREATE TABLE IF NOT EXISTS birthdays (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      birth_month INTEGER NOT NULL,
+      birth_day INTEGER NOT NULL,
+      birth_year INTEGER DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (guild_id, user_id)
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS birthday_settings (
+      guild_id TEXT PRIMARY KEY,
+      enabled INTEGER DEFAULT 1,
+      channel_id TEXT DEFAULT NULL,
+      message TEXT DEFAULT 'Happy birthday {user}! 🎂🎉',
+      role_id TEXT DEFAULT NULL
+    )
+  `);
+
   // Migrations: Add missing columns to existing tables
   try {
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarborder INTEGER DEFAULT 3`);

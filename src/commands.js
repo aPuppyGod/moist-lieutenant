@@ -1806,6 +1806,557 @@ async function cmdVoiceBan(message, args = []) {
 }
 
 // ─────────────────────────────────────────────────────
+// Giveaway Commands
+// ─────────────────────────────────────────────────────
+
+async function cmdGiveaway(message, args) {
+  if (!(await requireAdministrator(message))) return;
+
+  const subcommand = args[0]?.toLowerCase();
+
+  if (subcommand === "start") {
+    // !giveaway start <duration> <winners> <prize>
+    // Example: !giveaway start 1d 1 Discord Nitro
+    if (args.length < 4) {
+      await message.reply("Usage: `!giveaway start <duration> <winners> <prize>`\nExample: `!giveaway start 1d 1 Discord Nitro`").catch(() => {});
+      return;
+    }
+
+    const durationMs = parseDurationMs(args[1]);
+    if (!durationMs) {
+      await message.reply("❌ Invalid duration. Use format like: 1m, 1h, 1d (m=minutes, h=hours, d=days)").catch(() => {});
+      return;
+    }
+
+    const winners = Number.parseInt(args[2], 10);
+    if (!Number.isFinite(winners) || winners < 1 || winners > 10) {
+      await message.reply("❌ Winners must be between 1 and 10.").catch(() => {});
+      return;
+    }
+
+    const prize = args.slice(3).join(" ");
+    const endTime = Date.now() + durationMs;
+
+    const giveawayEmbed = {
+      color: 0x00ff00,
+      title: "🎉 GIVEAWAY 🎉",
+      description: `**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nReact with 🎉 to enter!`,
+      footer: { text: `Hosted by ${message.author.tag}` },
+      timestamp: new Date(endTime).toISOString()
+    };
+
+    const giveawayMsg = await message.channel.send({ embeds: [giveawayEmbed] }).catch(() => null);
+    if (!giveawayMsg) {
+      await message.reply("❌ Failed to create giveaway message.").catch(() => {});
+      return;
+    }
+
+    await giveawayMsg.react("🎉").catch(() => {});
+
+    const result = await run(`
+      INSERT INTO giveaways (guild_id, channel_id, message_id, host_id, prize, winners_count, end_time)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [message.guild.id, message.channel.id, giveawayMsg.id, message.author.id, prize, winners, endTime]);
+
+    await message.reply(`✅ Giveaway created! ID: ${result.lastID}`).catch(() => {});
+  } else if (subcommand === "end") {
+    // !giveaway end <message_id>
+    if (!args[1]) {
+      await message.reply("Usage: `!giveaway end <message_id>`").catch(() => {});
+      return;
+    }
+
+    const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
+    if (!giveaway) {
+      await message.reply("❌ Giveaway not found or already ended.").catch(() => {});
+      return;
+    }
+
+    await endGiveaway(message.client, giveaway);
+    await message.reply("✅ Giveaway ended!").catch(() => {});
+  } else if (subcommand === "reroll") {
+    // !giveaway reroll <message_id>
+    if (!args[1]) {
+      await message.reply("Usage: `!giveaway reroll <message_id>`").catch(() => {});
+      return;
+    }
+
+    const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=?`, [args[1], message.guild.id]);
+    if (!giveaway) {
+      await message.reply("❌ Giveaway not found.").catch(() => {});
+      return;
+    }
+
+    await rerollGiveaway(message.client, giveaway);
+    await message.reply("✅ Giveaway rerolled!").catch(() => {});
+  } else {
+    await message.reply("Usage: `!giveaway <start|end|reroll> ...`").catch(() => {});
+  }
+}
+
+async function endGiveaway(client, giveaway) {
+  const guild = client.guilds.cache.get(giveaway.guild_id);
+  if (!guild) return;
+
+  const channel = guild.channels.cache.get(giveaway.channel_id);
+  if (!channel) return;
+
+  const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
+  if (!giveawayMsg) return;
+
+  const reaction = giveawayMsg.reactions.cache.get("🎉");
+  if (!reaction) {
+    await run(`UPDATE giveaways SET ended=1 WHERE id=?`, [giveaway.id]);
+    return;
+  }
+
+  const users = await reaction.users.fetch();
+  const validEntries = users.filter(u => !u.bot);
+
+  let winners = [];
+  if (validEntries.size === 0) {
+    await channel.send(`No valid entries for the giveaway: **${giveaway.prize}**`).catch(() => {});
+  } else {
+    const winnerCount = Math.min(giveaway.winners_count, validEntries.size);
+    const entries = Array.from(validEntries.values());
+    
+    for (let i = 0; i < winnerCount; i++) {
+      const randomIndex = Math.floor(Math.random() * entries.length);
+      winners.push(entries[randomIndex]);
+      entries.splice(randomIndex, 1);
+    }
+
+    const winnerMentions = winners.map(w => `<@${w.id}>`).join(", ");
+    await channel.send(`🎉 Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
+  }
+
+  const winnerIds = winners.map(w => w.id).join(",");
+  await run(`UPDATE giveaways SET ended=1, winner_ids=? WHERE id=?`, [winnerIds, giveaway.id]);
+
+  const endEmbed = {
+    color: 0xff0000,
+    title: "🎉 GIVEAWAY ENDED 🎉",
+    description: `**Prize:** ${giveaway.prize}\n**Winners:** ${winners.length > 0 ? winners.map(w => w.tag).join(", ") : "No winners"}`,
+    footer: { text: `Hosted by ${giveaway.host_id}` }
+  };
+
+  await giveawayMsg.edit({ embeds: [endEmbed] }).catch(() => {});
+}
+
+async function rerollGiveaway(client, giveaway) {
+  const guild = client.guilds.cache.get(giveaway.guild_id);
+  if (!guild) return;
+
+  const channel = guild.channels.cache.get(giveaway.channel_id);
+  if (!channel) return;
+
+  const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
+  if (!giveawayMsg) return;
+
+  const reaction = giveawayMsg.reactions.cache.get("🎉");
+  if (!reaction) return;
+
+  const users = await reaction.users.fetch();
+  const validEntries = users.filter(u => !u.bot);
+
+  if (validEntries.size === 0) {
+    await channel.send(`No valid entries to reroll for: **${giveaway.prize}**`).catch(() => {});
+    return;
+  }
+
+  const winnerCount = Math.min(giveaway.winners_count, validEntries.size);
+  const entries = Array.from(validEntries.values());
+  const winners = [];
+
+  for (let i = 0; i < winnerCount; i++) {
+    const randomIndex = Math.floor(Math.random() * entries.length);
+    winners.push(entries[randomIndex]);
+    entries.splice(randomIndex, 1);
+  }
+
+  const winnerMentions = winners.map(w => `<@${w.id}>`).join(", ");
+  await channel.send(`🎉 **REROLL!** Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// Advanced Poll Commands
+// ─────────────────────────────────────────────────────
+
+async function cmdAdvancedPoll(message, args) {
+  // !poll create <question> | <option1> | <option2> | ...
+  // !poll end <message_id>
+  
+  const subcommand = args[0]?.toLowerCase();
+
+  if (subcommand === "create") {
+    const content = args.slice(1).join(" ");
+    if (!content.includes("|")) {
+      await message.reply("Usage: `!poll create <question> | <option1> | <option2> | ...`\nExample: `!poll create What's your favorite color? | Red | Blue | Green`").catch(() => {});
+      return;
+    }
+
+    const parts = content.split("|").map(p => p.trim());
+    if (parts.length < 3) {
+      await message.reply("❌ You need at least a question and 2 options.").catch(() => {});
+      return;
+    }
+
+    const question = parts[0];
+    const options = parts.slice(1);
+
+    if (options.length > 10) {
+      await message.reply("❌ Maximum 10 options allowed.").catch(() => {});
+      return;
+    }
+
+    const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+    
+    const pollEmbed = {
+      color: 0x3498db,
+      title: "📊 Poll",
+      description: `**${question}**\n\n${options.map((opt, i) => `${emojis[i]} ${opt}`).join("\n")}`,
+      footer: { text: `Created by ${message.author.tag}` },
+      timestamp: new Date().toISOString()
+    };
+
+    const pollMsg = await message.channel.send({ embeds: [pollEmbed] }).catch(() => null);
+    if (!pollMsg) {
+      await message.reply("❌ Failed to create poll.").catch(() => {});
+      return;
+    }
+
+    for (let i = 0; i < options.length; i++) {
+      await pollMsg.react(emojis[i]).catch(() => {});
+    }
+
+    const result = await run(`
+      INSERT INTO polls (guild_id, channel_id, message_id, creator_id, question, options)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [message.guild.id, message.channel.id, pollMsg.id, message.author.id, question, JSON.stringify(options)]);
+
+    await message.reply(`✅ Poll created! React to vote. ID: ${result.lastID}`).catch(() => {});
+  } else if (subcommand === "end") {
+    if (!args[1]) {
+      await message.reply("Usage: `!poll end <message_id>`").catch(() => {});
+      return;
+    }
+
+    const poll = await get(`SELECT * FROM polls WHERE message_id=? AND guild_id=?`, [args[1], message.guild.id]);
+    if (!poll) {
+      await message.reply("❌ Poll not found.").catch(() => {});
+      return;
+    }
+
+    await endPoll(message.client, poll);
+    await message.reply("✅ Poll ended!").catch(() => {});
+  } else {
+    await message.reply("Usage: `!poll <create|end> ...`").catch(() => {});
+  }
+}
+
+async function endPoll(client, poll) {
+  const guild = client.guilds.cache.get(poll.guild_id);
+  if (!guild) return;
+
+  const channel = guild.channels.cache.get(poll.channel_id);
+  if (!channel) return;
+
+  const pollMsg = await channel.messages.fetch(poll.message_id).catch(() => null);
+  if (!pollMsg) return;
+
+  const options = JSON.parse(poll.options);
+  const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+  
+  const results = [];
+  for (let i = 0; i < options.length; i++) {
+    const reaction = pollMsg.reactions.cache.get(emojis[i]);
+    const count = reaction ? reaction.count - 1 : 0; // -1 for bot reaction
+    results.push({ option: options[i], votes: count });
+  }
+
+  results.sort((a, b) => b.votes - a.votes);
+  const totalVotes = results.reduce((sum, r) => sum + r.votes, 0);
+
+  const resultsEmbed = {
+    color: 0x2ecc71,
+    title: "📊 Poll Results",
+    description: `**${poll.question}**\n\n${results.map((r, i) => `${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "•"} **${r.option}**: ${r.votes} vote${r.votes !== 1 ? "s" : ""} (${totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0}%)`).join("\n")}\n\n**Total Votes:** ${totalVotes}`,
+    footer: { text: "Poll ended" },
+    timestamp: new Date().toISOString()
+  };
+
+  await pollMsg.edit({ embeds: [resultsEmbed] }).catch(() => {});
+  await run(`UPDATE polls SET ended=1 WHERE id=?`, [poll.id]);
+}
+
+// ─────────────────────────────────────────────────────
+// Economy Commands
+// ─────────────────────────────────────────────────────
+
+async function cmdBalance(message, args) {
+  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  if (!economySettings || !economySettings.enabled) {
+    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  const targetUser = args[0] ? await pickUserSmart(message, args[0]) : null;
+  const userId = targetUser?.member?.id || message.author.id;
+
+  await run(`
+    INSERT INTO user_economy (guild_id, user_id)
+    VALUES (?, ?)
+    ON CONFLICT (guild_id, user_id) DO NOTHING
+  `, [message.guild.id, userId]);
+
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, userId]);
+  
+  const embed = {
+    color: 0xf1c40f,
+    title: `${economySettings.currency_symbol} Balance`,
+    description: `💰 **Wallet:** ${economy.balance} ${economySettings.currency_name}\n🏦 **Bank:** ${economy.bank} ${economySettings.currency_name}\n💎 **Total:** ${economy.balance + economy.bank} ${economySettings.currency_name}`,
+    footer: { text: userId === message.author.id ? "Your balance" : `Balance of ${targetUser.member.user.tag}` }
+  };
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdDaily(message) {
+  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  if (!economySettings || !economySettings.enabled) {
+    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  await run(`
+    INSERT INTO user_economy (guild_id, user_id)
+    VALUES (?, ?)
+    ON CONFLICT (guild_id, user_id) DO NOTHING
+  `, [message.guild.id, message.author.id]);
+
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  
+  const now = Date.now();
+  const dayInMs = 86400000;
+  
+  if (economy.last_daily && (now - economy.last_daily) < dayInMs) {
+    const timeLeft = dayInMs - (now - economy.last_daily);
+    const hours = Math.floor(timeLeft / 3600000);
+    const minutes = Math.floor((timeLeft % 3600000) / 60000);
+    await message.reply(`⏰ You already claimed your daily reward! Come back in ${hours}h ${minutes}m.`).catch(() => {});
+    return;
+  }
+
+  const newBalance = economy.balance + economySettings.daily_amount;
+  await run(`UPDATE user_economy SET balance=?, last_daily=? WHERE guild_id=? AND user_id=?`, [newBalance, now, message.guild.id, message.author.id]);
+  
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "daily", economySettings.daily_amount, "Daily reward"]);
+
+  await message.reply(`✅ You claimed your daily reward of ${economySettings.daily_amount} ${economySettings.currency_name}! ${economySettings.currency_symbol}`).catch(() => {});
+}
+
+async function cmdWeekly(message) {
+  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  if (!economySettings || !economySettings.enabled) {
+    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  await run(`
+    INSERT INTO user_economy (guild_id, user_id)
+    VALUES (?, ?)
+    ON CONFLICT (guild_id, user_id) DO NOTHING
+  `, [message.guild.id, message.author.id]);
+
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  
+  const now = Date.now();
+  const weekInMs = 604800000;
+  
+  if (economy.last_weekly && (now - economy.last_weekly) < weekInMs) {
+    const timeLeft = weekInMs - (now - economy.last_weekly);
+    const days = Math.floor(timeLeft / 86400000);
+    const hours = Math.floor((timeLeft % 86400000) / 3600000);
+    await message.reply(`⏰ You already claimed your weekly reward! Come back in ${days}d ${hours}h.`).catch(() => {});
+    return;
+  }
+
+  const newBalance = economy.balance + economySettings.weekly_amount;
+  await run(`UPDATE user_economy SET balance=?, last_weekly=? WHERE guild_id=? AND user_id=?`, [newBalance, now, message.guild.id, message.author.id]);
+  
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "weekly", economySettings.weekly_amount, "Weekly reward"]);
+
+  await message.reply(`✅ You claimed your weekly reward of ${economySettings.weekly_amount} ${economySettings.currency_name}! ${economySettings.currency_symbol}`).catch(() => {});
+}
+
+async function cmdPay(message, args) {
+  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  if (!economySettings || !economySettings.enabled) {
+    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  if (args.length < 2) {
+    await message.reply("Usage: `!pay <user> <amount>`").catch(() => {});
+    return;
+  }
+
+  const target = await pickUserSmart(message, args[0]);
+  if (!target || target.ambiguous || target.member.user.bot) {
+    await message.reply("❌ Invalid user or cannot pay bots.").catch(() => {});
+    return;
+  }
+
+  const amount = Number.parseInt(args[1], 10);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await message.reply("❌ Invalid amount.").catch(() => {});
+    return;
+  }
+
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.member.id]);
+
+  const senderEcon = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  
+  if (senderEcon.balance < amount) {
+    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
+    return;
+  }
+
+  await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, message.author.id]);
+  await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, target.member.id]);
+
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "pay_sent", -amount, `Paid to ${target.member.user.tag}`]);
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, target.member.id, "pay_received", amount, `Received from ${message.author.tag}`]);
+
+  await message.reply(`✅ You paid ${amount} ${economySettings.currency_name} to ${target.member}! ${economySettings.currency_symbol}`).catch(() => {});
+}
+
+async function cmdEcoLeaderboard(message) {
+  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  if (!economySettings || !economySettings.enabled) {
+    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    return;
+  }
+
+  const top = await all(`
+    SELECT user_id, balance, bank, (balance + bank) as total
+    FROM user_economy
+    WHERE guild_id=?
+    ORDER BY total DESC
+    LIMIT 10
+  `, [message.guild.id]);
+
+  if (top.length === 0) {
+    await message.reply("No economy data yet!").catch(() => {});
+    return;
+  }
+
+  const embed = {
+    color: 0xf1c40f,
+    title: `${economySettings.currency_symbol} Economy Leaderboard`,
+    description: top.map((row, i) => {
+      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+      return `${medal} <@${row.user_id}>: **${row.total}** ${economySettings.currency_name}`;
+    }).join("\n"),
+    footer: { text: `${message.guild.name}` }
+  };
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// Reminder Commands
+// ─────────────────────────────────────────────────────
+
+async function cmdRemindMe(message, args) {
+  if (args.length < 2) {
+    await message.reply("Usage: `!remindme <duration> <message>`\nExample: `!remindme 1h Take out the trash`").catch(() => {});
+    return;
+  }
+
+  const durationMs = parseDurationMs(args[0]);
+  if (!durationMs) {
+    await message.reply("❌ Invalid duration. Use format like: 1m, 1h, 1d").catch(() => {});
+    return;
+  }
+
+  const reminderText = args.slice(1).join(" ");
+  const remindAt = Date.now() + durationMs;
+
+  await run(`
+    INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_at)
+    VALUES (?, ?, ?, ?, ?)
+  `, [message.author.id, message.guild.id, message.channel.id, reminderText, remindAt]);
+
+  await message.reply(`✅ I'll remind you in ${args[0]}: "${reminderText}"`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// Birthday Commands
+// ─────────────────────────────────────────────────────
+
+async function cmdBirthday(message, args) {
+  const subcommand = args[0]?.toLowerCase();
+
+  if (subcommand === "set") {
+    // !birthday set <MM/DD> or <MM/DD/YYYY>
+    if (!args[1]) {
+      await message.reply("Usage: `!birthday set <MM/DD>` or `!birthday set <MM/DD/YYYY>`\nExample: `!birthday set 05/15`").catch(() => {});
+      return;
+    }
+
+    const parts = args[1].split("/");
+    if (parts.length < 2 || parts.length > 3) {
+      await message.reply("❌ Invalid date format. Use MM/DD or MM/DD/YYYY").catch(() => {});
+      return;
+    }
+
+    const month = Number.parseInt(parts[0], 10);
+    const day = Number.parseInt(parts[1], 10);
+    const year = parts[2] ? Number.parseInt(parts[2], 10) : null;
+
+    if (!Number.isFinite(month) || month < 1 || month > 12 || !Number.isFinite(day) || day < 1 || day > 31) {
+      await message.reply("❌ Invalid date.").catch(() => {});
+      return;
+    }
+
+    await run(`
+      INSERT INTO birthdays (guild_id, user_id, birth_month, birth_day, birth_year)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (guild_id, user_id) DO UPDATE SET birth_month=EXCLUDED.birth_month, birth_day=EXCLUDED.birth_day, birth_year=EXCLUDED.birth_year
+    `, [message.guild.id, message.author.id, month, day, year]);
+
+    await message.reply(`🎂 Your birthday has been set to ${month}/${day}${year ? `/${year}` : ""}!`).catch(() => {});
+  } else if (subcommand === "remove") {
+    await run(`DELETE FROM birthdays WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+    await message.reply("✅ Your birthday has been removed.").catch(() => {});
+  } else if (subcommand === "list") {
+    const birthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day`, [message.guild.id]);
+    
+    if (birthdays.length === 0) {
+      await message.reply("No birthdays registered yet!").catch(() => {});
+      return;
+    }
+
+    const embed = {
+      color: 0xe91e63,
+      title: "🎂 Birthday List",
+      description: birthdays.map(b => `<@${b.user_id}>: ${b.birth_month}/${b.birth_day}${b.birth_year ? `/${b.birth_year}` : ""}`).join("\n"),
+      footer: { text: `${birthdays.length} birthday${birthdays.length !== 1 ? "s" : ""} registered` }
+    };
+
+    await message.reply({ embeds: [embed] }).catch(() => {});
+  } else {
+    await message.reply("Usage: `!birthday <set|remove|list> ...`").catch(() => {});
+  }
+}
+
+// ─────────────────────────────────────────────────────
 // Main handler
 // ─────────────────────────────────────────────────────
 
@@ -1945,7 +2496,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "poll") {
-    await cmdPoll(message, args);
+    await cmdAdvancedPoll(message, args);
     return true;
   }
 
@@ -1956,6 +2507,46 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "suggest") {
     await cmdSuggest(message, args);
+    return true;
+  }
+
+  if (cmd === "giveaway") {
+    await cmdGiveaway(message, args);
+    return true;
+  }
+
+  if (cmd === "balance" || cmd === "bal") {
+    await cmdBalance(message, args);
+    return true;
+  }
+
+  if (cmd === "daily") {
+    await cmdDaily(message);
+    return true;
+  }
+
+  if (cmd === "weekly") {
+    await cmdWeekly(message);
+    return true;
+  }
+
+  if (cmd === "pay") {
+    await cmdPay(message, args);
+    return true;
+  }
+
+  if (cmd === "baltop" || cmd === "richest") {
+    await cmdEcoLeaderboard(message);
+    return true;
+  }
+
+  if (cmd === "remindme" || cmd === "remind") {
+    await cmdRemindMe(message, args);
+    return true;
+  }
+
+  if (cmd === "birthday" || cmd === "bday") {
+    await cmdBirthday(message, args);
     return true;
   }
 
@@ -2296,4 +2887,4 @@ async function registerSlashCommands(client) {
   console.log(`[slash] Registered ${defs.length} commands (guild-only sync across ${guildSynced} guilds)`);
 }
 
-module.exports = { handleCommands, handleSlashCommand, registerSlashCommands };
+module.exports = { handleCommands, handleSlashCommand, registerSlashCommands, endGiveaway };

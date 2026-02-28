@@ -484,6 +484,90 @@ client.once(Events.ClientReady, async () => {
       });
     }, 30_000);
 
+    // Check for ended giveaways every 30 seconds
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const endedGiveaways = await all(`SELECT * FROM giveaways WHERE ended=0 AND end_time <= ?`, [now]);
+        for (const giveaway of endedGiveaways) {
+          const { endGiveaway } = require("./commands");
+          await endGiveaway(client, giveaway);
+        }
+      } catch (err) {
+        console.error("Giveaway check failed:", err);
+      }
+    }, 30_000);
+
+    // Check for due reminders every 15 seconds
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const dueReminders = await all(`SELECT * FROM reminders WHERE completed=0 AND remind_at <= ?`, [now]);
+        for (const reminder of dueReminders) {
+          const user = await client.users.fetch(reminder.user_id).catch(() => null);
+          if (user) {
+            const embed = {
+              color: 0x3498db,
+              title: "⏰ Reminder",
+              description: reminder.reminder_text,
+              footer: { text: `Set ${new Date(reminder.created_at).toLocaleString()}` }
+            };
+            await user.send({ embeds: [embed] }).catch(() => {});
+          }
+          await run(`UPDATE reminders SET completed=1 WHERE id=?`, [reminder.id]);
+        }
+      } catch (err) {
+        console.error("Reminder check failed:", err);
+      }
+    }, 15_000);
+
+    // Check for birthdays once a day at midnight (or on startup)
+    const checkBirthdays = async () => {
+      try {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        
+        const birthdays = await all(`SELECT * FROM birthdays WHERE birth_month=? AND birth_day=?`, [month, day]);
+        
+        for (const birthday of birthdays) {
+          const guild = client.guilds.cache.get(birthday.guild_id);
+          if (!guild) continue;
+          
+          const settings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [birthday.guild_id]);
+          if (!settings || !settings.enabled || !settings.channel_id) continue;
+          
+          const channel = guild.channels.cache.get(settings.channel_id);
+          if (!channel) continue;
+          
+          const member = await guild.members.fetch(birthday.user_id).catch(() => null);
+          if (!member) continue;
+          
+          const message = settings.message
+            .replace(/{user}/g, `<@${birthday.user_id}>`)
+            .replace(/{server}/g, guild.name);
+          
+          await channel.send(message).catch(() => {});
+          
+          if (settings.role_id) {
+            const role = guild.roles.cache.get(settings.role_id);
+            if (role && !member.roles.cache.has(settings.role_id)) {
+              await member.roles.add(role).catch(() => {});
+              
+              setTimeout(async () => {
+                await member.roles.remove(role).catch(() => {});
+              }, 86400000);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Birthday check failed:", err);
+      }
+    };
+    
+    checkBirthdays();
+    setInterval(checkBirthdays, 3600000);
+
     setInterval(async () => {
       try {
         const voiceXp = parseInt(process.env.VOICE_XP_PER_MINUTE || "5", 10);
@@ -785,6 +869,16 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     }
   }
 
+  // Check for new reaction role system
+  const reactionRole = await get(`SELECT * FROM reaction_roles WHERE message_id=? AND emoji=?`, [msg.id, reaction.emoji.name || reaction.emoji.id]);
+  if (reactionRole && msg.guild) {
+    const member = await msg.guild.members.fetch(user.id).catch(() => null);
+    const role = msg.guild.roles.cache.get(reactionRole.role_id);
+    if (member && role) {
+      await member.roles.add(role).catch(() => {});
+    }
+  }
+
   await applyReactionRoleOnAdd(reaction, user).catch((err) => {
     console.error("Reaction role add failed:", err);
   });
@@ -872,6 +966,16 @@ client.on(Events.MessageReactionRemove, async (reaction, user) => {
           }
         }
       }
+    }
+  }
+
+  // Check for new reaction role system removal
+  const reactionRole = await get(`SELECT * FROM reaction_roles WHERE message_id=? AND emoji=?`, [msg.id, reaction.emoji.name || reaction.emoji.id]);
+  if (reactionRole && msg.guild) {
+    const member = await msg.guild.members.fetch(user.id).catch(() => null);
+    const role = msg.guild.roles.cache.get(reactionRole.role_id);
+    if (member && role) {
+      await member.roles.remove(role).catch(() => {});
     }
   }
   

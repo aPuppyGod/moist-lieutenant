@@ -1373,6 +1373,7 @@ const { LOG_EVENT_DEFS } = require("./loggingConfig");
 const { ChannelType } = require("discord.js");
 const { normalizeEmojiKey } = require("./reactionRoles");
 const { sendTicketPanel, closeTicketChannel } = require("./tickets");
+const { SOCIAL_PLATFORM_OPTIONS, SOCIAL_EVENT_LABELS, getSupportedEventsForPlatform, defaultTemplateForEvent, normalizePlatform } = require("./socials");
 
 function startDashboard(client) {
     const app = express();
@@ -3629,6 +3630,25 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const reactionRolesConfig = await all(`SELECT * FROM reaction_roles WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
     const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
+    const socialLinks = await all(
+      `SELECT id, platform, external_id, source_url, label, channel_id, enabled, created_at, last_checked_at
+       FROM social_links
+       WHERE guild_id=?
+       ORDER BY created_at DESC`,
+      [guildId]
+    );
+    const socialRules = await all(
+      `SELECT id, link_id, event_type, enabled, channel_id, role_id, message_template
+       FROM social_link_rules
+       WHERE guild_id=?
+       ORDER BY link_id, event_type`,
+      [guildId]
+    );
+    const socialRulesByLink = new Map();
+    for (const rule of socialRules) {
+      if (!socialRulesByLink.has(rule.link_id)) socialRulesByLink.set(rule.link_id, []);
+      socialRulesByLink.get(rule.link_id).push(rule);
+    }
     
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
     const activeModule = String(req.query.module || "overview").toLowerCase();
@@ -3637,6 +3657,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "moderation", label: "Moderation" },
       { key: "welcome", label: "Welcome & Auto-Roles" },
       { key: "logging", label: "Logging" },
+      { key: "socials", label: "Socials" },
       { key: "xp", label: "XP" },
       { key: "tickets", label: "Tickets" },
       { key: "reactionroles", label: "Reaction Roles" },
@@ -4095,6 +4116,136 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           `;
         }).join("")}
       </ul>
+      ` : ""}
+
+      ${activeModule === "socials" ? `
+
+      <h3>Social Link Integrations</h3>
+      <p class="section-description">Link creator socials and configure live/posts/community/story notifications with per-event channel, role, and message template controls.</p>
+
+      <form method="post" action="/guild/${guildId}/social-links/add">
+        <div class="form-row">
+          <label>
+            <span>Platform</span>
+            <select name="platform" required>
+              ${SOCIAL_PLATFORM_OPTIONS.map((platform) => `<option value="${platform.key}">${escapeHtml(platform.label)}</option>`).join("")}
+            </select>
+          </label>
+          <label>
+            <span>Handle / ID / Unique Key</span>
+            <input name="external_id" required placeholder="e.g. UC..., @name, username" />
+          </label>
+          <label>
+            <span>Source URL / RSS (optional)</span>
+            <input name="source_url" placeholder="https://..." />
+          </label>
+          <label>
+            <span>Display Label (optional)</span>
+            <input name="label" placeholder="Creator name" />
+          </label>
+          <label>
+            <span>Linked Channel (optional)</span>
+            <select name="channel_id">
+              <option value="">Use default social channel</option>
+              ${textChannels.map((c) => `<option value="${c.id}">#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <button type="submit">Link Social</button>
+        </div>
+      </form>
+
+      <br/>
+      <h4>Default Social Notifications Channel</h4>
+      <form method="post" action="/guild/${guildId}/socials/default-channel">
+        <div class="form-row">
+          <label>
+            <span>Default Channel</span>
+            <select name="social_default_channel_id">
+              <option value="" ${!settings.social_default_channel_id ? "selected" : ""}>None</option>
+              ${textChannels.map((c) => `<option value="${c.id}" ${settings.social_default_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <button type="submit">Save Default Channel</button>
+        </div>
+      </form>
+
+      <br/>
+      <h4>Linked Social Accounts</h4>
+      ${socialLinks.length ? socialLinks.map((link) => {
+        const label = link.label || link.external_id;
+        const rules = socialRulesByLink.get(link.id) || [];
+        const eventTypes = getSupportedEventsForPlatform(link.platform);
+        const eventRuleMap = new Map(rules.map((rule) => [rule.event_type, rule]));
+        const linkedChannelName = link.channel_id ? (guild.channels.cache.get(link.channel_id)?.name || link.channel_id) : null;
+
+        return `
+          <div class="admin-section" style="margin-bottom:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div>
+                <strong>${escapeHtml(SOCIAL_PLATFORM_OPTIONS.find((platform) => platform.key === link.platform)?.label || link.platform)}</strong>
+                • ${escapeHtml(label)}
+                ${linkedChannelName ? `• <span style="opacity:0.8;">#${escapeHtml(linkedChannelName)}</span>` : ""}
+                ${link.source_url ? `• <a href="${escapeHtml(link.source_url)}" target="_blank" rel="noopener noreferrer">Source</a>` : ""}
+                <div style="opacity:0.7;font-size:0.9em;">Last checked: ${link.last_checked_at ? new Date(Number(link.last_checked_at)).toLocaleString() : "never"}</div>
+              </div>
+              <div style="display:flex;gap:8px;">
+                <form method="post" action="/guild/${guildId}/social-links/toggle" style="display:inline;">
+                  <input type="hidden" name="link_id" value="${link.id}" />
+                  <input type="hidden" name="enabled" value="${Number(link.enabled) === 1 ? "0" : "1"}" />
+                  <button type="submit">${Number(link.enabled) === 1 ? "Disable" : "Enable"}</button>
+                </form>
+                <form method="post" action="/guild/${guildId}/social-links/delete" style="display:inline;">
+                  <input type="hidden" name="link_id" value="${link.id}" />
+                  <button type="submit">Delete</button>
+                </form>
+              </div>
+            </div>
+
+            <div style="margin-top:10px;">
+              ${eventTypes.map((eventType) => {
+                const rule = eventRuleMap.get(eventType);
+                const roleDefault = rule?.role_id || "";
+                const channelDefault = rule?.channel_id || "";
+                const templateDefault = rule?.message_template || "";
+                return `
+                  <form method="post" action="/guild/${guildId}/social-rules/save" style="margin:8px 0;padding:10px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;">
+                    <input type="hidden" name="link_id" value="${link.id}" />
+                    <input type="hidden" name="event_type" value="${eventType}" />
+                    <label style="display:flex;align-items:center;gap:8px;">
+                      <input type="checkbox" name="enabled" ${rule && Number(rule.enabled) === 1 ? "checked" : ""} />
+                      <span><strong>${escapeHtml(SOCIAL_EVENT_LABELS[eventType] || eventType)}</strong> notifications enabled</span>
+                    </label>
+                    <div class="form-row" style="margin-top:8px;">
+                      <label>
+                        <span>Channel Override</span>
+                        <select name="channel_id">
+                          <option value="" ${!channelDefault ? "selected" : ""}>Use linked/default channel</option>
+                          ${textChannels.map((c) => `<option value="${c.id}" ${channelDefault === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+                        </select>
+                      </label>
+                      <label>
+                        <span>Role Mention</span>
+                        <select name="role_id">
+                          <option value="" ${!roleDefault ? "selected" : ""}>No role mention</option>
+                          ${roleOptions.map((role) => `<option value="${role.id}" ${roleDefault === role.id ? "selected" : ""}>@${escapeHtml(role.name)}</option>`).join("")}
+                        </select>
+                      </label>
+                    </div>
+                    <label style="display:block;margin-top:8px;">
+                      <span>Message Template</span>
+                      <textarea name="message_template" rows="3" style="width:100%;max-width:100%;font-family:inherit;">${escapeHtml(templateDefault)}</textarea>
+                    </label>
+                    <div style="opacity:0.75;font-size:0.9em;margin-top:4px;">Available placeholders: {role} {platform} {handle} {title} {url} {event}</div>
+                    <button type="submit" style="margin-top:8px;">Save ${escapeHtml(SOCIAL_EVENT_LABELS[eventType] || eventType)} Rule</button>
+                  </form>
+                `;
+              }).join("")}
+            </div>
+          </div>
+        `;
+      }).join("") : `<div class="empty-state">No socials linked yet.</div>`}
+
+      <p style="opacity:0.8;margin-top:10px;">Tip: For TikTok/Twitter/Instagram/Facebook/Kick, add a valid RSS/Atom URL in Source URL for post monitoring.</p>
       ` : ""}
 
       ${activeModule === "reactionroles" ? `
@@ -4777,6 +4928,134 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("mod-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/socials/default-channel", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const socialDefaultChannelId = String(req.body.social_default_channel_id || "").trim() || null;
+      await updateGuildSettings(guildId, {
+        social_default_channel_id: socialDefaultChannelId
+      });
+      return res.redirect(getModuleRedirect(guildId, 'socials'));
+    } catch (e) {
+      console.error("social default channel save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/social-links/add", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const platform = normalizePlatform(req.body.platform);
+      const externalId = String(req.body.external_id || "").trim();
+      const sourceUrl = String(req.body.source_url || "").trim() || null;
+      const label = String(req.body.label || "").trim() || null;
+      const channelId = String(req.body.channel_id || "").trim() || null;
+      const createdBy = req.user?.id || null;
+
+      if (!externalId) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      const insert = await run(
+        `INSERT INTO social_links (guild_id, platform, external_id, source_url, label, channel_id, enabled, created_by, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
+         ON CONFLICT (guild_id, platform, external_id)
+         DO UPDATE SET source_url=EXCLUDED.source_url, label=EXCLUDED.label, channel_id=EXCLUDED.channel_id
+         RETURNING id`,
+        [guildId, platform, externalId, sourceUrl, label, channelId, createdBy, Date.now()]
+      );
+
+      const linkId = insert?.rows?.[0]?.id || null;
+      if (linkId) {
+        const events = getSupportedEventsForPlatform(platform);
+        for (const eventType of events) {
+          await run(
+            `INSERT INTO social_link_rules (guild_id, link_id, event_type, enabled, message_template, created_at, updated_at)
+             VALUES (?, ?, ?, 1, ?, ?, ?)
+             ON CONFLICT (link_id, event_type)
+             DO NOTHING`,
+            [guildId, linkId, eventType, defaultTemplateForEvent(eventType), Date.now(), Date.now()]
+          );
+        }
+      }
+
+      return res.redirect(getModuleRedirect(guildId, 'socials'));
+    } catch (e) {
+      console.error("social-links add error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/social-links/toggle", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const linkId = Number.parseInt(String(req.body.link_id || "0"), 10);
+      const enabled = String(req.body.enabled || "0") === "1" ? 1 : 0;
+      if (!Number.isInteger(linkId) || linkId <= 0) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      await run(
+        `UPDATE social_links SET enabled=? WHERE guild_id=? AND id=?`,
+        [enabled, guildId, linkId]
+      );
+
+      return res.redirect(getModuleRedirect(guildId, 'socials'));
+    } catch (e) {
+      console.error("social-links toggle error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/social-links/delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const linkId = Number.parseInt(String(req.body.link_id || "0"), 10);
+      if (!Number.isInteger(linkId) || linkId <= 0) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      await run(`DELETE FROM social_link_rules WHERE guild_id=? AND link_id=?`, [guildId, linkId]);
+      await run(`DELETE FROM social_announcements WHERE guild_id=? AND link_id=?`, [guildId, linkId]);
+      await run(`DELETE FROM social_links WHERE guild_id=? AND id=?`, [guildId, linkId]);
+
+      return res.redirect(getModuleRedirect(guildId, 'socials'));
+    } catch (e) {
+      console.error("social-links delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/social-rules/save", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const linkId = Number.parseInt(String(req.body.link_id || "0"), 10);
+      const eventType = String(req.body.event_type || "post").trim().toLowerCase();
+      const enabled = req.body.enabled === "on" ? 1 : 0;
+      const channelId = String(req.body.channel_id || "").trim() || null;
+      const roleId = String(req.body.role_id || "").trim() || null;
+      const messageTemplateRaw = String(req.body.message_template || "").trim();
+      const messageTemplate = messageTemplateRaw || defaultTemplateForEvent(eventType);
+
+      if (!Number.isInteger(linkId) || linkId <= 0) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      await run(
+        `INSERT INTO social_link_rules (guild_id, link_id, event_type, enabled, channel_id, role_id, message_template, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (link_id, event_type)
+         DO UPDATE SET enabled=EXCLUDED.enabled, channel_id=EXCLUDED.channel_id, role_id=EXCLUDED.role_id, message_template=EXCLUDED.message_template, updated_at=EXCLUDED.updated_at`,
+        [guildId, linkId, eventType, enabled, channelId, roleId, messageTemplate, Date.now(), Date.now()]
+      );
+
+      return res.redirect(getModuleRedirect(guildId, 'socials'));
+    } catch (e) {
+      console.error("social-rules save error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

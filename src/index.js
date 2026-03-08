@@ -25,6 +25,7 @@ const { getLoggingActorExclusions } = require("./settings");
 const { getReactionRoleQuestion, getReactionRoleOptions } = require("./settings");
 const { findRecentModAction } = require("./modActionTracker");
 const { startDashboard } = require("./dashboard");
+const { startSocialFeedNotifier } = require("./socials");
 const { applyReactionRoleOnAdd, applyReactionRoleOnRemove } = require("./reactionRoles");
 const { handleTicketInteraction } = require("./tickets");
 const unidecode = require('unidecode');
@@ -647,6 +648,7 @@ client.once(Events.ClientReady, async () => {
     });
 
     startDashboard(client);
+    startSocialFeedNotifier(client);
 
     setInterval(() => {
       cleanupPrivateRooms(client).catch((err) => {

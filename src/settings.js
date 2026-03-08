@@ -32,6 +32,7 @@ async function getGuildSettings(guildId) {
     mod_role_id: row?.mod_role_id ?? null,
     log_channel_id: row?.log_channel_id ?? null,
     log_summary_cards_enabled: Number(row?.log_summary_cards_enabled ?? 1) === 1,
+    social_default_channel_id: row?.social_default_channel_id ?? null,
 
     level_up_channel_id: row?.level_up_channel_id ?? null,
 
@@ -53,6 +54,7 @@ async function updateGuildSettings(guildId, patch) {
     "mod_role_id",
     "log_channel_id",
     "log_summary_cards_enabled",
+    "social_default_channel_id",
     "level_up_channel_id",
     "level_up_message"
   ]);

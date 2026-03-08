@@ -211,6 +211,7 @@ async function initDb() {
       mod_role_id TEXT DEFAULT NULL,
       log_channel_id TEXT DEFAULT NULL,
       log_summary_cards_enabled INTEGER DEFAULT 1,
+      social_default_channel_id TEXT DEFAULT NULL,
 
       level_up_channel_id TEXT DEFAULT NULL,
       level_up_message TEXT DEFAULT NULL,
@@ -329,6 +330,55 @@ async function initDb() {
       target_id TEXT NOT NULL,
       target_type TEXT NOT NULL,
       PRIMARY KEY (guild_id, target_id)
+    )
+  `);
+
+  // Social link sources (YouTube/Twitch/TikTok/Twitter/etc.)
+  await run(`
+    CREATE TABLE IF NOT EXISTS social_links (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      source_url TEXT DEFAULT NULL,
+      label TEXT DEFAULT NULL,
+      channel_id TEXT DEFAULT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_by TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      last_checked_at BIGINT DEFAULT NULL,
+      UNIQUE (guild_id, platform, external_id)
+    )
+  `);
+
+  // Per-link event routing and templates
+  await run(`
+    CREATE TABLE IF NOT EXISTS social_link_rules (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      link_id BIGINT NOT NULL,
+      event_type TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      channel_id TEXT DEFAULT NULL,
+      role_id TEXT DEFAULT NULL,
+      message_template TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      updated_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      UNIQUE (link_id, event_type)
+    )
+  `);
+
+  // Deduped social announcements already sent
+  await run(`
+    CREATE TABLE IF NOT EXISTS social_announcements (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      link_id BIGINT NOT NULL,
+      event_type TEXT NOT NULL,
+      event_uid TEXT NOT NULL,
+      posted_message_id TEXT DEFAULT NULL,
+      sent_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      UNIQUE (link_id, event_uid)
     )
   `);
 
@@ -776,6 +826,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS social_default_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_transcript_channel_id TEXT DEFAULT NULL`);

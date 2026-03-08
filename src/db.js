@@ -210,6 +210,7 @@ async function initDb() {
       new_account_warn_days INTEGER DEFAULT 1,
       mod_role_id TEXT DEFAULT NULL,
       log_channel_id TEXT DEFAULT NULL,
+      log_summary_cards_enabled INTEGER DEFAULT 1,
 
       level_up_channel_id TEXT DEFAULT NULL,
       level_up_message TEXT DEFAULT NULL,
@@ -774,6 +775,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS new_account_warn_days INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_transcript_channel_id TEXT DEFAULT NULL`);

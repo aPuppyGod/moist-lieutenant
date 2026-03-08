@@ -31,6 +31,7 @@ async function getGuildSettings(guildId) {
     new_account_warn_days: row?.new_account_warn_days ?? 1,
     mod_role_id: row?.mod_role_id ?? null,
     log_channel_id: row?.log_channel_id ?? null,
+    log_summary_cards_enabled: Number(row?.log_summary_cards_enabled ?? 1) === 1,
 
     level_up_channel_id: row?.level_up_channel_id ?? null,
 
@@ -51,6 +52,7 @@ async function updateGuildSettings(guildId, patch) {
     "new_account_warn_days",
     "mod_role_id",
     "log_channel_id",
+    "log_summary_cards_enabled",
     "level_up_channel_id",
     "level_up_message"
   ]);

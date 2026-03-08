@@ -7,8 +7,10 @@ const {
   Events,
   AuditLogEvent,
   ChannelType,
-  EmbedBuilder
+  EmbedBuilder,
+  AttachmentBuilder
 } = require("discord.js");
+const { createCanvas } = require("canvas");
 
 const { initDb, get, run, all } = require("./db");
 const { levelFromXp } = require("./xp");
@@ -114,6 +116,135 @@ function trimText(value, max = 1000) {
   return `${text.slice(0, max - 1)}…`;
 }
 
+function sanitizeAttachmentName(name, fallback = "log-file") {
+  const safe = String(name || fallback)
+    .replace(/[\\/:*?"<>|\x00-\x1F]/g, "-")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 70);
+  return safe || fallback;
+}
+
+function extensionFromContentType(contentType) {
+  const map = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/jpg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/bmp": "bmp",
+    "image/svg+xml": "svg",
+    "video/mp4": "mp4",
+    "video/webm": "webm"
+  };
+  return map[String(contentType || "").toLowerCase()] || null;
+}
+
+function extensionFromUrl(url, fallback = "bin") {
+  try {
+    const parsed = new URL(url);
+    const match = parsed.pathname.match(/\.([a-zA-Z0-9]{2,6})$/);
+    return match ? match[1].toLowerCase() : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function isImageMedia(item) {
+  const contentType = String(item?.contentType || "").toLowerCase();
+  const name = String(item?.name || "");
+  const url = String(item?.url || "");
+  if (contentType.startsWith("image/")) return true;
+  return /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(name) || /\.(png|jpe?g|gif|webp|bmp|svg)(\?|$)/i.test(url);
+}
+
+function stripLogMarkdown(value) {
+  return String(value || "")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function roundRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + width, y, x + width, y + height, r);
+  ctx.arcTo(x + width, y + height, x, y + height, r);
+  ctx.arcTo(x, y + height, x, y, r);
+  ctx.arcTo(x, y, x + width, y, r);
+  ctx.closePath();
+}
+
+async function buildLogSummaryImage(guild, payload, actorUserId) {
+  if (!guild || !actorUserId) return null;
+  const member = guild.members.cache.get(actorUserId) || await guild.members.fetch(actorUserId).catch(() => null);
+  const user = member?.user || await guild.client.users.fetch(actorUserId).catch(() => null);
+  if (!user) return null;
+
+  const displayName = member?.displayName || user.globalName || user.username || "Unknown";
+  const canvas = createCanvas(980, 230);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#111318";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#20242d";
+  roundRectPath(ctx, 18, 18, canvas.width - 36, canvas.height - 36, 16);
+  ctx.fill();
+
+  const title = stripLogMarkdown(payload?.title || "Server Log");
+  const detail = trimText(stripLogMarkdown(payload?.description || ""), 180);
+
+  ctx.fillStyle = "#f2f3f5";
+  ctx.font = "bold 38px Times New Roman";
+  ctx.fillText(title, 44, 78);
+
+  const mentionText = `@${displayName}`;
+  ctx.font = "28px Times New Roman";
+  const mentionWidth = Math.min(ctx.measureText(mentionText).width + 36, canvas.width - 110);
+  roundRectPath(ctx, 44, 98, mentionWidth, 44, 12);
+  ctx.fillStyle = "#3d4f7f";
+  ctx.fill();
+  ctx.fillStyle = "#e6eeff";
+  ctx.fillText(mentionText, 60, 128);
+
+  ctx.fillStyle = "#d0d7e2";
+  ctx.font = "26px Times New Roman";
+  const detailText = detail || "No additional details.";
+  ctx.fillText(detailText, 44, 178);
+
+  return new AttachmentBuilder(canvas.toBuffer("image/png"), { name: "log-summary.png" });
+}
+
+async function downloadMediaAttachment(item, index) {
+  if (!item?.url) return null;
+  try {
+    const response = await fetch(item.url);
+    if (!response.ok) return null;
+
+    const contentType = String(item.contentType || response.headers.get("content-type") || "").toLowerCase();
+    const data = await response.arrayBuffer();
+    const buffer = Buffer.from(data);
+    if (!buffer.length) return null;
+
+    let name = sanitizeAttachmentName(item.name || `log-media-${index + 1}`, `log-media-${index + 1}`);
+    if (!/\.[a-z0-9]{2,6}$/i.test(name)) {
+      const ext = extensionFromContentType(contentType) || extensionFromUrl(item.url, "bin");
+      name = `${name}.${ext}`;
+    }
+
+    return {
+      attachment: new AttachmentBuilder(buffer, { name }),
+      name,
+      isImage: isImageMedia({ ...item, contentType, name })
+    };
+  } catch {
+    return null;
+  }
+}
+
 function customEmojiLinksFromText(text) {
   const raw = String(text || "");
   const regex = /<(a?):([a-zA-Z0-9_]+):(\d+)>/g;
@@ -151,7 +282,8 @@ function formatMessageLogContent(message) {
     lines.push(`Attachments (${attachments.length}):`);
     for (const attachment of attachments.slice(0, 8)) {
       const kind = attachment.contentType?.startsWith("image/") ? "image" : "file";
-      lines.push(`- [${kind}] ${attachment.name || "attachment"} → ${attachment.url}`);
+      const sizeKb = typeof attachment.size === "number" ? ` (${Math.max(1, Math.round(attachment.size / 1024))} KB)` : "";
+      lines.push(`- [${kind}] ${attachment.name || "attachment"}${sizeKb}`);
     }
   }
 
@@ -159,7 +291,7 @@ function formatMessageLogContent(message) {
   if (stickers.length) {
     lines.push(`Stickers (${stickers.length}):`);
     for (const sticker of stickers.slice(0, 8)) {
-      lines.push(`- ${sticker.name || "sticker"} (${sticker.id}) → ${stickerUrl(sticker) || "n/a"}`);
+      lines.push(`- ${sticker.name || "sticker"} (${sticker.id})`);
     }
   }
 
@@ -167,31 +299,48 @@ function formatMessageLogContent(message) {
   if (customEmojis.length) {
     lines.push(`Custom Emojis (${customEmojis.length}):`);
     for (const emoji of customEmojis.slice(0, 12)) {
-      lines.push(`- ${emoji.animated ? "animated" : "static"} :${emoji.name}: (${emoji.emojiId}) → ${emoji.emojiUrl}`);
+      lines.push(`- ${emoji.animated ? "animated" : "static"} :${emoji.name}: (${emoji.emojiId})`);
     }
   }
 
   return trimText(lines.join("\n"), 3500);
 }
 
-function collectRenderableMediaUrls(message) {
+function collectRenderableMediaItems(message) {
   if (!message) return [];
-  const urls = [];
+  const items = [];
 
   const attachments = message.attachments ? [...message.attachments.values()] : [];
   for (const attachment of attachments) {
-    const isImage = attachment.contentType?.startsWith("image/")
-      || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(attachment.url || "");
-    if (isImage && attachment.url) urls.push(attachment.url);
+    if (!attachment?.url) continue;
+    items.push({
+      url: attachment.url,
+      name: attachment.name || "attachment",
+      contentType: attachment.contentType || null
+    });
   }
 
   const stickers = message.stickers ? [...message.stickers.values()] : [];
   for (const sticker of stickers) {
     const url = stickerUrl(sticker);
-    if (url) urls.push(url);
+    if (!url) continue;
+    const stickerName = sanitizeAttachmentName(sticker.name || `sticker-${sticker.id}`, `sticker-${sticker.id}`);
+    items.push({
+      url,
+      name: `${stickerName}.${extensionFromUrl(url, "png")}`,
+      contentType: "image/png"
+    });
   }
 
-  return [...new Set(urls)].slice(0, 4);
+  const deduped = [];
+  const seen = new Set();
+  for (const item of items) {
+    if (!item?.url || seen.has(item.url)) continue;
+    seen.add(item.url);
+    deduped.push(item);
+  }
+
+  return deduped.slice(0, 9);
 }
 
 function userLabel(userLike) {
@@ -200,9 +349,8 @@ function userLabel(userLike) {
   const tag = user.tag || user.username || "Unknown";
   const userId = user.id || "no-id";
   const displayName = user.displayName || user.globalName || user.username || tag;
-  if (!userId || userId === "no-id") return tag;
-  // Use zero-width space to prevent pinging: @\u200Busername
-  return `@\u200B${displayName} ([${tag}](https://discord.com/users/${userId}))`;
+  if (!userId || userId === "no-id") return `@${displayName} (${tag})`;
+  return `<@${userId}> (\`${tag}\`)`;
 }
 
 function channelLabel(channel) {
@@ -310,11 +458,16 @@ async function sendGuildLog(guild, payload) {
 
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!channel || !channel.isTextBased || !channel.isTextBased()) return;
+  const summaryCardsEnabled = Number(settings?.log_summary_cards_enabled ?? 1) === 1;
 
   const embed = new EmbedBuilder()
     .setColor(payload.color || LOG_THEME.info)
-    .setTitle(payload.title || "Server Log")
-    .setDescription(trimText(payload.description || ""))
+    .setAuthor({
+      name: payload.title || "Server Log",
+      iconURL: guild.iconURL({ size: 128 }) || undefined
+    })
+    .setDescription(trimText(payload.description || "", 3800))
+    .setFooter({ text: `${guild.name} • Logging` })
     .setTimestamp(new Date());
 
   // Add user avatar if actorUserId is provided
@@ -334,35 +487,52 @@ async function sendGuildLog(guild, payload) {
     })));
   }
 
-  const mediaUrls = Array.isArray(payload.mediaUrls)
-    ? payload.mediaUrls.filter(Boolean).slice(0, 4)
-    : [];
+  const mediaItems = Array.isArray(payload.mediaItems)
+    ? payload.mediaItems.filter((item) => item?.url).slice(0, 9)
+    : Array.isArray(payload.mediaUrls)
+      ? payload.mediaUrls.filter(Boolean).slice(0, 9).map((url, index) => ({
+          url,
+          name: `media-${index + 1}`
+        }))
+      : [];
 
-  if (mediaUrls.length) {
+  const downloadedMedia = [];
+  for (let index = 0; index < mediaItems.length; index += 1) {
+    const downloaded = await downloadMediaAttachment(mediaItems[index], index);
+    if (downloaded) downloadedMedia.push(downloaded);
+  }
+
+  const files = downloadedMedia.map((item) => item.attachment);
+
+  let summaryImage = null;
+  if (summaryCardsEnabled && payload?.renderSummaryImage !== false && actorUserId) {
+    summaryImage = await buildLogSummaryImage(guild, payload, actorUserId);
+    if (summaryImage) {
+      files.push(summaryImage);
+    }
+  }
+
+  const firstImage = downloadedMedia.find((item) => item.isImage);
+  if (firstImage) {
+    embed.setImage(`attachment://${firstImage.name}`);
+  } else if (summaryImage) {
+    embed.setImage(`attachment://${summaryImage.name}`);
+  }
+
+  if (downloadedMedia.length) {
     embed.addFields([
       {
-        name: "Media",
-        value: mediaUrls.map((u, i) => `[View ${i + 1}](${u})`).join(" • ")
+        name: "Attachments",
+        value: downloadedMedia.map((item) => `• ${item.name}`).join("\n")
       }
     ]);
   }
 
   await channel.send({
     embeds: [embed],
+    files,
     allowedMentions: { parse: [] }
   }).catch(() => {});
-
-  for (const mediaUrl of mediaUrls) {
-    const mediaEmbed = new EmbedBuilder()
-      .setColor(payload.color || LOG_THEME.info)
-      .setImage(mediaUrl)
-      .setTimestamp(new Date());
-
-    await channel.send({
-      embeds: [mediaEmbed],
-      allowedMentions: { parse: [] }
-    }).catch(() => {});
-  }
 }
 
 async function handleLevelUp(guild, userId, oldLevel, newLevel, message = null) {
@@ -1199,11 +1369,11 @@ client.on(Events.MessageDelete, async (message) => {
       ? `${userLabel(message.author)} (self-delete)`
       : "Unknown";
   const actorUserId = deleter?.id || message.author?.id || null;
-  const mediaUrls = collectRenderableMediaUrls(message);
+  const mediaItems = collectRenderableMediaItems(message);
   await sendGuildLog(message.guild, {
     eventKey: "message_delete",
     actorUserId,
-    mediaUrls,
+    mediaItems,
     color: LOG_THEME.warn,
     title: "🗑️ Message Deleted",
     sourceChannelId: message.channel?.id,
@@ -1256,14 +1426,20 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
   if ((oldMessage.content || "") === (newMessage.content || "")) return;
   if (newMessage.author?.bot) return;
 
-  const beforeMediaUrls = collectRenderableMediaUrls(oldMessage);
-  const afterMediaUrls = collectRenderableMediaUrls(newMessage);
-  const mediaUrls = [...new Set([...afterMediaUrls, ...beforeMediaUrls])].slice(0, 4);
+  const beforeMediaItems = collectRenderableMediaItems(oldMessage);
+  const afterMediaItems = collectRenderableMediaItems(newMessage);
+  const mediaItems = [];
+  const mediaSeen = new Set();
+  for (const item of [...afterMediaItems, ...beforeMediaItems]) {
+    if (!item?.url || mediaSeen.has(item.url)) continue;
+    mediaSeen.add(item.url);
+    mediaItems.push(item);
+  }
 
   await sendGuildLog(newMessage.guild, {
     eventKey: "message_edit",
     actorUserId: newMessage.author?.id,
-    mediaUrls,
+    mediaItems,
     color: LOG_THEME.info,
     title: "✏️ Message Edited",
     sourceChannelId: newMessage.channel?.id,
@@ -1323,6 +1499,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
   await sendGuildLog(member.guild, {
     eventKey: "member_join",
     actorUserId: member.id,
+    renderSummaryImage: true,
     color: LOG_THEME.info,
     title: "📥 Member Joined",
     description: `${userLabel(member.user)} joined the server.`,
@@ -1339,6 +1516,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
       await sendGuildLog(member.guild, {
         eventKey: "member_join_new_account",
         actorUserId: member.id,
+        renderSummaryImage: true,
         color: LOG_THEME.warn,
         title: "⚠️ New Account Joined",
         description: `${userLabel(member.user)} joined with a recently created account.`,

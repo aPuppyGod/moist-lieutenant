@@ -3768,6 +3768,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </select>
         </label>
         <br/><br/>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="log_summary_cards_enabled" ${settings.log_summary_cards_enabled ? "checked" : ""} />
+          <span>Enable log summary cards (Times New Roman image style)</span>
+        </label>
+        <br/><br/>
         <button type="submit">Save Moderation Settings</button>
       </form>
 
@@ -4755,6 +4760,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const logChannelId = String(req.body.log_channel_id || "").trim() || null;
       const commandPrefixRaw = String(req.body.command_prefix || "!").trim();
       const newAccountWarnDaysRaw = Number.parseInt(String(req.body.new_account_warn_days || "1"), 10);
+      const logSummaryCardsEnabled = req.body.log_summary_cards_enabled === "on";
       const newAccountWarnDays = Number.isInteger(newAccountWarnDaysRaw) && newAccountWarnDaysRaw >= 0
         ? newAccountWarnDaysRaw
         : 1;
@@ -4764,6 +4770,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       await updateGuildSettings(guildId, {
         mod_role_id: modRoleId,
         log_channel_id: logChannelId,
+        log_summary_cards_enabled: logSummaryCardsEnabled,
         command_prefix: commandPrefix,
         new_account_warn_days: newAccountWarnDays
       });

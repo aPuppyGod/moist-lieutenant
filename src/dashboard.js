@@ -4236,7 +4236,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                       <textarea name="message_template" rows="3" style="width:100%;max-width:100%;font-family:inherit;">${escapeHtml(templateDefault)}</textarea>
                     </label>
                     <div style="opacity:0.75;font-size:0.9em;margin-top:4px;">Available placeholders: {role} {platform} {handle} {title} {url} {event}</div>
-                    <button type="submit" style="margin-top:8px;">Save ${escapeHtml(SOCIAL_EVENT_LABELS[eventType] || eventType)} Rule</button>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                      <button type="submit">Save ${escapeHtml(SOCIAL_EVENT_LABELS[eventType] || eventType)} Rule</button>
+                    </div>
+                  </form>
+                  <form method="post" action="/guild/${guildId}/social-rules/test" style="margin-top:6px;">
+                    <input type="hidden" name="link_id" value="${link.id}" />
+                    <input type="hidden" name="event_type" value="${eventType}" />
+                    <button type="submit">Send Test ${escapeHtml(SOCIAL_EVENT_LABELS[eventType] || eventType)} Notification</button>
                   </form>
                 `;
               }).join("")}
@@ -5056,6 +5063,83 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'socials'));
     } catch (e) {
       console.error("social-rules save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/social-rules/test", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const linkId = Number.parseInt(String(req.body.link_id || "0"), 10);
+      const eventType = String(req.body.event_type || "post").trim().toLowerCase();
+
+      if (!Number.isInteger(linkId) || linkId <= 0) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      const link = await get(
+        `SELECT id, guild_id, platform, external_id, label, channel_id
+         FROM social_links
+         WHERE guild_id=? AND id=?`,
+        [guildId, linkId]
+      );
+      if (!link) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      const rule = await get(
+        `SELECT event_type, enabled, channel_id, role_id, message_template
+         FROM social_link_rules
+         WHERE guild_id=? AND link_id=? AND event_type=?`,
+        [guildId, linkId, eventType]
+      );
+      const settings = await getGuildSettings(guildId);
+      const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      const channelId =
+        (rule?.channel_id && String(rule.channel_id))
+        || (link?.channel_id && String(link.channel_id))
+        || (settings?.social_default_channel_id && String(settings.social_default_channel_id))
+        || null;
+
+      if (!channelId) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+      if (!channel || !channel.isTextBased || !channel.isTextBased()) {
+        return res.redirect(getModuleRedirect(guildId, 'socials'));
+      }
+
+      const roleMention = rule?.role_id ? `<@&${rule.role_id}>` : "";
+      const platformLabel = SOCIAL_PLATFORM_OPTIONS.find((platform) => platform.key === normalizePlatform(link.platform))?.label || link.platform;
+      const template = rule?.message_template || defaultTemplateForEvent(eventType);
+      const eventLabel = SOCIAL_EVENT_LABELS[eventType] || eventType;
+
+      const testMessage = String(template || "")
+        .replaceAll("{platform}", platformLabel)
+        .replaceAll("{handle}", link.label || link.external_id)
+        .replaceAll("{title}", `[TEST] ${eventLabel} title`)
+        .replaceAll("{url}", "https://example.com/test-social-event")
+        .replaceAll("{event}", eventLabel)
+        .replaceAll("{role}", roleMention || "")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+      await channel.send({
+        content: testMessage || `${roleMention} [TEST] ${eventLabel} notification`,
+        allowedMentions: {
+          parse: [],
+          roles: rule?.role_id ? [rule.role_id] : []
+        }
+      }).catch(() => {});
+
+      return res.redirect(getModuleRedirect(guildId, 'socials'));
+    } catch (e) {
+      console.error("social-rules test error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

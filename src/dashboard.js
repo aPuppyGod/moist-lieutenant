@@ -4189,6 +4189,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <h3 style="margin-top:18px;">Anti-Nuke Incidents</h3>
       <p class="section-description">Recent anti-nuke triggers and manual unlock actions.</p>
+      <form method="get" action="/guild/${guildId}/anti-nuke/incidents/export" style="margin-bottom:8px;">
+        <button type="submit">Export Anti-Nuke Incidents (JSON)</button>
+      </form>
       <form method="post" action="/guild/${guildId}/anti-nuke/incidents/clear" style="margin-bottom:8px;" onsubmit="return confirm('Clear all anti-nuke incident history for this guild?')">
         <button type="submit" style="background:#d9534f;">Clear Anti-Nuke Incident History</button>
       </form>
@@ -5478,6 +5481,35 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke incidents clear error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/anti-nuke/incidents/export", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const incidents = await all(
+        `SELECT id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at
+         FROM anti_nuke_incidents
+         WHERE guild_id=?
+         ORDER BY created_at DESC`,
+        [guildId]
+      );
+
+      const payload = {
+        version: 1,
+        exported_at: Date.now(),
+        guild_id: guildId,
+        count: incidents.length,
+        incidents
+      };
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-anti-nuke-incidents-${stamp}.json"`);
+      return res.status(200).send(JSON.stringify(payload, null, 2));
+    } catch (e) {
+      console.error("anti-nuke incidents export error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

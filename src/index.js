@@ -121,10 +121,10 @@ const LOG_THEME = {
 
 const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
 const QUICK_MUTE_MS = 10 * 60_000;
-const ANTI_NUKE_WINDOW_MS = 30_000;
-const ANTI_NUKE_COOLDOWN_MS = 10 * 60_000;
+const DEFAULT_ANTI_NUKE_WINDOW_MS = 30_000;
+const DEFAULT_ANTI_NUKE_COOLDOWN_MS = 10 * 60_000;
 const TICKET_SLA_INTERVAL_MS = 2 * 60_000;
-const ANTI_NUKE_THRESHOLDS = {
+const DEFAULT_ANTI_NUKE_THRESHOLDS = {
   channel_delete: 3,
   role_delete: 3,
   ban_add: 4
@@ -195,13 +195,29 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
   if (!guild || !eventType || !actorUserId) return;
   if (actorUserId === BOT_MANAGER_ID) return;
 
-  const threshold = ANTI_NUKE_THRESHOLDS[eventType];
+  const settings = await getGuildSettings(guild.id).catch(() => null);
+  const configuredWindowSeconds = Number(settings?.anti_nuke_window_seconds ?? 30);
+  const configuredCooldownMinutes = Number(settings?.anti_nuke_cooldown_minutes ?? 10);
+  const windowMs = Number.isFinite(configuredWindowSeconds)
+    ? Math.min(300_000, Math.max(5_000, configuredWindowSeconds * 1000))
+    : DEFAULT_ANTI_NUKE_WINDOW_MS;
+  const cooldownMs = Number.isFinite(configuredCooldownMinutes)
+    ? Math.min(7_200_000, Math.max(60_000, configuredCooldownMinutes * 60_000))
+    : DEFAULT_ANTI_NUKE_COOLDOWN_MS;
+
+  const thresholds = {
+    channel_delete: Math.min(20, Math.max(2, Number(settings?.anti_nuke_channel_delete_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.channel_delete))),
+    role_delete: Math.min(20, Math.max(2, Number(settings?.anti_nuke_role_delete_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.role_delete))),
+    ban_add: Math.min(30, Math.max(2, Number(settings?.anti_nuke_ban_add_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.ban_add)))
+  };
+
+  const threshold = thresholds[eventType];
   if (!threshold) return;
 
   const now = Date.now();
   const bucketKey = `${guild.id}:${eventType}:${actorUserId}`;
   const old = antiNukeBuckets.get(bucketKey) || [];
-  const recent = old.filter((ts) => now - ts < ANTI_NUKE_WINDOW_MS);
+  const recent = old.filter((ts) => now - ts < windowMs);
   recent.push(now);
   antiNukeBuckets.set(bucketKey, recent);
 
@@ -209,7 +225,7 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
 
   const cooldownKey = `${guild.id}:${eventType}`;
   const last = antiNukeCooldowns.get(cooldownKey) || 0;
-  if (now - last < ANTI_NUKE_COOLDOWN_MS) return;
+  if (now - last < cooldownMs) return;
   antiNukeCooldowns.set(cooldownKey, now);
 
   const everyone = guild.roles.everyone;
@@ -237,7 +253,7 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
     description: `Protective lockdown activated after suspicious ${eventType.replaceAll("_", " ")} activity.`,
     fields: [
       { name: "Actor", value: actorLabel || actorUserId, inline: true },
-      { name: "Trigger", value: `${eventType} x${recent.length} in ${Math.floor(ANTI_NUKE_WINDOW_MS / 1000)}s`, inline: true },
+      { name: "Trigger", value: `${eventType} x${recent.length} in ${Math.floor(windowMs / 1000)}s`, inline: true },
       { name: "Action", value: "Disabled dangerous permissions for @everyone across channels." }
     ]
   });

@@ -4081,6 +4081,26 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input name="new_account_warn_days" value="${escapeHtml(settings.new_account_warn_days || 1)}" style="max-width:120px;" />
         </label>
         <br/><br/>
+        <label>Anti-Nuke Window (seconds)
+          <input name="anti_nuke_window_seconds" value="${escapeHtml(settings.anti_nuke_window_seconds || 30)}" style="max-width:120px;" />
+        </label>
+        <br/><br/>
+        <label>Anti-Nuke Cooldown (minutes)
+          <input name="anti_nuke_cooldown_minutes" value="${escapeHtml(settings.anti_nuke_cooldown_minutes || 10)}" style="max-width:120px;" />
+        </label>
+        <br/><br/>
+        <label>Channel Delete Trigger Count
+          <input name="anti_nuke_channel_delete_threshold" value="${escapeHtml(settings.anti_nuke_channel_delete_threshold || 3)}" style="max-width:120px;" />
+        </label>
+        <br/><br/>
+        <label>Role Delete Trigger Count
+          <input name="anti_nuke_role_delete_threshold" value="${escapeHtml(settings.anti_nuke_role_delete_threshold || 3)}" style="max-width:120px;" />
+        </label>
+        <br/><br/>
+        <label>Ban Add Trigger Count
+          <input name="anti_nuke_ban_add_threshold" value="${escapeHtml(settings.anti_nuke_ban_add_threshold || 4)}" style="max-width:120px;" />
+        </label>
+        <br/><br/>
         <label>Log Channel
           <select name="log_channel_id">
             <option value="" ${!settings.log_channel_id ? "selected" : ""}>None</option>
@@ -5244,10 +5264,20 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const logChannelId = String(req.body.log_channel_id || "").trim() || null;
       const commandPrefixRaw = String(req.body.command_prefix || "!").trim();
       const newAccountWarnDaysRaw = Number.parseInt(String(req.body.new_account_warn_days || "1"), 10);
+      const antiNukeWindowRaw = Number.parseInt(String(req.body.anti_nuke_window_seconds || "30"), 10);
+      const antiNukeCooldownRaw = Number.parseInt(String(req.body.anti_nuke_cooldown_minutes || "10"), 10);
+      const antiNukeChannelDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_channel_delete_threshold || "3"), 10);
+      const antiNukeRoleDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_role_delete_threshold || "3"), 10);
+      const antiNukeBanAddThresholdRaw = Number.parseInt(String(req.body.anti_nuke_ban_add_threshold || "4"), 10);
       const logSummaryCardsEnabled = req.body.log_summary_cards_enabled === "on";
       const newAccountWarnDays = Number.isInteger(newAccountWarnDaysRaw) && newAccountWarnDaysRaw >= 0
         ? newAccountWarnDaysRaw
         : 1;
+      const antiNukeWindowSeconds = Number.isInteger(antiNukeWindowRaw) ? Math.min(300, Math.max(5, antiNukeWindowRaw)) : 30;
+      const antiNukeCooldownMinutes = Number.isInteger(antiNukeCooldownRaw) ? Math.min(120, Math.max(1, antiNukeCooldownRaw)) : 10;
+      const antiNukeChannelDeleteThreshold = Number.isInteger(antiNukeChannelDeleteThresholdRaw) ? Math.min(20, Math.max(2, antiNukeChannelDeleteThresholdRaw)) : 3;
+      const antiNukeRoleDeleteThreshold = Number.isInteger(antiNukeRoleDeleteThresholdRaw) ? Math.min(20, Math.max(2, antiNukeRoleDeleteThresholdRaw)) : 3;
+      const antiNukeBanAddThreshold = Number.isInteger(antiNukeBanAddThresholdRaw) ? Math.min(30, Math.max(2, antiNukeBanAddThresholdRaw)) : 4;
       const commandPrefix = (!commandPrefixRaw || commandPrefixRaw.length > 3 || /\s/.test(commandPrefixRaw))
         ? "!"
         : commandPrefixRaw;
@@ -5256,7 +5286,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         log_channel_id: logChannelId,
         log_summary_cards_enabled: logSummaryCardsEnabled,
         command_prefix: commandPrefix,
-        new_account_warn_days: newAccountWarnDays
+        new_account_warn_days: newAccountWarnDays,
+        anti_nuke_window_seconds: antiNukeWindowSeconds,
+        anti_nuke_cooldown_minutes: antiNukeCooldownMinutes,
+        anti_nuke_channel_delete_threshold: antiNukeChannelDeleteThreshold,
+        anti_nuke_role_delete_threshold: antiNukeRoleDeleteThreshold,
+        anti_nuke_ban_add_threshold: antiNukeBanAddThreshold
       });
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {

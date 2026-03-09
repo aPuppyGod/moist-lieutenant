@@ -209,6 +209,7 @@ async function initDb() {
       command_prefix TEXT DEFAULT '!',
       new_account_warn_days INTEGER DEFAULT 1,
       mod_role_id TEXT DEFAULT NULL,
+      anti_nuke_enabled INTEGER DEFAULT 1,
       anti_nuke_window_seconds INTEGER DEFAULT 30,
       anti_nuke_cooldown_minutes INTEGER DEFAULT 10,
       anti_nuke_channel_delete_threshold INTEGER DEFAULT 3,
@@ -855,6 +856,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS command_prefix TEXT DEFAULT '!'`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS new_account_warn_days INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_window_seconds INTEGER DEFAULT 30`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_cooldown_minutes INTEGER DEFAULT 10`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_channel_delete_threshold INTEGER DEFAULT 3`);

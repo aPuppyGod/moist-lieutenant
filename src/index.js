@@ -196,6 +196,7 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
   if (actorUserId === BOT_MANAGER_ID) return;
 
   const settings = await getGuildSettings(guild.id).catch(() => null);
+  if (settings?.anti_nuke_enabled === false) return;
   const configuredWindowSeconds = Number(settings?.anti_nuke_window_seconds ?? 30);
   const configuredCooldownMinutes = Number(settings?.anti_nuke_cooldown_minutes ?? 10);
   const windowMs = Number.isFinite(configuredWindowSeconds)

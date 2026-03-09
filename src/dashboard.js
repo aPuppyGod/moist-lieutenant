@@ -4124,6 +4124,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input name="new_account_warn_days" value="${escapeHtml(settings.new_account_warn_days || 1)}" style="max-width:120px;" />
         </label>
         <br/><br/>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="anti_nuke_enabled" ${settings.anti_nuke_enabled ? "checked" : ""} />
+          <span>Enable Anti-Nuke Protection</span>
+        </label>
+        <br/><br/>
         <label>Anti-Nuke Window (seconds)
           <input name="anti_nuke_window_seconds" value="${escapeHtml(settings.anti_nuke_window_seconds || 30)}" style="max-width:120px;" />
         </label>
@@ -5363,6 +5368,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const logChannelId = String(req.body.log_channel_id || "").trim() || null;
       const commandPrefixRaw = String(req.body.command_prefix || "!").trim();
       const newAccountWarnDaysRaw = Number.parseInt(String(req.body.new_account_warn_days || "1"), 10);
+      const antiNukeEnabled = req.body.anti_nuke_enabled === "on";
       const antiNukeWindowRaw = Number.parseInt(String(req.body.anti_nuke_window_seconds || "30"), 10);
       const antiNukeCooldownRaw = Number.parseInt(String(req.body.anti_nuke_cooldown_minutes || "10"), 10);
       const antiNukeChannelDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_channel_delete_threshold || "3"), 10);
@@ -5393,6 +5399,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         log_quick_mod_actions_enabled: logQuickModActionsEnabled,
         command_prefix: commandPrefix,
         new_account_warn_days: newAccountWarnDays,
+        anti_nuke_enabled: antiNukeEnabled,
         anti_nuke_window_seconds: antiNukeWindowSeconds,
         anti_nuke_cooldown_minutes: antiNukeCooldownMinutes,
         anti_nuke_channel_delete_threshold: antiNukeChannelDeleteThreshold,

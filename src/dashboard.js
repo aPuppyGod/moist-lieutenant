@@ -1373,7 +1373,16 @@ const { LOG_EVENT_DEFS } = require("./loggingConfig");
 const { ChannelType } = require("discord.js");
 const { normalizeEmojiKey } = require("./reactionRoles");
 const { sendTicketPanel, closeTicketChannel } = require("./tickets");
-const { SOCIAL_PLATFORM_OPTIONS, SOCIAL_EVENT_LABELS, getSupportedEventsForPlatform, defaultTemplateForEvent, normalizePlatform } = require("./socials");
+const {
+  SOCIAL_PLATFORM_OPTIONS,
+  SOCIAL_EVENT_LABELS,
+  getSupportedEventsForPlatform,
+  defaultTemplateForEvent,
+  normalizePlatform,
+  normalizeSocialExternalId,
+  inferSourceUrl,
+  inferDefaultLabel
+} = require("./socials");
 
 function startDashboard(client) {
     const app = express();
@@ -4121,7 +4130,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${activeModule === "socials" ? `
 
       <h3>Social Link Integrations</h3>
-      <p class="section-description">Link creator socials and configure live/posts/community/story notifications with per-event channel, role, and message template controls.</p>
+      <p class="section-description">Link creator socials with just @username or username. The bot will auto-resolve URLs/feeds where possible.</p>
 
       <form method="post" action="/guild/${guildId}/social-links/add">
         <div class="form-row">
@@ -4132,12 +4141,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             </select>
           </label>
           <label>
-            <span>Handle / ID / Unique Key</span>
-            <input name="external_id" required placeholder="e.g. UC..., @name, username" />
+            <span>Username / Channel Handle</span>
+            <input name="external_id" required placeholder="e.g. @name or name" />
           </label>
           <label>
-            <span>Source URL / RSS (optional)</span>
-            <input name="source_url" placeholder="https://..." />
+            <span>Source URL / RSS (advanced optional)</span>
+            <input name="source_url" placeholder="Leave blank for auto" />
           </label>
           <label>
             <span>Display Label (optional)</span>
@@ -4252,7 +4261,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         `;
       }).join("") : `<div class="empty-state">No socials linked yet.</div>`}
 
-      <p style="opacity:0.8;margin-top:10px;">Tip: For TikTok/Twitter/Instagram/Facebook/Kick, add a valid RSS/Atom URL in Source URL for post monitoring.</p>
+      <p style="opacity:0.8;margin-top:10px;">Tip: If auto-detection fails for a platform, paste an RSS/Atom URL in Source URL (advanced).</p>
       ` : ""}
 
       ${activeModule === "reactionroles" ? `
@@ -4957,9 +4966,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const platform = normalizePlatform(req.body.platform);
-      const externalId = String(req.body.external_id || "").trim();
-      const sourceUrl = String(req.body.source_url || "").trim() || null;
-      const label = String(req.body.label || "").trim() || null;
+      const externalIdRaw = String(req.body.external_id || "").trim();
+      const externalId = normalizeSocialExternalId(platform, externalIdRaw);
+      const sourceUrl = inferSourceUrl(platform, externalId, String(req.body.source_url || "").trim()) || null;
+      const label = String(req.body.label || "").trim() || inferDefaultLabel(platform, externalId);
       const channelId = String(req.body.channel_id || "").trim() || null;
       const createdBy = req.user?.id || null;
 

@@ -23,6 +23,130 @@ function normalizePlatform(value) {
   return SOCIAL_PLATFORM_OPTIONS.some((p) => p.key === platform) ? platform : "custom_rss";
 }
 
+function parseUrlSafe(value) {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+function stripAt(value) {
+  return String(value || "").replace(/^@+/, "").trim();
+}
+
+function firstPathPart(pathname) {
+  return String(pathname || "")
+    .split("/")
+    .filter(Boolean)[0] || "";
+}
+
+function normalizeSocialExternalId(platformRaw, rawValue) {
+  const platform = normalizePlatform(platformRaw);
+  const raw = String(rawValue || "").trim();
+  if (!raw) return "";
+
+  if (platform === "custom_rss") {
+    return raw;
+  }
+
+  const parsed = parseUrlSafe(raw);
+  let candidate = raw;
+
+  if (parsed) {
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname || "";
+
+    if (platform === "youtube") {
+      const channelMatch = path.match(/\/channel\/(UC[\w-]{20,})/i);
+      if (channelMatch) return channelMatch[1];
+
+      const atMatch = path.match(/\/@([a-zA-Z0-9._-]+)/);
+      if (atMatch) return `@${atMatch[1]}`;
+
+      const userOrCustom = path.match(/\/(user|c)\/([a-zA-Z0-9._-]+)/i);
+      if (userOrCustom) return userOrCustom[2];
+
+      if (host.includes("youtube.com") || host.includes("youtu.be")) {
+        const first = firstPathPart(path);
+        if (first) candidate = first;
+      }
+    } else {
+      const first = firstPathPart(path);
+      if (first) candidate = first;
+    }
+  }
+
+  candidate = stripAt(candidate)
+    .replace(/^channel\//i, "")
+    .replace(/[?#].*$/, "")
+    .trim();
+
+  if (platform === "youtube" && /^UC[\w-]{20,}$/i.test(candidate)) {
+    return candidate;
+  }
+
+  if (platform === "youtube") {
+    return candidate ? `@${candidate}` : "";
+  }
+
+  return candidate;
+}
+
+function inferSourceUrl(platformRaw, externalIdRaw, sourceUrlRaw) {
+  const platform = normalizePlatform(platformRaw);
+  const externalId = String(externalIdRaw || "").trim();
+  const sourceUrl = String(sourceUrlRaw || "").trim();
+  if (sourceUrl) return sourceUrl;
+  if (!externalId) return null;
+
+  if (platform === "youtube") {
+    if (/^UC[\w-]{20,}$/i.test(externalId)) {
+      return `https://www.youtube.com/channel/${externalId}`;
+    }
+    return `https://www.youtube.com/${externalId.startsWith("@") ? externalId : `@${externalId}`}`;
+  }
+
+  if (platform === "twitch") {
+    return `https://www.twitch.tv/${stripAt(externalId)}`;
+  }
+
+  if (platform === "twitter") {
+    return `https://nitter.net/${stripAt(externalId)}/rss`;
+  }
+
+  if (platform === "tiktok") {
+    return `https://rsshub.app/tiktok/user/${stripAt(externalId)}`;
+  }
+
+  if (platform === "instagram") {
+    return `https://rsshub.app/instagram/user/${stripAt(externalId)}`;
+  }
+
+  if (platform === "facebook") {
+    return `https://rsshub.app/facebook/page/${stripAt(externalId)}`;
+  }
+
+  if (platform === "kick") {
+    return `https://kick.com/${stripAt(externalId)}`;
+  }
+
+  return null;
+}
+
+function inferDefaultLabel(platformRaw, externalIdRaw) {
+  const platform = normalizePlatform(platformRaw);
+  const externalId = String(externalIdRaw || "").trim();
+  if (!externalId) return null;
+  if (platform === "youtube") {
+    if (/^UC[\w-]{20,}$/i.test(externalId)) return externalId;
+    return externalId.startsWith("@") ? externalId : `@${externalId}`;
+  }
+  if (platform === "custom_rss") return externalId;
+  const clean = stripAt(externalId);
+  return clean ? `@${clean}` : null;
+}
+
 function getSupportedEventsForPlatform(platformRaw) {
   const platform = normalizePlatform(platformRaw);
   if (platform === "youtube") return ["live", "post", "community"];
@@ -97,17 +221,31 @@ async function fetchText(url) {
   return await response.text();
 }
 
-function resolveYouTubeChannelId(link) {
+async function resolveYouTubeChannelId(link) {
   const external = String(link.external_id || "").trim();
   const sourceUrl = String(link.source_url || "").trim();
 
   if (/^UC[\w-]{20,}$/i.test(external)) return external;
+
+  const feedChannelMatch = sourceUrl.match(/[?&]channel_id=(UC[\w-]{20,})/i);
+  if (feedChannelMatch) return feedChannelMatch[1];
 
   const fromExternalUrl = external.match(/channel\/(UC[\w-]{20,})/i);
   if (fromExternalUrl) return fromExternalUrl[1];
 
   const fromSourceUrl = sourceUrl.match(/channel\/(UC[\w-]{20,})/i);
   if (fromSourceUrl) return fromSourceUrl[1];
+
+  const handleCandidate = external.startsWith("@") ? external : `@${stripAt(external)}`;
+  if (!/^@[a-zA-Z0-9._-]+$/.test(handleCandidate)) return null;
+
+  try {
+    const html = await fetchText(`https://www.youtube.com/${handleCandidate}`);
+    const channelIdMatch = html.match(/"channelId":"(UC[\w-]{20,})"/);
+    if (channelIdMatch) return channelIdMatch[1];
+  } catch {
+    // Best-effort handle resolution.
+  }
 
   return null;
 }
@@ -124,7 +262,7 @@ function getYouTubeCommunityUrl(link, channelId) {
 }
 
 async function pollYoutube(link) {
-  const channelId = resolveYouTubeChannelId(link);
+  const channelId = await resolveYouTubeChannelId(link);
   if (!channelId) return [];
 
   const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`;
@@ -400,6 +538,9 @@ module.exports = {
   SOCIAL_PLATFORM_OPTIONS,
   SOCIAL_EVENT_LABELS,
   normalizePlatform,
+  normalizeSocialExternalId,
+  inferSourceUrl,
+  inferDefaultLabel,
   getSupportedEventsForPlatform,
   defaultTemplateForEvent,
   ensureDefaultRulesForLink,

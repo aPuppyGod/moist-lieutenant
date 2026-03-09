@@ -1375,6 +1375,7 @@ client.on(Events.MessageDelete, async (message) => {
   await sendGuildLog(message.guild, {
     eventKey: "message_delete",
     actorUserId,
+    renderSummaryImage: false,
     mediaItems,
     color: LOG_THEME.warn,
     title: "🗑️ Message Deleted",
@@ -1441,6 +1442,7 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
   await sendGuildLog(newMessage.guild, {
     eventKey: "message_edit",
     actorUserId: newMessage.author?.id,
+    renderSummaryImage: false,
     mediaItems,
     color: LOG_THEME.info,
     title: "✏️ Message Edited",

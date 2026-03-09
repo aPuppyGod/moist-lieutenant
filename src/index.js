@@ -111,10 +111,126 @@ const LOG_THEME = {
   neutral: 0x0a1e1e
 };
 
+const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
+const ANTI_NUKE_WINDOW_MS = 30_000;
+const ANTI_NUKE_COOLDOWN_MS = 10 * 60_000;
+const ANTI_NUKE_THRESHOLDS = {
+  channel_delete: 3,
+  role_delete: 3,
+  ban_add: 4
+};
+const antiNukeBuckets = new Map();
+const antiNukeCooldowns = new Map();
+
 function trimText(value, max = 1000) {
   const text = String(value ?? "");
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1)}…`;
+}
+
+function scoreJoinRisk(member) {
+  const user = member?.user;
+  if (!user) {
+    return { score: 0, reasons: ["No user data"] };
+  }
+
+  const reasons = [];
+  let score = 0;
+
+  const accountAgeMs = Date.now() - Number(user.createdTimestamp || 0);
+  const ageDays = accountAgeMs / (24 * 60 * 60 * 1000);
+  if (ageDays < 1) {
+    score += 50;
+    reasons.push("Account age under 1 day");
+  } else if (ageDays < 3) {
+    score += 35;
+    reasons.push("Account age under 3 days");
+  } else if (ageDays < 7) {
+    score += 20;
+    reasons.push("Account age under 7 days");
+  } else if (ageDays < 30) {
+    score += 10;
+    reasons.push("Account age under 30 days");
+  }
+
+  if (!user.avatar) {
+    score += 15;
+    reasons.push("Default profile avatar");
+  }
+
+  const username = String(user.username || "");
+  const digits = (username.match(/\d/g) || []).length;
+  if (digits >= 5) {
+    score += 10;
+    reasons.push("Username has many digits");
+  }
+
+  if (!user.globalName) {
+    score += 5;
+    reasons.push("No global display name");
+  }
+
+  if (username.length <= 3) {
+    score += 10;
+    reasons.push("Very short username");
+  }
+
+  return {
+    score: Math.min(100, score),
+    reasons: reasons.length ? reasons : ["No risk signals"]
+  };
+}
+
+async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
+  if (!guild || !eventType || !actorUserId) return;
+  if (actorUserId === BOT_MANAGER_ID) return;
+
+  const threshold = ANTI_NUKE_THRESHOLDS[eventType];
+  if (!threshold) return;
+
+  const now = Date.now();
+  const bucketKey = `${guild.id}:${eventType}:${actorUserId}`;
+  const old = antiNukeBuckets.get(bucketKey) || [];
+  const recent = old.filter((ts) => now - ts < ANTI_NUKE_WINDOW_MS);
+  recent.push(now);
+  antiNukeBuckets.set(bucketKey, recent);
+
+  if (recent.length < threshold) return;
+
+  const cooldownKey = `${guild.id}:${eventType}`;
+  const last = antiNukeCooldowns.get(cooldownKey) || 0;
+  if (now - last < ANTI_NUKE_COOLDOWN_MS) return;
+  antiNukeCooldowns.set(cooldownKey, now);
+
+  const everyone = guild.roles.everyone;
+  const lockdownPerms = {
+    ManageChannels: false,
+    ManageRoles: false,
+    BanMembers: false,
+    KickMembers: false,
+    ManageWebhooks: false
+  };
+
+  for (const [, channel] of guild.channels.cache) {
+    if (!channel?.permissionOverwrites?.edit) continue;
+    await channel.permissionOverwrites.edit(everyone, lockdownPerms, {
+      reason: `Anti-nuke lockdown: ${eventType}`
+    }).catch(() => {});
+  }
+
+  const actorLabel = await labelFromUserId(guild, actorUserId);
+  await sendGuildLog(guild, {
+    eventKey: "guild_update",
+    actorUserId,
+    color: LOG_THEME.warn,
+    title: "🚨 Anti-Nuke Triggered",
+    description: `Protective lockdown activated after suspicious ${eventType.replaceAll("_", " ")} activity.`,
+    fields: [
+      { name: "Actor", value: actorLabel || actorUserId, inline: true },
+      { name: "Trigger", value: `${eventType} x${recent.length} in ${Math.floor(ANTI_NUKE_WINDOW_MS / 1000)}s`, inline: true },
+      { name: "Action", value: "Disabled dangerous permissions for @everyone across channels." }
+    ]
+  });
 }
 
 function sanitizeAttachmentName(name, fallback = "log-file") {
@@ -1492,6 +1608,8 @@ client.on(Events.VoiceStateUpdate, async (oldState, newState) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
+  const risk = scoreJoinRisk(member);
+
   // Logging
   await sendGuildLog(member.guild, {
     eventKey: "member_join",
@@ -1500,7 +1618,11 @@ client.on(Events.GuildMemberAdd, async (member) => {
     color: LOG_THEME.info,
     title: "📥 Member Joined",
     description: `${userLabel(member.user)} joined the server.`,
-    fields: [{ name: "User", value: userLabel(member.user), inline: true }]
+    fields: [
+      { name: "User", value: userLabel(member.user), inline: true },
+      { name: "Risk Score", value: `${risk.score}/100`, inline: true },
+      { name: "Risk Signals", value: trimText(risk.reasons.join("; "), 900), inline: false }
+    ]
   });
 
   const settings = await getGuildSettings(member.guild.id).catch(() => null);
@@ -1519,6 +1641,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
         description: `${userLabel(member.user)} joined with a recently created account.`,
         fields: [
           { name: "User", value: userLabel(member.user), inline: true },
+          { name: "Risk Score", value: `${risk.score}/100`, inline: true },
           { name: "Account Age", value: `${accountAgeDays} day(s)`, inline: true },
           { name: "Threshold", value: `${thresholdDays} day(s)`, inline: true }
         ]
@@ -1641,9 +1764,11 @@ client.on(Events.GuildBanAdd, async (ban) => {
     ttlMs: 60_000
   });
   const actorLabel = await resolveActionActorLabel(ban.guild, executor, tracked?.actorId);
+  const actorUserId = tracked?.actorId || executor?.id || null;
+  await triggerAntiNukeIfNeeded(ban.guild, "ban_add", actorUserId);
   await sendGuildLog(ban.guild, {
     eventKey: "ban_add",
-    actorUserId: tracked?.actorId || executor?.id || null,
+    actorUserId,
     color: LOG_THEME.mod,
     title: "⛔ Member Banned",
     description: `${userLabel(ban.user)} was banned.`,
@@ -1776,9 +1901,13 @@ client.on(Events.ChannelDelete, async (channel) => {
     [channel.guild.id, channel.id, channel.id]
   );
   if (isPrivateVC) return;
+
+  const executor = await getAuditExecutor(channel.guild, AuditLogEvent.ChannelDelete, channel.id);
+  await triggerAntiNukeIfNeeded(channel.guild, "channel_delete", executor?.id || null);
   
   await sendGuildLog(channel.guild, {
     eventKey: "channel_delete",
+    actorUserId: executor?.id || null,
     color: LOG_THEME.warn,
     title: "➖ Channel Deleted",
     sourceChannelId: channel.id,
@@ -1851,6 +1980,7 @@ client.on(Events.RoleCreate, async (role) => {
 
 client.on(Events.RoleDelete, async (role) => {
   const executor = await getAuditExecutor(role.guild, AuditLogEvent.RoleDelete, role.id);
+  await triggerAntiNukeIfNeeded(role.guild, "role_delete", executor?.id || null);
   await sendGuildLog(role.guild, {
     eventKey: "role_delete",
     actorUserId: executor?.id || null,

@@ -195,6 +195,12 @@ function clampInt(n, min, max) {
   return Math.max(min, Math.min(max, x));
 }
 
+function trimText(value, max = 1000) {
+  const text = String(value ?? "");
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1)}...`;
+}
+
 function normalizeName(s) {
   return String(s || "").trim().toLowerCase();
 }
@@ -1424,6 +1430,107 @@ async function cmdModLogs(message, args) {
   }
 
   embed.setFooter({ text: `Total Actions: ${rows.length}` });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+function parseAuditSearchArgs(args) {
+  const out = {
+    action: null,
+    userId: null,
+    moderatorId: null,
+    days: 7,
+    limit: 20
+  };
+
+  for (const rawArg of args || []) {
+    const arg = String(rawArg || "").trim();
+    if (!arg) continue;
+
+    const colonIdx = arg.indexOf(":");
+    if (colonIdx > 0) {
+      const key = arg.slice(0, colonIdx).toLowerCase();
+      const value = arg.slice(colonIdx + 1).trim();
+      if (!value) continue;
+
+      if (key === "action") out.action = value.toLowerCase();
+      if (key === "user") out.userId = value;
+      if (key === "moderator" || key === "mod") out.moderatorId = value;
+      if (key === "days") {
+        const n = Number.parseInt(value, 10);
+        if (Number.isInteger(n) && n > 0) out.days = Math.min(n, 90);
+      }
+      if (key === "limit") {
+        const n = Number.parseInt(value, 10);
+        if (Number.isInteger(n) && n > 0) out.limit = Math.min(n, 50);
+      }
+      continue;
+    }
+
+    if (/^\d+d$/i.test(arg)) {
+      const n = Number.parseInt(arg, 10);
+      if (Number.isInteger(n) && n > 0) out.days = Math.min(n, 90);
+      continue;
+    }
+
+    if (/^\d+$/.test(arg) && !out.userId) {
+      out.userId = arg;
+      continue;
+    }
+
+    if (!out.action) {
+      out.action = arg.toLowerCase();
+    }
+  }
+
+  if (out.action === "all") out.action = null;
+  return out;
+}
+
+async function cmdAuditSearch(message, args) {
+  if (!(await requireModerator(message))) return;
+
+  const parsed = parseAuditSearchArgs(args);
+  const params = [message.guild.id, Date.now() - parsed.days * 24 * 60 * 60 * 1000];
+  let sql = `SELECT id, user_id, moderator_id, action, reason, details, created_at
+             FROM mod_logs
+             WHERE guild_id=? AND created_at>=?`;
+
+  if (parsed.action) {
+    sql += ` AND LOWER(action)=?`;
+    params.push(parsed.action);
+  }
+  if (parsed.userId) {
+    sql += ` AND user_id=?`;
+    params.push(parsed.userId);
+  }
+  if (parsed.moderatorId) {
+    sql += ` AND moderator_id=?`;
+    params.push(parsed.moderatorId);
+  }
+
+  sql += ` ORDER BY created_at DESC LIMIT ?`;
+  params.push(parsed.limit);
+
+  const rows = await all(sql, params);
+  if (!rows.length) {
+    await message.reply("No moderation log entries matched your search.").catch(() => {});
+    return;
+  }
+
+  const lines = [];
+  for (const row of rows) {
+    const at = new Date(Number(row.created_at)).toLocaleString();
+    const reason = row.reason ? ` | ${trimText(row.reason, 80)}` : "";
+    lines.push(`#${row.id} ${row.action} | target:${row.user_id} | mod:${row.moderator_id} | ${at}${reason}`);
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0xffaa55)
+    .setTitle("🔎 Audit Search Results")
+    .setDescription(trimText(lines.join("\n"), 3900))
+    .setFooter({ text: `Filters: action=${parsed.action || "any"}, days=${parsed.days}, limit=${parsed.limit}` })
+    .setTimestamp();
+
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
@@ -3100,7 +3207,7 @@ async function handleCommands(message) {
   }
   
   // List of moderation commands that use the configurable prefix
-  const modCommands = ["ban", "unban", "kick", "mute", "unmute", "purge", "warn", "warnings", "clearwarns", "clearwarn", "modlogs", "lock", "unlock", "slowmode", "nick", "role", "softban"];
+  const modCommands = ["ban", "unban", "kick", "mute", "unmute", "purge", "warn", "warnings", "clearwarns", "clearwarn", "modlogs", "auditsearch", "lock", "unlock", "slowmode", "nick", "role", "softban"];
   
   // Try moderation prefix first for mod commands
   const modPrefixes = await getModPrefixes(message);
@@ -3389,6 +3496,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "auditsearch") {
+    await cmdAuditSearch(message, args);
+    return true;
+  }
+
   if (cmd === "lock") {
     await cmdLock(message);
     return true;
@@ -3459,6 +3571,7 @@ function buildSlashCommands() {
     { name: "unmute", description: "Unmute member", default_member_permissions: slashPerm(MODERATION_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "purge", description: "Delete recent messages", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "count", description: "1-100", required: true }] },
     { name: "warn", description: "Warn a user", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "auditsearch", description: "Search moderation audit logs", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "Action filter (warn/ban/kick/etc)", required: false }, { type: 6, name: "user", description: "Target user filter", required: false }, { type: 6, name: "moderator", description: "Moderator filter", required: false }, { type: 4, name: "days", description: "Lookback days (1-90)", required: false }, { type: 4, name: "limit", description: "Result limit (1-50)", required: false }] },
     { name: "warnings", description: "View user warnings", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }] },
     { name: "clearwarns", description: "Clear user warnings", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }] },
     { name: "nick", description: "Set nickname", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "name", description: "Nickname", required: true }] },
@@ -3581,6 +3694,7 @@ async function handleSlashCommand(interaction) {
   const name = interaction.commandName;
 
   const userOption = interaction.options.getUser("user");
+  const moderatorOption = interaction.options.getUser("moderator");
   const roleOption = interaction.options.getRole("role");
   const args = [];
 
@@ -3611,6 +3725,15 @@ async function handleSlashCommand(interaction) {
     if (reason) args.push(...String(reason).split(/\s+/));
   } else if (name === "warnings" || name === "clearwarns" || name === "voice-ban") {
     if (userOption) args.push(userOption.id);
+  } else if (name === "auditsearch") {
+    const action = optionValue(interaction, "action");
+    const days = optionValue(interaction, "days");
+    const limit = optionValue(interaction, "limit");
+    if (action) args.push(`action:${String(action)}`);
+    if (userOption) args.push(`user:${userOption.id}`);
+    if (moderatorOption) args.push(`moderator:${moderatorOption.id}`);
+    if (days) args.push(`days:${String(days)}`);
+    if (limit) args.push(`limit:${String(limit)}`);
   } else if (name === "nick") {
     if (userOption) args.push(userOption.id);
     const nick = optionValue(interaction, "name");

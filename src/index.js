@@ -641,6 +641,7 @@ async function sendGuildLog(guild, payload) {
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!channel || !channel.isTextBased || !channel.isTextBased()) return;
   const summaryCardsEnabled = Number(settings?.log_summary_cards_enabled ?? 1) === 1;
+  const quickModActionsEnabled = Number(settings?.log_quick_mod_actions_enabled ?? 1) === 1;
 
   const embed = new EmbedBuilder()
     .setColor(payload.color || LOG_THEME.info)
@@ -704,7 +705,7 @@ async function sendGuildLog(guild, payload) {
     ]);
   }
 
-  if (payload?.enableModActions && payload?.targetUserId) {
+  if (quickModActionsEnabled && payload?.enableModActions && payload?.targetUserId) {
     components.push(
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()

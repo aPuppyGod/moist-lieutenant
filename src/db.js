@@ -221,6 +221,7 @@ async function initDb() {
       anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1,
       log_channel_id TEXT DEFAULT NULL,
       log_summary_cards_enabled INTEGER DEFAULT 1,
+      log_quick_mod_actions_enabled INTEGER DEFAULT 1,
       social_default_channel_id TEXT DEFAULT NULL,
 
       level_up_channel_id TEXT DEFAULT NULL,
@@ -866,6 +867,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_quick_mod_actions_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS social_default_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_log_channel_id TEXT DEFAULT NULL`);

@@ -42,6 +42,7 @@ async function getGuildSettings(guildId) {
     anti_nuke_lock_manage_webhooks: Number(row?.anti_nuke_lock_manage_webhooks ?? 1) === 1,
     log_channel_id: row?.log_channel_id ?? null,
     log_summary_cards_enabled: Number(row?.log_summary_cards_enabled ?? 1) === 1,
+    log_quick_mod_actions_enabled: Number(row?.log_quick_mod_actions_enabled ?? 1) === 1,
     social_default_channel_id: row?.social_default_channel_id ?? null,
 
     level_up_channel_id: row?.level_up_channel_id ?? null,
@@ -74,6 +75,7 @@ async function updateGuildSettings(guildId, patch) {
     "anti_nuke_lock_manage_webhooks",
     "log_channel_id",
     "log_summary_cards_enabled",
+    "log_quick_mod_actions_enabled",
     "social_default_channel_id",
     "level_up_channel_id",
     "level_up_message"

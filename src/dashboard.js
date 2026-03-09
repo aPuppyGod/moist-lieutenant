@@ -4179,6 +4179,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input type="checkbox" name="log_summary_cards_enabled" ${settings.log_summary_cards_enabled ? "checked" : ""} />
           <span>Enable log summary cards (Times New Roman image style)</span>
         </label>
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" name="log_quick_mod_actions_enabled" ${settings.log_quick_mod_actions_enabled ? "checked" : ""} />
+          <span>Enable quick moderation buttons in logs</span>
+        </label>
         <br/><br/>
         <button type="submit">Save Moderation Settings</button>
       </form>
@@ -5370,6 +5374,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const antiNukeLockKickMembers = req.body.anti_nuke_lock_kick_members === "on";
       const antiNukeLockManageWebhooks = req.body.anti_nuke_lock_manage_webhooks === "on";
       const logSummaryCardsEnabled = req.body.log_summary_cards_enabled === "on";
+      const logQuickModActionsEnabled = req.body.log_quick_mod_actions_enabled === "on";
       const newAccountWarnDays = Number.isInteger(newAccountWarnDaysRaw) && newAccountWarnDaysRaw >= 0
         ? newAccountWarnDaysRaw
         : 1;
@@ -5385,6 +5390,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         mod_role_id: modRoleId,
         log_channel_id: logChannelId,
         log_summary_cards_enabled: logSummaryCardsEnabled,
+        log_quick_mod_actions_enabled: logQuickModActionsEnabled,
         command_prefix: commandPrefix,
         new_account_warn_days: newAccountWarnDays,
         anti_nuke_window_seconds: antiNukeWindowSeconds,

@@ -404,7 +404,9 @@ async function createTicket(guildId, channelId, openerId) {
 async function touchTicketActivity(guildId, channelId, timestamp = Date.now()) {
   await run(
     `UPDATE tickets
-     SET last_activity_at=?
+     SET last_activity_at=?,
+         sla_reminder_sent_at=NULL,
+         sla_escalated_at=NULL
      WHERE guild_id=? AND channel_id=? AND status='open'`,
     [timestamp, guildId, channelId]
   );

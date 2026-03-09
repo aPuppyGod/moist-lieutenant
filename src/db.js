@@ -210,6 +210,7 @@ async function initDb() {
       new_account_warn_days INTEGER DEFAULT 1,
       mod_role_id TEXT DEFAULT NULL,
       anti_nuke_enabled INTEGER DEFAULT 1,
+      anti_nuke_auto_unlock_minutes INTEGER DEFAULT 0,
       anti_nuke_window_seconds INTEGER DEFAULT 30,
       anti_nuke_cooldown_minutes INTEGER DEFAULT 10,
       anti_nuke_channel_delete_threshold INTEGER DEFAULT 3,
@@ -325,6 +326,18 @@ async function initDb() {
       initiated_by_user_id TEXT DEFAULT NULL,
       details TEXT DEFAULT NULL,
       created_at BIGINT NOT NULL
+    )
+  `);
+
+  // Anti-nuke scheduled unlock jobs
+  await run(`
+    CREATE TABLE IF NOT EXISTS anti_nuke_unlock_jobs (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      run_at BIGINT NOT NULL,
+      unlock_perms_json TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      executed_at BIGINT DEFAULT NULL
     )
   `);
 
@@ -857,6 +870,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS new_account_warn_days INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_role_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_auto_unlock_minutes INTEGER DEFAULT 0`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_window_seconds INTEGER DEFAULT 30`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_cooldown_minutes INTEGER DEFAULT 10`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_channel_delete_threshold INTEGER DEFAULT 3`);

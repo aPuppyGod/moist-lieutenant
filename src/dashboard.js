@@ -4129,6 +4129,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <span>Enable Anti-Nuke Protection</span>
         </label>
         <br/><br/>
+        <label>Auto-Unlock After (minutes, 0 = disabled)
+          <input name="anti_nuke_auto_unlock_minutes" value="${escapeHtml(settings.anti_nuke_auto_unlock_minutes || 0)}" style="max-width:140px;" />
+        </label>
+        <br/><br/>
         <label>Anti-Nuke Window (seconds)
           <input name="anti_nuke_window_seconds" value="${escapeHtml(settings.anti_nuke_window_seconds || 30)}" style="max-width:120px;" />
         </label>
@@ -5369,6 +5373,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const commandPrefixRaw = String(req.body.command_prefix || "!").trim();
       const newAccountWarnDaysRaw = Number.parseInt(String(req.body.new_account_warn_days || "1"), 10);
       const antiNukeEnabled = req.body.anti_nuke_enabled === "on";
+      const antiNukeAutoUnlockRaw = Number.parseInt(String(req.body.anti_nuke_auto_unlock_minutes || "0"), 10);
       const antiNukeWindowRaw = Number.parseInt(String(req.body.anti_nuke_window_seconds || "30"), 10);
       const antiNukeCooldownRaw = Number.parseInt(String(req.body.anti_nuke_cooldown_minutes || "10"), 10);
       const antiNukeChannelDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_channel_delete_threshold || "3"), 10);
@@ -5385,6 +5390,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         ? newAccountWarnDaysRaw
         : 1;
       const antiNukeWindowSeconds = Number.isInteger(antiNukeWindowRaw) ? Math.min(300, Math.max(5, antiNukeWindowRaw)) : 30;
+      const antiNukeAutoUnlockMinutes = Number.isInteger(antiNukeAutoUnlockRaw) ? Math.min(1440, Math.max(0, antiNukeAutoUnlockRaw)) : 0;
       const antiNukeCooldownMinutes = Number.isInteger(antiNukeCooldownRaw) ? Math.min(120, Math.max(1, antiNukeCooldownRaw)) : 10;
       const antiNukeChannelDeleteThreshold = Number.isInteger(antiNukeChannelDeleteThresholdRaw) ? Math.min(20, Math.max(2, antiNukeChannelDeleteThresholdRaw)) : 3;
       const antiNukeRoleDeleteThreshold = Number.isInteger(antiNukeRoleDeleteThresholdRaw) ? Math.min(20, Math.max(2, antiNukeRoleDeleteThresholdRaw)) : 3;
@@ -5400,6 +5406,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         command_prefix: commandPrefix,
         new_account_warn_days: newAccountWarnDays,
         anti_nuke_enabled: antiNukeEnabled,
+        anti_nuke_auto_unlock_minutes: antiNukeAutoUnlockMinutes,
         anti_nuke_window_seconds: antiNukeWindowSeconds,
         anti_nuke_cooldown_minutes: antiNukeCooldownMinutes,
         anti_nuke_channel_delete_threshold: antiNukeChannelDeleteThreshold,
@@ -5446,6 +5453,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         }).catch(() => {});
       }
 
+      const cancelledJobs = await run(
+        `UPDATE anti_nuke_unlock_jobs SET executed_at=? WHERE guild_id=? AND executed_at IS NULL`,
+        [Date.now(), guildId]
+      ).catch(() => null);
+
       await run(
         `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -5456,7 +5468,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           null,
           req.user?.id || null,
           JSON.stringify({
-            unlocked_permissions: Object.keys(unlockPerms)
+            unlocked_permissions: Object.keys(unlockPerms),
+            cancelled_auto_unlock_jobs: Number(cancelledJobs?.rowCount || 0)
           }),
           Date.now()
         ]

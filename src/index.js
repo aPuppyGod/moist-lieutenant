@@ -123,6 +123,7 @@ const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
 const QUICK_MUTE_MS = 10 * 60_000;
 const DEFAULT_ANTI_NUKE_WINDOW_MS = 30_000;
 const DEFAULT_ANTI_NUKE_COOLDOWN_MS = 10 * 60_000;
+const ANTI_NUKE_UNLOCK_INTERVAL_MS = 60_000;
 const TICKET_SLA_INTERVAL_MS = 2 * 60_000;
 const DEFAULT_ANTI_NUKE_THRESHOLDS = {
   channel_delete: 3,
@@ -197,6 +198,7 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
 
   const settings = await getGuildSettings(guild.id).catch(() => null);
   if (settings?.anti_nuke_enabled === false) return;
+  const autoUnlockMinutes = Math.min(1440, Math.max(0, Number(settings?.anti_nuke_auto_unlock_minutes ?? 0)));
   const configuredWindowSeconds = Number(settings?.anti_nuke_window_seconds ?? 30);
   const configuredCooldownMinutes = Number(settings?.anti_nuke_cooldown_minutes ?? 10);
   const windowMs = Number.isFinite(configuredWindowSeconds)
@@ -260,6 +262,19 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
         reason: `Anti-nuke lockdown: ${eventType}`
       }).catch(() => {});
     }
+
+    if (autoUnlockMinutes > 0) {
+      const runAt = now + autoUnlockMinutes * 60_000;
+      await run(
+        `UPDATE anti_nuke_unlock_jobs SET executed_at=? WHERE guild_id=? AND executed_at IS NULL`,
+        [now, guild.id]
+      ).catch(() => {});
+      await run(
+        `INSERT INTO anti_nuke_unlock_jobs (guild_id, run_at, unlock_perms_json, created_at, executed_at)
+         VALUES (?, ?, ?, ?, NULL)`,
+        [guild.id, runAt, JSON.stringify(Object.keys(lockdownPerms)), now]
+      ).catch(() => {});
+    }
   }
 
   await run(
@@ -273,7 +288,8 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
       JSON.stringify({
         trigger_count: recent.length,
         window_seconds: Math.floor(windowMs / 1000),
-        locked_permissions: lockedNames
+        locked_permissions: lockedNames,
+        auto_unlock_minutes: autoUnlockMinutes
       }),
       now
     ]
@@ -292,7 +308,7 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
       {
         name: "Action",
         value: lockedNames.length
-          ? `Disabled for @everyone: ${lockedNames.join(", ")}`
+          ? `Disabled for @everyone: ${lockedNames.join(", ")}${autoUnlockMinutes > 0 ? ` | Auto-unlock in ${autoUnlockMinutes}m` : ""}`
           : "No lockdown permissions are enabled in settings."
       }
     ]
@@ -852,6 +868,65 @@ async function maybeRunTicketSlaChecks(client) {
   }
 }
 
+async function maybeRunAntiNukeUnlockJobs(client) {
+  const now = Date.now();
+  const dueJobs = await all(
+    `SELECT id, guild_id, run_at, unlock_perms_json
+     FROM anti_nuke_unlock_jobs
+     WHERE executed_at IS NULL AND run_at <= ?
+     ORDER BY run_at ASC
+     LIMIT 50`,
+    [now]
+  ).catch(() => []);
+
+  for (const job of dueJobs) {
+    const guild = client.guilds.cache.get(job.guild_id) || await client.guilds.fetch(job.guild_id).catch(() => null);
+    if (!guild) continue;
+
+    await guild.channels.fetch().catch(() => {});
+
+    let unlockKeys = [];
+    try {
+      const parsed = JSON.parse(String(job.unlock_perms_json || "[]"));
+      if (Array.isArray(parsed)) unlockKeys = parsed;
+    } catch {
+      unlockKeys = [];
+    }
+
+    const unlockPerms = {};
+    if (unlockKeys.includes("ManageChannels")) unlockPerms.ManageChannels = null;
+    if (unlockKeys.includes("ManageRoles")) unlockPerms.ManageRoles = null;
+    if (unlockKeys.includes("BanMembers")) unlockPerms.BanMembers = null;
+    if (unlockKeys.includes("KickMembers")) unlockPerms.KickMembers = null;
+    if (unlockKeys.includes("ManageWebhooks")) unlockPerms.ManageWebhooks = null;
+
+    if (Object.keys(unlockPerms).length) {
+      const everyone = guild.roles.everyone;
+      for (const [, channel] of guild.channels.cache) {
+        if (!channel?.permissionOverwrites?.edit) continue;
+        await channel.permissionOverwrites.edit(everyone, unlockPerms, {
+          reason: "Anti-nuke auto-unlock"
+        }).catch(() => {});
+      }
+    }
+
+    await run(`UPDATE anti_nuke_unlock_jobs SET executed_at=? WHERE id=?`, [now, job.id]).catch(() => {});
+    await run(
+      `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        guild.id,
+        "auto_unlock",
+        null,
+        null,
+        null,
+        JSON.stringify({ unlocked_permissions: unlockKeys, job_id: job.id }),
+        now
+      ]
+    ).catch(() => {});
+  }
+}
+
 async function handleLevelUp(guild, userId, oldLevel, newLevel, message = null) {
   const settings = await getGuildSettings(guild.id);
 
@@ -1089,6 +1164,14 @@ client.once(Events.ClientReady, async () => {
         console.error("Ticket SLA interval failed:", err);
       }
     }, TICKET_SLA_INTERVAL_MS);
+
+    setInterval(async () => {
+      try {
+        await maybeRunAntiNukeUnlockJobs(client);
+      } catch (err) {
+        console.error("Anti-nuke auto-unlock interval failed:", err);
+      }
+    }, ANTI_NUKE_UNLOCK_INTERVAL_MS);
   } catch (err) {
     console.error("ClientReady startup failed:", err);
   }

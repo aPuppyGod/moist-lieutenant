@@ -229,19 +229,36 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
   antiNukeCooldowns.set(cooldownKey, now);
 
   const everyone = guild.roles.everyone;
-  const lockdownPerms = {
-    ManageChannels: false,
-    ManageRoles: false,
-    BanMembers: false,
-    KickMembers: false,
-    ManageWebhooks: false
-  };
+  const lockdownPerms = {};
+  const lockedNames = [];
+  if (settings?.anti_nuke_lock_manage_channels !== false) {
+    lockdownPerms.ManageChannels = false;
+    lockedNames.push("Manage Channels");
+  }
+  if (settings?.anti_nuke_lock_manage_roles !== false) {
+    lockdownPerms.ManageRoles = false;
+    lockedNames.push("Manage Roles");
+  }
+  if (settings?.anti_nuke_lock_ban_members !== false) {
+    lockdownPerms.BanMembers = false;
+    lockedNames.push("Ban Members");
+  }
+  if (settings?.anti_nuke_lock_kick_members !== false) {
+    lockdownPerms.KickMembers = false;
+    lockedNames.push("Kick Members");
+  }
+  if (settings?.anti_nuke_lock_manage_webhooks !== false) {
+    lockdownPerms.ManageWebhooks = false;
+    lockedNames.push("Manage Webhooks");
+  }
 
-  for (const [, channel] of guild.channels.cache) {
-    if (!channel?.permissionOverwrites?.edit) continue;
-    await channel.permissionOverwrites.edit(everyone, lockdownPerms, {
-      reason: `Anti-nuke lockdown: ${eventType}`
-    }).catch(() => {});
+  if (Object.keys(lockdownPerms).length) {
+    for (const [, channel] of guild.channels.cache) {
+      if (!channel?.permissionOverwrites?.edit) continue;
+      await channel.permissionOverwrites.edit(everyone, lockdownPerms, {
+        reason: `Anti-nuke lockdown: ${eventType}`
+      }).catch(() => {});
+    }
   }
 
   const actorLabel = await labelFromUserId(guild, actorUserId);
@@ -254,7 +271,12 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
     fields: [
       { name: "Actor", value: actorLabel || actorUserId, inline: true },
       { name: "Trigger", value: `${eventType} x${recent.length} in ${Math.floor(windowMs / 1000)}s`, inline: true },
-      { name: "Action", value: "Disabled dangerous permissions for @everyone across channels." }
+      {
+        name: "Action",
+        value: lockedNames.length
+          ? `Disabled for @everyone: ${lockedNames.join(", ")}`
+          : "No lockdown permissions are enabled in settings."
+      }
     ]
   });
 }

@@ -214,6 +214,11 @@ async function initDb() {
       anti_nuke_channel_delete_threshold INTEGER DEFAULT 3,
       anti_nuke_role_delete_threshold INTEGER DEFAULT 3,
       anti_nuke_ban_add_threshold INTEGER DEFAULT 4,
+      anti_nuke_lock_manage_channels INTEGER DEFAULT 1,
+      anti_nuke_lock_manage_roles INTEGER DEFAULT 1,
+      anti_nuke_lock_ban_members INTEGER DEFAULT 1,
+      anti_nuke_lock_kick_members INTEGER DEFAULT 1,
+      anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1,
       log_channel_id TEXT DEFAULT NULL,
       log_summary_cards_enabled INTEGER DEFAULT 1,
       social_default_channel_id TEXT DEFAULT NULL,
@@ -840,6 +845,11 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_channel_delete_threshold INTEGER DEFAULT 3`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_role_delete_threshold INTEGER DEFAULT 3`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_ban_add_threshold INTEGER DEFAULT 4`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_manage_channels INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_manage_roles INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_ban_members INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_kick_members INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS social_default_channel_id TEXT DEFAULT NULL`);

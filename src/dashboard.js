@@ -4101,6 +4101,30 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input name="anti_nuke_ban_add_threshold" value="${escapeHtml(settings.anti_nuke_ban_add_threshold || 4)}" style="max-width:120px;" />
         </label>
         <br/><br/>
+        <div style="padding:10px;border:1px solid rgba(123,201,111,0.35);border-radius:8px;max-width:480px;">
+          <div style="font-weight:600;margin-bottom:8px;">Anti-Nuke Lockdown Permissions</div>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <input type="checkbox" name="anti_nuke_lock_manage_channels" ${settings.anti_nuke_lock_manage_channels ? "checked" : ""} />
+            <span>Disable Manage Channels for @everyone</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <input type="checkbox" name="anti_nuke_lock_manage_roles" ${settings.anti_nuke_lock_manage_roles ? "checked" : ""} />
+            <span>Disable Manage Roles for @everyone</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <input type="checkbox" name="anti_nuke_lock_ban_members" ${settings.anti_nuke_lock_ban_members ? "checked" : ""} />
+            <span>Disable Ban Members for @everyone</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+            <input type="checkbox" name="anti_nuke_lock_kick_members" ${settings.anti_nuke_lock_kick_members ? "checked" : ""} />
+            <span>Disable Kick Members for @everyone</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" name="anti_nuke_lock_manage_webhooks" ${settings.anti_nuke_lock_manage_webhooks ? "checked" : ""} />
+            <span>Disable Manage Webhooks for @everyone</span>
+          </label>
+        </div>
+        <br/><br/>
         <label>Log Channel
           <select name="log_channel_id">
             <option value="" ${!settings.log_channel_id ? "selected" : ""}>None</option>
@@ -5269,6 +5293,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const antiNukeChannelDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_channel_delete_threshold || "3"), 10);
       const antiNukeRoleDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_role_delete_threshold || "3"), 10);
       const antiNukeBanAddThresholdRaw = Number.parseInt(String(req.body.anti_nuke_ban_add_threshold || "4"), 10);
+      const antiNukeLockManageChannels = req.body.anti_nuke_lock_manage_channels === "on";
+      const antiNukeLockManageRoles = req.body.anti_nuke_lock_manage_roles === "on";
+      const antiNukeLockBanMembers = req.body.anti_nuke_lock_ban_members === "on";
+      const antiNukeLockKickMembers = req.body.anti_nuke_lock_kick_members === "on";
+      const antiNukeLockManageWebhooks = req.body.anti_nuke_lock_manage_webhooks === "on";
       const logSummaryCardsEnabled = req.body.log_summary_cards_enabled === "on";
       const newAccountWarnDays = Number.isInteger(newAccountWarnDaysRaw) && newAccountWarnDaysRaw >= 0
         ? newAccountWarnDaysRaw
@@ -5291,7 +5320,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         anti_nuke_cooldown_minutes: antiNukeCooldownMinutes,
         anti_nuke_channel_delete_threshold: antiNukeChannelDeleteThreshold,
         anti_nuke_role_delete_threshold: antiNukeRoleDeleteThreshold,
-        anti_nuke_ban_add_threshold: antiNukeBanAddThreshold
+        anti_nuke_ban_add_threshold: antiNukeBanAddThreshold,
+        anti_nuke_lock_manage_channels: antiNukeLockManageChannels,
+        anti_nuke_lock_manage_roles: antiNukeLockManageRoles,
+        anti_nuke_lock_ban_members: antiNukeLockBanMembers,
+        anti_nuke_lock_kick_members: antiNukeLockKickMembers,
+        anti_nuke_lock_manage_webhooks: antiNukeLockManageWebhooks
       });
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {

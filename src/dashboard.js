@@ -4153,6 +4153,22 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input name="anti_nuke_ban_add_threshold" value="${escapeHtml(settings.anti_nuke_ban_add_threshold || 4)}" style="max-width:120px;" />
         </label>
         <br/><br/>
+        <label>Anti-Nuke Alert Channel Override
+          <select name="anti_nuke_alert_channel_id">
+            <option value="" ${!settings.anti_nuke_alert_channel_id ? "selected" : ""}>Use Log Channel</option>
+            ${textChannels.map((c) => `<option value="${c.id}" ${settings.anti_nuke_alert_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+          </select>
+        </label>
+        <br/><br/>
+        <label>Anti-Nuke Alert Ping Role
+          <select name="anti_nuke_alert_role_id">
+            <option value="" ${!settings.anti_nuke_alert_role_id ? "selected" : ""}>None</option>
+            ${roleOptions.map((r) => `
+              <option value="${r.id}" ${settings.anti_nuke_alert_role_id === r.id ? "selected" : ""}>@${escapeHtml(r.name)}</option>
+            `).join("")}
+          </select>
+        </label>
+        <br/><br/>
         <div style="padding:10px;border:1px solid rgba(123,201,111,0.35);border-radius:8px;max-width:480px;">
           <div style="font-weight:600;margin-bottom:8px;">Anti-Nuke Lockdown Permissions</div>
           <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -5379,6 +5395,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const antiNukeChannelDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_channel_delete_threshold || "3"), 10);
       const antiNukeRoleDeleteThresholdRaw = Number.parseInt(String(req.body.anti_nuke_role_delete_threshold || "3"), 10);
       const antiNukeBanAddThresholdRaw = Number.parseInt(String(req.body.anti_nuke_ban_add_threshold || "4"), 10);
+      const antiNukeAlertChannelId = String(req.body.anti_nuke_alert_channel_id || "").trim() || null;
+      const antiNukeAlertRoleId = String(req.body.anti_nuke_alert_role_id || "").trim() || null;
       const antiNukeLockManageChannels = req.body.anti_nuke_lock_manage_channels === "on";
       const antiNukeLockManageRoles = req.body.anti_nuke_lock_manage_roles === "on";
       const antiNukeLockBanMembers = req.body.anti_nuke_lock_ban_members === "on";
@@ -5412,6 +5430,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         anti_nuke_channel_delete_threshold: antiNukeChannelDeleteThreshold,
         anti_nuke_role_delete_threshold: antiNukeRoleDeleteThreshold,
         anti_nuke_ban_add_threshold: antiNukeBanAddThreshold,
+        anti_nuke_alert_channel_id: antiNukeAlertChannelId,
+        anti_nuke_alert_role_id: antiNukeAlertRoleId,
         anti_nuke_lock_manage_channels: antiNukeLockManageChannels,
         anti_nuke_lock_manage_roles: antiNukeLockManageRoles,
         anti_nuke_lock_ban_members: antiNukeLockBanMembers,

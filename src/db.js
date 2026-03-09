@@ -221,6 +221,8 @@ async function initDb() {
       anti_nuke_lock_ban_members INTEGER DEFAULT 1,
       anti_nuke_lock_kick_members INTEGER DEFAULT 1,
       anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1,
+      anti_nuke_alert_channel_id TEXT DEFAULT NULL,
+      anti_nuke_alert_role_id TEXT DEFAULT NULL,
       log_channel_id TEXT DEFAULT NULL,
       log_summary_cards_enabled INTEGER DEFAULT 1,
       log_quick_mod_actions_enabled INTEGER DEFAULT 1,
@@ -881,6 +883,8 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_ban_members INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_kick_members INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_alert_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_alert_role_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_quick_mod_actions_enabled INTEGER DEFAULT 1`);

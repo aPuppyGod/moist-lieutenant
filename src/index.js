@@ -296,8 +296,12 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
   ).catch(() => {});
 
   const actorLabel = await labelFromUserId(guild, actorUserId);
+  const alertRoleId = settings?.anti_nuke_alert_role_id ? String(settings.anti_nuke_alert_role_id).trim() : "";
   await sendGuildLog(guild, {
-    eventKey: "guild_update",
+    eventKey: "anti_nuke_trigger",
+    forceChannelId: settings?.anti_nuke_alert_channel_id || settings?.log_channel_id || null,
+    content: alertRoleId ? `<@&${alertRoleId}>` : undefined,
+    allowedRoleMentions: alertRoleId ? [alertRoleId] : [],
     actorUserId,
     color: LOG_THEME.warn,
     title: "🚨 Anti-Nuke Triggered",
@@ -613,6 +617,7 @@ async function sendGuildLog(guild, payload) {
 
   const eventKey = String(payload?.eventKey || "").trim();
   let channelId = settings.log_channel_id;
+  const forcedChannelId = payload?.forceChannelId ? String(payload.forceChannelId).trim() : "";
 
   if (eventKey) {
     const eventConfigs = await getLoggingEventConfigs(guild.id).catch(() => []);
@@ -620,6 +625,7 @@ async function sendGuildLog(guild, payload) {
     if (eventConfig && Number(eventConfig.enabled) !== 1) return;
     if (eventConfig?.channel_id) channelId = eventConfig.channel_id;
   }
+  if (forcedChannelId) channelId = forcedChannelId;
 
   const actorUserId = payload?.actorUserId ? String(payload.actorUserId) : null;
   if (actorUserId) {
@@ -704,6 +710,10 @@ async function sendGuildLog(guild, payload) {
 
   const files = downloadedMedia.map((item) => item.attachment);
   const components = [];
+  const content = payload?.content ? trimText(String(payload.content), 1800) : undefined;
+  const allowedRoleMentions = Array.isArray(payload?.allowedRoleMentions)
+    ? payload.allowedRoleMentions.map((id) => String(id || "").trim()).filter(Boolean).slice(0, 5)
+    : [];
 
   let summaryImage = null;
   if (summaryCardsEnabled && payload?.renderSummaryImage === true && actorUserId) {
@@ -742,10 +752,13 @@ async function sendGuildLog(guild, payload) {
   }
 
   await channel.send({
+    content,
     embeds: [embed],
     files,
     components,
-    allowedMentions: { parse: [] }
+    allowedMentions: allowedRoleMentions.length
+      ? { parse: [], roles: allowedRoleMentions }
+      : { parse: [] }
   }).catch(() => {});
 }
 

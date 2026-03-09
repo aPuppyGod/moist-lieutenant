@@ -1449,7 +1449,7 @@ function startDashboard(client) {
       if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
       for (const guild of client.guilds.cache.values()) {
         const member = guild.members.cache.get(user.id);
-        if (member && (member.permissions.has("Administrator") || member.permissions.has("ManageGuild"))) {
+        if (member && member.permissions.has("Administrator")) {
           return true;
         }
       }
@@ -1468,24 +1468,48 @@ function startDashboard(client) {
       return res.status(403).send("You must be a Discord server admin or bot manager to access this page.");
     }
 
-    async function userCanManageGuild(user, guildId) {
-      if (!user?.id || !guildId) return false;
-      if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
+    async function getGuildAccessLevel(user, guildId) {
+      const result = {
+        isManager: false,
+        isAdmin: false,
+        isModerator: false,
+        member: null
+      };
+
+      if (!user?.id || !guildId) return result;
+
+      if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) {
+        result.isManager = true;
+        result.isAdmin = true;
+        result.isModerator = true;
+        return result;
+      }
 
       const guild = client.guilds.cache.get(guildId);
-      if (!guild) return false;
+      if (!guild) return result;
 
       let member = guild.members.cache.get(user.id);
       if (!member) {
         member = await guild.members.fetch(user.id).catch(() => null);
       }
-      if (!member) return false;
+      if (!member) return result;
 
-      return (
-        member.permissions.has("Administrator") ||
-        member.permissions.has("ManageGuild") ||
-        member.permissions.has("ManageChannels")
-      );
+      result.member = member;
+      result.isAdmin = member.permissions.has("Administrator");
+      if (result.isAdmin) {
+        result.isModerator = true;
+        return result;
+      }
+
+      const modRoleId = (await getGuildSettings(guildId).catch(() => null))?.mod_role_id || null;
+      if (!modRoleId) return result;
+
+      const modRole = guild.roles.cache.get(modRoleId) || await guild.roles.fetch(modRoleId).catch(() => null);
+      if (!modRole) return result;
+
+      const hasModRoleOrHigher = member.roles.cache.some((role) => role.position >= modRole.position);
+      result.isModerator = hasModRoleOrHigher;
+      return result;
     }
 
     async function requireGuildAdmin(req, res, next) {
@@ -1495,8 +1519,24 @@ function startDashboard(client) {
       }
 
       const guildId = req.params.guildId;
-      const allowed = await userCanManageGuild(req.user, guildId);
-      if (!allowed) return res.status(403).send("You are not allowed to manage this server.");
+      const access = await getGuildAccessLevel(req.user, guildId);
+      if (!(access.isAdmin || access.isManager)) {
+        return res.status(403).send("Only server administrators or the configured manager can access admin features.");
+      }
+      return next();
+    }
+
+    async function requireGuildModerator(req, res, next) {
+      if (!(req.isAuthenticated && req.isAuthenticated())) {
+        if (req.session) req.session.returnTo = req.originalUrl;
+        return res.redirect("/login");
+      }
+
+      const guildId = req.params.guildId;
+      const access = await getGuildAccessLevel(req.user, guildId);
+      if (!access.isModerator) {
+        return res.status(403).send("Only moderators (mod role or higher), administrators, or the manager can access moderation features.");
+      }
       return next();
     }
 
@@ -3604,10 +3644,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   // ─────────────────────────────────────────────
   // Guild page
   // ─────────────────────────────────────────────
-  app.get("/guild/:guildId", requireGuildAdmin, async (req, res) => {
+  app.get("/guild/:guildId", requireGuildModerator, async (req, res) => {
     const guildId = req.params.guildId;
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return res.status(404).send("Bot is not in that guild.");
+    const access = await getGuildAccessLevel(req.user, guildId);
+    const canAccessAdminFeatures = access.isAdmin || access.isManager;
 
     const settings = await getGuildSettings(guildId);
     const levelRoles = await getLevelRoles(guildId);
@@ -3703,7 +3745,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
     
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
-    const activeModule = String(req.query.module || "overview").toLowerCase();
+    const requestedModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
       { key: "overview", label: "Overview" },
       { key: "moderation", label: "Moderation" },
@@ -3719,6 +3761,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "birthdays", label: "Birthdays" },
       { key: "customization", label: "Customization" }
     ];
+    const moderatorModules = new Set(["moderation", "logging"]);
+    const visibleTabs = canAccessAdminFeatures
+      ? moduleTabs
+      : moduleTabs.filter((tab) => moderatorModules.has(tab.key));
+    const fallbackModule = visibleTabs[0]?.key || "moderation";
+    const activeModule = visibleTabs.some((tab) => tab.key === requestedModule)
+      ? requestedModule
+      : fallbackModule;
 
     const xpCountRow = await get(
       `SELECT COUNT(*)::int AS count FROM user_xp WHERE guild_id=?`,
@@ -3752,7 +3802,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <p><a href="/">Back</a> | <a href="/logout">Logout</a></p>
 
       <div class="admin-section" style="display:flex;flex-wrap:wrap;gap:8px;">
-        ${moduleTabs.map((tab) => `
+        ${visibleTabs.map((tab) => `
           <a class="btn" style="padding:8px 12px;${activeModule === tab.key ? "opacity:1;font-weight:700;border-bottom:2px solid #7bc96f;" : "opacity:0.8;"}" href="/guild/${guildId}?module=${tab.key}">${escapeHtml(tab.label)}</a>
         `).join("")}
       </div>
@@ -5513,7 +5563,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  app.post("/guild/:guildId/logging-exclusions/add", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/logging-exclusions/add", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const channelId = String(req.body.channel_id || "").trim();
@@ -5533,7 +5583,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  app.post("/guild/:guildId/logging-exclusions/delete", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/logging-exclusions/delete", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const targetId = String(req.body.target_id || "").trim();
@@ -5546,7 +5596,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  app.post("/guild/:guildId/logging-events", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/logging-events", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       for (const def of LOG_EVENT_DEFS) {
@@ -5561,7 +5611,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  app.post("/guild/:guildId/logging-actors/add", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/logging-actors/add", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const userId = String(req.body.user_id || "").trim();
@@ -5575,7 +5625,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  app.post("/guild/:guildId/logging-actors/delete", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/logging-actors/delete", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const targetId = String(req.body.target_id || "").trim();
@@ -5738,7 +5788,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   // ─────────────────────────────────────────────
   // Warning management
   // ─────────────────────────────────────────────
-  app.post("/guild/:guildId/warnings/delete", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/warnings/delete", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const warningId = Number.parseInt(String(req.body.warning_id || ""), 10);
@@ -5752,7 +5802,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
-  app.post("/guild/:guildId/warnings/clear-user", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/warnings/clear-user", requireGuildModerator, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const userId = String(req.body.user_id || "").trim();

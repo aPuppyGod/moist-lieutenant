@@ -25,13 +25,7 @@ const DEFAULT_MOD_COMMAND_PERMISSION = PermissionsBitField.Flags.ManageMessages;
 function isAdminOrManager(member) {
   if (!member) return false;
   if (member.id === BOT_MANAGER_ID) return true;
-  // "manager" is ambiguous; the closest practical perms are ManageGuild / ManageChannels.
-  // Admin also works.
-  return (
-    member.permissions.has(PermissionsBitField.Flags.Administrator) ||
-    member.permissions.has(PermissionsBitField.Flags.ManageGuild) ||
-    member.permissions.has(PermissionsBitField.Flags.ManageChannels)
-  );
+  return member.permissions.has(PermissionsBitField.Flags.Administrator);
 }
 
 async function getConfiguredModRoleId(guildId) {
@@ -39,17 +33,21 @@ async function getConfiguredModRoleId(guildId) {
   return settings?.mod_role_id || null;
 }
 
-async function memberHasConfiguredModRole(member) {
+async function memberHasConfiguredModRoleOrHigher(member) {
   if (!member?.guild) return false;
   const modRoleId = await getConfiguredModRoleId(member.guild.id);
   if (!modRoleId) return false;
-  return member.roles?.cache?.has(modRoleId) || false;
+
+  const modRole = member.guild.roles.cache.get(modRoleId) || await member.guild.roles.fetch(modRoleId).catch(() => null);
+  if (!modRole) return false;
+
+  return member.roles?.cache?.some((role) => role.position >= modRole.position) || false;
 }
 
 async function isModerator(member) {
   if (!member) return false;
   if (isAdminOrManager(member)) return true;
-  return await memberHasConfiguredModRole(member);
+  return await memberHasConfiguredModRoleOrHigher(member);
 }
 
 async function requireModerator(message) {
@@ -306,10 +304,9 @@ async function cmdPublicCommands(message) {
 }
 
 async function cmdModCommands(message) {
-  const hasModRole = await memberHasConfiguredModRole(message.member);
-  const isManager = message.member?.id === BOT_MANAGER_ID;
-  if (!hasModRole && !isManager) {
-    await message.reply("Only the configured mod role can use this command list.").catch(() => {});
+  const canUse = await isModerator(message.member);
+  if (!canUse) {
+    await message.reply("Only moderators (mod role or higher), administrators, or the manager can use this command list.").catch(() => {});
     return;
   }
   const settings = await getGuildSettings(message.guild.id);

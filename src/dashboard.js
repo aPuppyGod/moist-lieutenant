@@ -4189,6 +4189,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <h3 style="margin-top:18px;">Anti-Nuke Incidents</h3>
       <p class="section-description">Recent anti-nuke triggers and manual unlock actions.</p>
+      <form method="post" action="/guild/${guildId}/anti-nuke/incidents/clear" style="margin-bottom:8px;" onsubmit="return confirm('Clear all anti-nuke incident history for this guild?')">
+        <button type="submit" style="background:#d9534f;">Clear Anti-Nuke Incident History</button>
+      </form>
       ${antiNukeRows.length > 0 ? `
       <table class="enhanced-table">
         <tr><th>Type</th><th>Event</th><th>Actor</th><th>Initiated By</th><th>Details</th><th>Date</th></tr>
@@ -5446,6 +5449,35 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke unlock error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/anti-nuke/incidents/clear", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const deleted = await run(
+        `DELETE FROM anti_nuke_incidents WHERE guild_id=?`,
+        [guildId]
+      );
+
+      await run(
+        `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          guildId,
+          "history_cleared",
+          null,
+          null,
+          req.user?.id || null,
+          JSON.stringify({ deleted_count: Number(deleted?.rowCount || 0) }),
+          Date.now()
+        ]
+      ).catch(() => {});
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("anti-nuke incidents clear error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

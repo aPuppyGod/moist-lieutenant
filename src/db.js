@@ -312,6 +312,20 @@ async function initDb() {
     )
   `);
 
+  // Anti-nuke incidents (trigger + unlock audit history)
+  await run(`
+    CREATE TABLE IF NOT EXISTS anti_nuke_incidents (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      incident_type TEXT NOT NULL,
+      event_type TEXT DEFAULT NULL,
+      actor_user_id TEXT DEFAULT NULL,
+      initiated_by_user_id TEXT DEFAULT NULL,
+      details TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL
+    )
+  `);
+
   // Logging exclusions (channels/categories to skip logging)
   await run(`
     CREATE TABLE IF NOT EXISTS logging_exclusions (

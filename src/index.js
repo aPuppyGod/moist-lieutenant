@@ -261,6 +261,23 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
     }
   }
 
+  await run(
+    `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, details, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      guild.id,
+      "trigger",
+      eventType,
+      actorUserId,
+      JSON.stringify({
+        trigger_count: recent.length,
+        window_seconds: Math.floor(windowMs / 1000),
+        locked_permissions: lockedNames
+      }),
+      now
+    ]
+  ).catch(() => {});
+
   const actorLabel = await labelFromUserId(guild, actorUserId);
   await sendGuildLog(guild, {
     eventKey: "guild_update",

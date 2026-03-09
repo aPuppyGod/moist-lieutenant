@@ -3865,6 +3865,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
        LIMIT 50`,
       [guildId]
     );
+    const antiNukeIncidents = await all(
+      `SELECT id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at
+       FROM anti_nuke_incidents
+       WHERE guild_id=?
+       ORDER BY created_at DESC
+       LIMIT 50`,
+      [guildId]
+    );
     const warningRows = modWarnings.map((w) => {
       const target = guild.members.cache.get(w.user_id);
       const moderator = guild.members.cache.get(w.moderator_id);
@@ -3877,6 +3885,41 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         targetName,
         moderatorName,
         reason: w.reason,
+        createdAt
+      };
+    });
+    const antiNukeRows = antiNukeIncidents.map((row) => {
+      const actor = row.actor_user_id ? guild.members.cache.get(row.actor_user_id) : null;
+      const initiator = row.initiated_by_user_id ? guild.members.cache.get(row.initiated_by_user_id) : null;
+      const actorName = row.actor_user_id
+        ? (actor ? `${actor.displayName} (${actor.user.username})` : row.actor_user_id)
+        : "-";
+      const initiatorName = row.initiated_by_user_id
+        ? (initiator ? `${initiator.displayName} (${initiator.user.username})` : row.initiated_by_user_id)
+        : "-";
+      const createdAt = Number.isFinite(Number(row.created_at)) ? new Date(Number(row.created_at)).toLocaleString() : "-";
+      let detailsText = "-";
+      if (row.details) {
+        try {
+          const parsed = JSON.parse(row.details);
+          if (parsed && typeof parsed === "object") {
+            detailsText = Object.entries(parsed)
+              .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(",") : String(v)}`)
+              .join(" | ");
+          } else {
+            detailsText = String(row.details);
+          }
+        } catch {
+          detailsText = String(row.details);
+        }
+      }
+      return {
+        id: row.id,
+        incidentType: row.incident_type,
+        eventType: row.event_type || "-",
+        actorName,
+        initiatorName,
+        detailsText,
         createdAt
       };
     });
@@ -4143,6 +4186,24 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <form method="post" action="/guild/${guildId}/anti-nuke/unlock" style="margin-top:8px;" onsubmit="return confirm('Restore anti-nuke locked permissions for @everyone across channels?')">
         <button type="submit" style="background:#f0ad4e;">Emergency Unlock Anti-Nuke Lockdown</button>
       </form>
+
+      <h3 style="margin-top:18px;">Anti-Nuke Incidents</h3>
+      <p class="section-description">Recent anti-nuke triggers and manual unlock actions.</p>
+      ${antiNukeRows.length > 0 ? `
+      <table class="enhanced-table">
+        <tr><th>Type</th><th>Event</th><th>Actor</th><th>Initiated By</th><th>Details</th><th>Date</th></tr>
+        ${antiNukeRows.map((r) => `
+          <tr>
+            <td>${escapeHtml(r.incidentType)}</td>
+            <td>${escapeHtml(r.eventType)}</td>
+            <td>${escapeHtml(r.actorName)}</td>
+            <td>${escapeHtml(r.initiatorName)}</td>
+            <td>${escapeHtml(r.detailsText)}</td>
+            <td>${escapeHtml(r.createdAt)}</td>
+          </tr>
+        `).join("")}
+      </table>
+      ` : `<div class="empty-state">No anti-nuke incidents logged yet</div>`}
 
       <h3>Warnings</h3>
       <p class="section-description">View and manage user warnings issued by moderators</p>
@@ -5365,6 +5426,22 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           reason: "Manual anti-nuke unlock from dashboard"
         }).catch(() => {});
       }
+
+      await run(
+        `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          guildId,
+          "manual_unlock",
+          null,
+          null,
+          req.user?.id || null,
+          JSON.stringify({
+            unlocked_permissions: Object.keys(unlockPerms)
+          }),
+          Date.now()
+        ]
+      ).catch(() => {});
 
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {

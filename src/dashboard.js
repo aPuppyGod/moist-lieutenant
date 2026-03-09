@@ -4140,6 +4140,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <button type="submit">Save Moderation Settings</button>
       </form>
 
+      <form method="post" action="/guild/${guildId}/anti-nuke/unlock" style="margin-top:8px;" onsubmit="return confirm('Restore anti-nuke locked permissions for @everyone across channels?')">
+        <button type="submit" style="background:#f0ad4e;">Emergency Unlock Anti-Nuke Lockdown</button>
+      </form>
+
       <h3>Warnings</h3>
       <p class="section-description">View and manage user warnings issued by moderators</p>
       ${warningRows.length > 0 ? `
@@ -5330,6 +5334,41 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("mod-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/anti-nuke/unlock", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const guild = client.guilds.cache.get(guildId) || await client.guilds.fetch(guildId).catch(() => null);
+      if (!guild) return res.status(404).send("Guild not found.");
+
+      await guild.channels.fetch().catch(() => {});
+      const settings = await getGuildSettings(guildId);
+      const everyone = guild.roles.everyone;
+
+      const unlockPerms = {};
+      if (settings?.anti_nuke_lock_manage_channels !== false) unlockPerms.ManageChannels = null;
+      if (settings?.anti_nuke_lock_manage_roles !== false) unlockPerms.ManageRoles = null;
+      if (settings?.anti_nuke_lock_ban_members !== false) unlockPerms.BanMembers = null;
+      if (settings?.anti_nuke_lock_kick_members !== false) unlockPerms.KickMembers = null;
+      if (settings?.anti_nuke_lock_manage_webhooks !== false) unlockPerms.ManageWebhooks = null;
+
+      if (!Object.keys(unlockPerms).length) {
+        return res.redirect(getModuleRedirect(guildId, 'moderation'));
+      }
+
+      for (const [, channel] of guild.channels.cache) {
+        if (!channel?.permissionOverwrites?.edit) continue;
+        await channel.permissionOverwrites.edit(everyone, unlockPerms, {
+          reason: "Manual anti-nuke unlock from dashboard"
+        }).catch(() => {});
+      }
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("anti-nuke unlock error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

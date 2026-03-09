@@ -1427,6 +1427,186 @@ const {
   inferDefaultLabel
 } = require("./socials");
 
+async function buildGuildConfigBackup(guildId) {
+  const singleRowTables = [
+    "guild_settings",
+    "ticket_settings",
+    "welcome_goodbye_settings",
+    "automod_settings",
+    "suggestion_settings",
+    "starboard_settings",
+    "economy_settings",
+    "birthday_settings"
+  ];
+  const multiRowTables = [
+    "level_roles",
+    "ignored_channels",
+    "logging_exclusions",
+    "logging_event_configs",
+    "logging_actor_exclusions",
+    "reaction_role_bindings",
+    "auto_roles",
+    "customization_unlocks"
+  ];
+
+  const backup = {
+    version: 1,
+    created_at: Date.now(),
+    guild_id: guildId,
+    data: {}
+  };
+
+  for (const table of singleRowTables) {
+    backup.data[table] = await get(`SELECT * FROM ${table} WHERE guild_id=?`, [guildId]);
+  }
+  for (const table of multiRowTables) {
+    backup.data[table] = await all(`SELECT * FROM ${table} WHERE guild_id=?`, [guildId]);
+  }
+
+  const socialLinks = await all(
+    `SELECT * FROM social_links WHERE guild_id=? ORDER BY created_at ASC`,
+    [guildId]
+  );
+  const socialRules = await all(
+    `SELECT * FROM social_link_rules WHERE guild_id=? ORDER BY link_id ASC, id ASC`,
+    [guildId]
+  );
+  backup.data.social_links = socialLinks;
+  backup.data.social_link_rules = socialRules;
+
+  const reactionQuestions = await all(
+    `SELECT * FROM reaction_role_questions WHERE guild_id=? ORDER BY created_at ASC, id ASC`,
+    [guildId]
+  );
+  const questionIds = reactionQuestions.map((q) => q.id);
+  let reactionOptions = [];
+  if (questionIds.length) {
+    const placeholders = questionIds.map(() => "?").join(", ");
+    reactionOptions = await all(
+      `SELECT * FROM reaction_role_options WHERE question_id IN (${placeholders}) ORDER BY question_id ASC, position ASC, id ASC`,
+      questionIds
+    );
+  }
+  backup.data.reaction_role_questions = reactionQuestions;
+  backup.data.reaction_role_options = reactionOptions;
+
+  return backup;
+}
+
+async function insertTableRow(tableName, row, opts = {}) {
+  if (!row || typeof row !== "object") return;
+  const payload = { ...row };
+  if (opts.forceGuildId) payload.guild_id = opts.forceGuildId;
+  for (const col of opts.omitColumns || []) {
+    delete payload[col];
+  }
+
+  const columns = Object.keys(payload);
+  if (!columns.length) return;
+
+  const placeholders = columns.map(() => "?").join(", ");
+  const sql = `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES (${placeholders})`;
+  await run(sql, columns.map((c) => payload[c]));
+}
+
+async function importGuildConfigBackup(guildId, payload) {
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+  if (!data || typeof data !== "object") {
+    throw new Error("Backup payload is missing data.");
+  }
+
+  const singleRowTables = [
+    "guild_settings",
+    "ticket_settings",
+    "welcome_goodbye_settings",
+    "automod_settings",
+    "suggestion_settings",
+    "starboard_settings",
+    "economy_settings",
+    "birthday_settings"
+  ];
+  const multiRowTables = [
+    "level_roles",
+    "ignored_channels",
+    "logging_exclusions",
+    "logging_event_configs",
+    "logging_actor_exclusions",
+    "reaction_role_bindings",
+    "auto_roles",
+    "customization_unlocks"
+  ];
+
+  try {
+    for (const table of singleRowTables) {
+      await run(`DELETE FROM ${table} WHERE guild_id=?`, [guildId]);
+    }
+    for (const table of multiRowTables) {
+      await run(`DELETE FROM ${table} WHERE guild_id=?`, [guildId]);
+    }
+    await run(`DELETE FROM social_link_rules WHERE guild_id=?`, [guildId]);
+    await run(`DELETE FROM social_links WHERE guild_id=?`, [guildId]);
+    await run(`DELETE FROM reaction_role_questions WHERE guild_id=?`, [guildId]);
+
+    for (const table of singleRowTables) {
+      const row = data[table] || null;
+      if (row) {
+        await insertTableRow(table, row, { forceGuildId: guildId });
+      }
+    }
+    for (const table of multiRowTables) {
+      const rows = Array.isArray(data[table]) ? data[table] : [];
+      for (const row of rows) {
+        await insertTableRow(table, row, { forceGuildId: guildId });
+      }
+    }
+
+    const socialLinks = Array.isArray(data.social_links) ? data.social_links : [];
+    const socialRules = Array.isArray(data.social_link_rules) ? data.social_link_rules : [];
+    const socialLinkMap = new Map();
+    for (const link of socialLinks) {
+      const linkPayload = { ...link, guild_id: guildId };
+      delete linkPayload.id;
+      const columns = Object.keys(linkPayload);
+      const inserted = await get(
+        `INSERT INTO social_links (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING id`,
+        columns.map((c) => linkPayload[c])
+      );
+      if (link?.id && inserted?.id) socialLinkMap.set(Number(link.id), Number(inserted.id));
+    }
+    for (const rule of socialRules) {
+      const mappedLinkId = socialLinkMap.get(Number(rule.link_id));
+      if (!mappedLinkId) continue;
+      const rulePayload = { ...rule, guild_id: guildId, link_id: mappedLinkId };
+      delete rulePayload.id;
+      await insertTableRow("social_link_rules", rulePayload);
+    }
+
+    const questions = Array.isArray(data.reaction_role_questions) ? data.reaction_role_questions : [];
+    const options = Array.isArray(data.reaction_role_options) ? data.reaction_role_options : [];
+    const questionMap = new Map();
+    for (const question of questions) {
+      const questionPayload = { ...question, guild_id: guildId };
+      delete questionPayload.id;
+      const columns = Object.keys(questionPayload);
+      const inserted = await get(
+        `INSERT INTO reaction_role_questions (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")}) RETURNING id`,
+        columns.map((c) => questionPayload[c])
+      );
+      if (question?.id && inserted?.id) questionMap.set(Number(question.id), Number(inserted.id));
+    }
+    for (const option of options) {
+      const mappedQuestionId = questionMap.get(Number(option.question_id));
+      if (!mappedQuestionId) continue;
+      const optionPayload = { ...option, question_id: mappedQuestionId };
+      delete optionPayload.id;
+      await insertTableRow("reaction_role_options", optionPayload);
+    }
+
+  } catch (error) {
+    throw error;
+  }
+}
+
 function startDashboard(client) {
     const app = express();
     app.locals.client = client;
@@ -3861,6 +4041,23 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         
         <button type="submit">Save Starboard Settings</button>
       </form>
+
+      <h3 style="margin-top:20px;">Backup & Restore</h3>
+      <p class="section-description">Export this guild's bot configuration to JSON, or import a previously exported backup.</p>
+      <form method="get" action="/guild/${guildId}/config/export">
+        <button type="submit">Download Config Backup</button>
+      </form>
+      <form method="post" action="/guild/${guildId}/config/import" style="margin-top:8px;">
+        <label style="display:block;">
+          <span>Backup JSON</span>
+          <textarea name="backup_json" rows="10" style="width:100%;max-width:100%;font-family:monospace;" placeholder="Paste exported JSON here" required></textarea>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <input type="checkbox" name="confirm_replace" required />
+          <span>I understand this will replace current configuration for this guild.</span>
+        </label>
+        <button type="submit" onclick="return confirm('Replace this guild\'s current config with imported backup?')">Import Config Backup</button>
+      </form>
       ` : ""}
 
       ${activeModule === "moderation" ? `
@@ -4601,17 +4798,30 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </form>
 
       <table>
-        <tr><th>Open Ticket Channel</th><th>Opened By</th><th>Created</th><th>Actions</th></tr>
+        <tr><th>Open Ticket Channel</th><th>Opened By</th><th>Created</th><th>SLA Status</th><th>Actions</th></tr>
         ${openTickets.map((t) => {
           const chName = guild.channels.cache.get(t.channel_id)?.name || t.channel_id;
           const opener = guild.members.cache.get(t.opener_id);
           const openerName = opener ? `${opener.displayName} (${opener.user.username})` : t.opener_id;
           const created = Number.isFinite(Number(t.created_at)) ? new Date(Number(t.created_at)).toLocaleString() : "-";
+          const now = Date.now();
+          const lastActivity = Number(t.last_activity_at || t.created_at || now);
+          const inactiveMinutes = Math.max(0, Math.floor((now - lastActivity) / 60000));
+          const reminderTarget = Math.max(0, Number(ticketSettings.sla_first_response_minutes || 0));
+          const escalationTarget = Math.max(0, Number(ticketSettings.sla_escalation_minutes || 0));
+          const reminderSent = Number(t.sla_reminder_sent_at || 0) > 0;
+          const escalated = Number(t.sla_escalated_at || 0) > 0;
+          const slaStatus = [
+            `Inactive: ${inactiveMinutes}m`,
+            reminderTarget > 0 ? `Reminder: ${reminderSent ? "sent" : `${Math.max(0, reminderTarget - inactiveMinutes)}m left`}` : "Reminder: off",
+            escalationTarget > 0 ? `Escalation: ${escalated ? "sent" : `${Math.max(0, escalationTarget - inactiveMinutes)}m left`}` : "Escalation: off"
+          ].join(" | ");
           return `
             <tr>
               <td>${escapeHtml(chName)}</td>
               <td>${escapeHtml(openerName)}</td>
               <td>${escapeHtml(created)}</td>
+              <td>${escapeHtml(slaStatus)}</td>
               <td>
                 <form method="post" action="/guild/${guildId}/tickets/close" style="display:inline;">
                   <input type="hidden" name="channel_id" value="${escapeHtml(t.channel_id)}" />
@@ -4620,7 +4830,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
               </td>
             </tr>
           `;
-        }).join("") || `<tr><td colspan="4">No open tickets.</td></tr>`}
+        }).join("") || `<tr><td colspan="5">No open tickets.</td></tr>`}
       </table>
       ` : ""}
 
@@ -5758,6 +5968,44 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'tickets'));
     } catch (e) {
       console.error("tickets close error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/config/export", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const backup = await buildGuildConfigBackup(guildId);
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-config-backup-${stamp}.json"`);
+      return res.status(200).send(JSON.stringify(backup, null, 2));
+    } catch (e) {
+      console.error("config export error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/config/import", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const confirmReplace = req.body.confirm_replace === "on";
+      if (!confirmReplace) return res.status(400).send("You must confirm replacement before importing.");
+
+      const rawJson = String(req.body.backup_json || "").trim();
+      if (!rawJson) return res.status(400).send("Backup JSON is required.");
+
+      let parsed;
+      try {
+        parsed = JSON.parse(rawJson);
+      } catch {
+        return res.status(400).send("Invalid JSON payload.");
+      }
+
+      await importGuildConfigBackup(guildId, parsed);
+      return res.redirect(getModuleRedirect(guildId, "overview"));
+    } catch (e) {
+      console.error("config import error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

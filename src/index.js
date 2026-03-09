@@ -506,18 +506,11 @@ async function sendGuildLog(guild, payload) {
   const files = downloadedMedia.map((item) => item.attachment);
 
   let summaryImage = null;
-  if (summaryCardsEnabled && payload?.renderSummaryImage !== false && actorUserId) {
+  if (summaryCardsEnabled && payload?.renderSummaryImage === true && actorUserId) {
     summaryImage = await buildLogSummaryImage(guild, payload, actorUserId);
     if (summaryImage) {
       files.push(summaryImage);
     }
-  }
-
-  const firstImage = downloadedMedia.find((item) => item.isImage);
-  if (firstImage) {
-    embed.setImage(`attachment://${firstImage.name}`);
-  } else if (summaryImage) {
-    embed.setImage(`attachment://${summaryImage.name}`);
   }
 
   if (downloadedMedia.length) {

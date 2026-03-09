@@ -12,7 +12,10 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  PermissionsBitField
+  PermissionsBitField,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
 } = require("discord.js");
 const { createCanvas } = require("canvas");
 
@@ -698,6 +701,37 @@ function canModerateMember(executor, target) {
   if (target.guild.ownerId === target.id) return false;
   if (executor.guild.ownerId === executor.id) return true;
   return executor.roles.highest.position > target.roles.highest.position;
+}
+
+function parseModActionCustomId(customId) {
+  const parts = String(customId || "").split(":");
+  if (parts.length < 3) return null;
+  const [, action, targetUserId] = parts;
+  if (!["warn", "mute", "kick"].includes(action)) return null;
+  if (!/^\d{15,21}$/.test(String(targetUserId || ""))) return null;
+  return { action, targetUserId };
+}
+
+async function resolveModActionContext(interaction, targetUserId) {
+  if (!interaction.guild || !interaction.member) {
+    return { ok: false, message: "This action can only be used in a server." };
+  }
+
+  const actor = interaction.member;
+  if (!(await canUseModeratorActions(actor))) {
+    return { ok: false, message: "You do not have permission to use this moderation action." };
+  }
+
+  const targetMember = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+  if (!targetMember) {
+    return { ok: false, message: "Target member is no longer in this server." };
+  }
+
+  if (!canModerateMember(actor, targetMember)) {
+    return { ok: false, message: "You cannot moderate this member due to role hierarchy." };
+  }
+
+  return { ok: true, actor, targetMember };
 }
 
 async function maybeRunTicketSlaChecks(client) {
@@ -1570,31 +1604,59 @@ client.login(process.env.DISCORD_TOKEN).catch((err) => {
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (interaction.isButton() && interaction.customId.startsWith("modact:")) {
-      const [, action, targetUserId] = interaction.customId.split(":");
-      if (!interaction.guild || !interaction.member) {
-        await interaction.reply({ content: "This action can only be used in a server.", ephemeral: true }).catch(() => {});
+      const parsed = parseModActionCustomId(interaction.customId);
+      if (!parsed) {
+        await interaction.reply({ content: "Unknown moderation action.", ephemeral: true }).catch(() => {});
         return;
       }
 
-      const actor = interaction.member;
-      if (!(await canUseModeratorActions(actor))) {
-        await interaction.reply({ content: "You do not have permission to use this moderation action.", ephemeral: true }).catch(() => {});
+      const context = await resolveModActionContext(interaction, parsed.targetUserId);
+      if (!context.ok) {
+        await interaction.reply({ content: context.message, ephemeral: true }).catch(() => {});
         return;
       }
 
-      const targetMember = await interaction.guild.members.fetch(targetUserId).catch(() => null);
-      if (!targetMember) {
-        await interaction.reply({ content: "Target member is no longer in this server.", ephemeral: true }).catch(() => {});
+      const modal = new ModalBuilder()
+        .setCustomId(`modact_modal:${parsed.action}:${parsed.targetUserId}`)
+        .setTitle(`Confirm ${parsed.action.toUpperCase()} action`);
+
+      const reasonInput = new TextInputBuilder()
+        .setCustomId("reason")
+        .setLabel("Reason")
+        .setStyle(TextInputStyle.Paragraph)
+        .setMinLength(3)
+        .setMaxLength(300)
+        .setRequired(true)
+        .setPlaceholder("Enter moderation reason...");
+
+      modal.addComponents(new ActionRowBuilder().addComponents(reasonInput));
+      await interaction.showModal(modal).catch(() => {});
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("modact_modal:")) {
+      const parsed = parseModActionCustomId(interaction.customId.replace("modact_modal:", "modact:"));
+      if (!parsed) {
+        await interaction.reply({ content: "Unknown moderation action.", ephemeral: true }).catch(() => {});
         return;
       }
 
-      if (!canModerateMember(actor, targetMember)) {
-        await interaction.reply({ content: "You cannot moderate this member due to role hierarchy.", ephemeral: true }).catch(() => {});
+      const context = await resolveModActionContext(interaction, parsed.targetUserId);
+      if (!context.ok) {
+        await interaction.reply({ content: context.message, ephemeral: true }).catch(() => {});
         return;
       }
 
-      if (action === "warn") {
-        const reason = "Quick action warning from log panel";
+      const reasonRaw = interaction.fields.getTextInputValue("reason");
+      const reason = trimText(String(reasonRaw || "").trim(), 300);
+      if (!reason) {
+        await interaction.reply({ content: "A moderation reason is required.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      const { actor, targetMember } = context;
+
+      if (parsed.action === "warn") {
         await run(
           `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
            VALUES (?, ?, ?, ?, ?)`,
@@ -1609,9 +1671,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      if (action === "mute") {
+      if (parsed.action === "mute") {
         const until = Date.now() + QUICK_MUTE_MS;
-        const muted = await targetMember.timeout(QUICK_MUTE_MS, `Quick mute by ${interaction.user.tag}`).catch(() => null);
+        const muted = await targetMember.timeout(QUICK_MUTE_MS, reason).catch(() => null);
         if (!muted) {
           await interaction.reply({ content: "I could not mute that member (check role hierarchy and permissions).", ephemeral: true }).catch(() => {});
           return;
@@ -1619,14 +1681,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await run(
           `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [interaction.guild.id, targetMember.id, actor.id, "mute", "Quick mute from log panel", `Muted until ${new Date(until).toISOString()}`, Date.now()]
+          [interaction.guild.id, targetMember.id, actor.id, "mute", reason, `Muted until ${new Date(until).toISOString()}`, Date.now()]
         );
         await interaction.reply({ content: `Muted ${targetMember.user.tag} for 10 minutes.`, ephemeral: true }).catch(() => {});
         return;
       }
 
-      if (action === "kick") {
-        const kicked = await targetMember.kick(`Quick kick by ${interaction.user.tag}`).catch(() => null);
+      if (parsed.action === "kick") {
+        const kicked = await targetMember.kick(reason).catch(() => null);
         if (!kicked) {
           await interaction.reply({ content: "I could not kick that member (check role hierarchy and permissions).", ephemeral: true }).catch(() => {});
           return;
@@ -1634,7 +1696,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await run(
           `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [interaction.guild.id, targetUserId, actor.id, "kick", "Quick kick from log panel", "Triggered from log action button", Date.now()]
+          [interaction.guild.id, parsed.targetUserId, actor.id, "kick", reason, "Triggered from log action button", Date.now()]
         );
         await interaction.reply({ content: `Kicked ${targetMember.user.tag}.`, ephemeral: true }).catch(() => {});
         return;

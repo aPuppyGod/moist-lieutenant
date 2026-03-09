@@ -1292,11 +1292,54 @@ function htmlTemplate(content, opts = {}) {
       });
       localStorage.setItem('collapsedSections', JSON.stringify(savedStates));
     }
+
+    function getScrollStorageKey() {
+      const url = new URL(window.location.href);
+      const module = url.searchParams.get('module') || 'default';
+      return 'lop-scroll:' + url.pathname + ':' + module;
+    }
+
+    function saveCurrentScrollPosition() {
+      try {
+        sessionStorage.setItem(getScrollStorageKey(), String(window.scrollY || window.pageYOffset || 0));
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+
+    function restoreScrollPosition() {
+      try {
+        const raw = sessionStorage.getItem(getScrollStorageKey());
+        const y = Number.parseInt(String(raw || ''), 10);
+        if (!Number.isFinite(y) || y < 0) return;
+
+        // Restore after layout settles (collapsible sections can shift height).
+        requestAnimationFrame(() => window.scrollTo(0, y));
+        setTimeout(() => window.scrollTo(0, y), 80);
+      } catch {
+        // Ignore storage errors.
+      }
+    }
+
+    function initScrollPersistence() {
+      if ('scrollRestoration' in history) {
+        history.scrollRestoration = 'manual';
+      }
+
+      const forms = document.querySelectorAll('form');
+      forms.forEach((form) => {
+        form.addEventListener('submit', saveCurrentScrollPosition);
+      });
+
+      window.addEventListener('beforeunload', saveCurrentScrollPosition);
+      restoreScrollPosition();
+    }
     
     // Initialize on page load
     document.addEventListener('DOMContentLoaded', function() {
       initTheme();
       initCollapsible();
+      initScrollPersistence();
     });
   </script>
 </head>

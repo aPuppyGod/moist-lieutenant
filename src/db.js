@@ -492,7 +492,10 @@ async function initDb() {
       ticket_log_channel_id TEXT DEFAULT NULL,
       ticket_transcript_channel_id TEXT DEFAULT NULL,
       save_transcript INTEGER NOT NULL DEFAULT 1,
-      delete_on_close INTEGER NOT NULL DEFAULT 0
+      delete_on_close INTEGER NOT NULL DEFAULT 0,
+      sla_first_response_minutes INTEGER NOT NULL DEFAULT 0,
+      sla_escalation_minutes INTEGER NOT NULL DEFAULT 0,
+      sla_escalation_role_id TEXT DEFAULT NULL
     )
   `);
 
@@ -504,6 +507,9 @@ async function initDb() {
       opener_id TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'open',
       created_at BIGINT NOT NULL,
+      last_activity_at BIGINT NOT NULL,
+      sla_reminder_sent_at BIGINT DEFAULT NULL,
+      sla_escalated_at BIGINT DEFAULT NULL,
       closed_at BIGINT DEFAULT NULL,
       closed_by TEXT DEFAULT NULL,
       PRIMARY KEY (guild_id, channel_id)
@@ -832,6 +838,14 @@ async function initDb() {
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_transcript_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS save_transcript INTEGER DEFAULT 1`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS delete_on_close INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS sla_first_response_minutes INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS sla_escalation_minutes INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS sla_escalation_role_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS last_activity_at BIGINT`);
+    await run(`UPDATE tickets SET last_activity_at=created_at WHERE last_activity_at IS NULL`);
+    await run(`ALTER TABLE tickets ALTER COLUMN last_activity_at SET NOT NULL`);
+    await run(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_reminder_sent_at BIGINT DEFAULT NULL`);
+    await run(`ALTER TABLE tickets ADD COLUMN IF NOT EXISTS sla_escalated_at BIGINT DEFAULT NULL`);
     
     // Economy system migrations
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS daily_streak INTEGER DEFAULT 0`);

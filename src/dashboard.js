@@ -4579,6 +4579,20 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <span>Delete on Close</span>
           <input type="checkbox" name="delete_on_close" ${ticketSettings.delete_on_close ? "checked" : ""} />
         </label>
+        <label style="min-width:180px;flex:0 0 180px;">
+          <span>SLA Reminder (minutes)</span>
+          <input type="number" min="0" name="sla_first_response_minutes" value="${Number(ticketSettings.sla_first_response_minutes || 0)}" />
+        </label>
+        <label style="min-width:180px;flex:0 0 180px;">
+          <span>SLA Escalation (minutes)</span>
+          <input type="number" min="0" name="sla_escalation_minutes" value="${Number(ticketSettings.sla_escalation_minutes || 0)}" />
+        </label>
+        <label>SLA Escalation Role
+          <select name="sla_escalation_role_id">
+            <option value="">None</option>
+            ${roleOptions.map((r) => `<option value="${r.id}" ${ticketSettings.sla_escalation_role_id === r.id ? "selected" : ""}>@${escapeHtml(r.name)}</option>`).join("")}
+          </select>
+        </label>
         <button type="submit">Save Ticket Settings</button>
       </form>
 
@@ -5687,6 +5701,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const ticketTranscriptChannelId = String(req.body.ticket_transcript_channel_id || "").trim() || null;
       const saveTranscript = req.body.save_transcript === "on";
       const deleteOnClose = req.body.delete_on_close === "on";
+      const slaFirstResponseMinutes = Math.max(0, Number.parseInt(String(req.body.sla_first_response_minutes || "0"), 10) || 0);
+      const slaEscalationMinutes = Math.max(0, Number.parseInt(String(req.body.sla_escalation_minutes || "0"), 10) || 0);
+      const slaEscalationRoleId = String(req.body.sla_escalation_role_id || "").trim() || null;
 
       await upsertTicketSettings(guildId, {
         enabled,
@@ -5697,7 +5714,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         ticket_log_channel_id: ticketLogChannelId,
         ticket_transcript_channel_id: ticketTranscriptChannelId,
         save_transcript: saveTranscript,
-        delete_on_close: deleteOnClose
+        delete_on_close: deleteOnClose,
+        sla_first_response_minutes: slaFirstResponseMinutes,
+        sla_escalation_minutes: slaEscalationMinutes,
+        sla_escalation_role_id: slaEscalationRoleId
       });
 
       return res.redirect(getModuleRedirect(guildId, 'tickets'));

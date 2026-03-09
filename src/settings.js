@@ -260,7 +260,8 @@ async function getTicketSettings(guildId) {
 
   const row = await get(
     `SELECT guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id,
-            ticket_log_channel_id, ticket_transcript_channel_id, save_transcript, delete_on_close
+            ticket_log_channel_id, ticket_transcript_channel_id, save_transcript, delete_on_close,
+            sla_first_response_minutes, sla_escalation_minutes, sla_escalation_role_id
      FROM ticket_settings
      WHERE guild_id=?`,
     [guildId]
@@ -277,7 +278,10 @@ async function getTicketSettings(guildId) {
     ticket_log_channel_id: row?.ticket_log_channel_id || null,
     ticket_transcript_channel_id: row?.ticket_transcript_channel_id || null,
     save_transcript: Number(row?.save_transcript ?? 1) === 1,
-    delete_on_close: Number(row?.delete_on_close || 0) === 1
+    delete_on_close: Number(row?.delete_on_close || 0) === 1,
+    sla_first_response_minutes: Math.max(0, Number(row?.sla_first_response_minutes || 0)),
+    sla_escalation_minutes: Math.max(0, Number(row?.sla_escalation_minutes || 0)),
+    sla_escalation_role_id: row?.sla_escalation_role_id || null
   };
 }
 
@@ -293,13 +297,23 @@ async function upsertTicketSettings(guildId, patch) {
     ticket_log_channel_id: patch.ticket_log_channel_id !== undefined ? (patch.ticket_log_channel_id || null) : current.ticket_log_channel_id,
     ticket_transcript_channel_id: patch.ticket_transcript_channel_id !== undefined ? (patch.ticket_transcript_channel_id || null) : current.ticket_transcript_channel_id,
     save_transcript: patch.save_transcript !== undefined ? (patch.save_transcript ? 1 : 0) : (current.save_transcript ? 1 : 0),
-    delete_on_close: patch.delete_on_close !== undefined ? (patch.delete_on_close ? 1 : 0) : (current.delete_on_close ? 1 : 0)
+    delete_on_close: patch.delete_on_close !== undefined ? (patch.delete_on_close ? 1 : 0) : (current.delete_on_close ? 1 : 0),
+    sla_first_response_minutes: patch.sla_first_response_minutes !== undefined
+      ? Math.max(0, Number(patch.sla_first_response_minutes || 0))
+      : Math.max(0, Number(current.sla_first_response_minutes || 0)),
+    sla_escalation_minutes: patch.sla_escalation_minutes !== undefined
+      ? Math.max(0, Number(patch.sla_escalation_minutes || 0))
+      : Math.max(0, Number(current.sla_escalation_minutes || 0)),
+    sla_escalation_role_id: patch.sla_escalation_role_id !== undefined
+      ? (patch.sla_escalation_role_id || null)
+      : current.sla_escalation_role_id
   };
 
   await run(
     `INSERT INTO ticket_settings (guild_id, enabled, panel_channel_id, category_id, support_role_id, ticket_prefix, panel_message_id,
-                                   ticket_log_channel_id, ticket_transcript_channel_id, save_transcript, delete_on_close)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   ticket_log_channel_id, ticket_transcript_channel_id, save_transcript, delete_on_close,
+                                   sla_first_response_minutes, sla_escalation_minutes, sla_escalation_role_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (guild_id)
      DO UPDATE SET
        enabled=EXCLUDED.enabled,
@@ -311,7 +325,10 @@ async function upsertTicketSettings(guildId, patch) {
        ticket_log_channel_id=EXCLUDED.ticket_log_channel_id,
        ticket_transcript_channel_id=EXCLUDED.ticket_transcript_channel_id,
        save_transcript=EXCLUDED.save_transcript,
-       delete_on_close=EXCLUDED.delete_on_close`,
+       delete_on_close=EXCLUDED.delete_on_close,
+       sla_first_response_minutes=EXCLUDED.sla_first_response_minutes,
+       sla_escalation_minutes=EXCLUDED.sla_escalation_minutes,
+       sla_escalation_role_id=EXCLUDED.sla_escalation_role_id`,
     [
       guildId,
       merged.enabled,
@@ -323,7 +340,10 @@ async function upsertTicketSettings(guildId, patch) {
       merged.ticket_log_channel_id,
       merged.ticket_transcript_channel_id,
       merged.save_transcript,
-      merged.delete_on_close
+      merged.delete_on_close,
+      merged.sla_first_response_minutes,
+      merged.sla_escalation_minutes,
+      merged.sla_escalation_role_id
     ]
   );
 }
@@ -349,12 +369,24 @@ async function getTicketByChannel(guildId, channelId) {
 }
 
 async function createTicket(guildId, channelId, openerId) {
+  const now = Date.now();
   await run(
-    `INSERT INTO tickets (guild_id, channel_id, opener_id, status, created_at)
-     VALUES (?, ?, ?, 'open', ?)
+    `INSERT INTO tickets (guild_id, channel_id, opener_id, status, created_at, last_activity_at, sla_reminder_sent_at, sla_escalated_at)
+     VALUES (?, ?, ?, 'open', ?, ?, NULL, NULL)
      ON CONFLICT (guild_id, channel_id)
-     DO UPDATE SET opener_id=EXCLUDED.opener_id, status='open', created_at=EXCLUDED.created_at, closed_at=NULL, closed_by=NULL`,
-    [guildId, channelId, openerId, Date.now()]
+     DO UPDATE SET opener_id=EXCLUDED.opener_id, status='open', created_at=EXCLUDED.created_at,
+                   last_activity_at=EXCLUDED.last_activity_at, sla_reminder_sent_at=NULL, sla_escalated_at=NULL,
+                   closed_at=NULL, closed_by=NULL`,
+    [guildId, channelId, openerId, now, now]
+  );
+}
+
+async function touchTicketActivity(guildId, channelId, timestamp = Date.now()) {
+  await run(
+    `UPDATE tickets
+     SET last_activity_at=?
+     WHERE guild_id=? AND channel_id=? AND status='open'`,
+    [timestamp, guildId, channelId]
   );
 }
 
@@ -369,7 +401,7 @@ async function closeTicket(guildId, channelId, closedBy) {
 
 async function getOpenTickets(guildId) {
   return await all(
-    `SELECT guild_id, channel_id, opener_id, status, created_at
+    `SELECT guild_id, channel_id, opener_id, status, created_at, last_activity_at, sla_reminder_sent_at, sla_escalated_at
      FROM tickets
      WHERE guild_id=? AND status='open'
      ORDER BY created_at DESC`,
@@ -493,6 +525,7 @@ module.exports = {
   getOpenTicketByUser,
   getTicketByChannel,
   createTicket,
+  touchTicketActivity,
   closeTicket,
   getOpenTickets,
 

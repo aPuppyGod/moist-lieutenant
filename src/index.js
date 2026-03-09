@@ -8,7 +8,11 @@ const {
   AuditLogEvent,
   ChannelType,
   EmbedBuilder,
-  AttachmentBuilder
+  AttachmentBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  PermissionsBitField
 } = require("discord.js");
 const { createCanvas } = require("canvas");
 
@@ -23,6 +27,7 @@ const { getLoggingExclusions } = require("./settings");
 const { getLoggingEventConfigs } = require("./settings");
 const { getLoggingActorExclusions } = require("./settings");
 const { getReactionRoleQuestion, getReactionRoleOptions } = require("./settings");
+const { touchTicketActivity } = require("./settings");
 const { findRecentModAction } = require("./modActionTracker");
 const { startDashboard } = require("./dashboard");
 const { startSocialFeedNotifier } = require("./socials");
@@ -112,8 +117,10 @@ const LOG_THEME = {
 };
 
 const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
+const QUICK_MUTE_MS = 10 * 60_000;
 const ANTI_NUKE_WINDOW_MS = 30_000;
 const ANTI_NUKE_COOLDOWN_MS = 10 * 60_000;
+const TICKET_SLA_INTERVAL_MS = 2 * 60_000;
 const ANTI_NUKE_THRESHOLDS = {
   channel_delete: 3,
   role_delete: 3,
@@ -620,6 +627,7 @@ async function sendGuildLog(guild, payload) {
   }
 
   const files = downloadedMedia.map((item) => item.attachment);
+  const components = [];
 
   let summaryImage = null;
   if (summaryCardsEnabled && payload?.renderSummaryImage === true && actorUserId) {
@@ -638,11 +646,119 @@ async function sendGuildLog(guild, payload) {
     ]);
   }
 
+  if (payload?.enableModActions && payload?.targetUserId) {
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`modact:warn:${payload.targetUserId}`)
+          .setLabel("Warn")
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`modact:mute:${payload.targetUserId}`)
+          .setLabel("Mute 10m")
+          .setStyle(ButtonStyle.Primary),
+        new ButtonBuilder()
+          .setCustomId(`modact:kick:${payload.targetUserId}`)
+          .setLabel("Kick")
+          .setStyle(ButtonStyle.Danger)
+      )
+    );
+  }
+
   await channel.send({
     embeds: [embed],
     files,
+    components,
     allowedMentions: { parse: [] }
   }).catch(() => {});
+}
+
+async function memberHasConfiguredModRoleOrHigher(member) {
+  if (!member?.guild) return false;
+  const settings = await getGuildSettings(member.guild.id).catch(() => null);
+  const modRoleId = settings?.mod_role_id;
+  if (!modRoleId) return false;
+
+  const modRole = member.guild.roles.cache.get(modRoleId) || await member.guild.roles.fetch(modRoleId).catch(() => null);
+  if (!modRole) return false;
+
+  return member.roles?.cache?.some((role) => role.position >= modRole.position) || false;
+}
+
+async function canUseModeratorActions(member) {
+  if (!member) return false;
+  if (member.id === BOT_MANAGER_ID) return true;
+  if (member.permissions?.has(PermissionsBitField.Flags.Administrator)) return true;
+  return await memberHasConfiguredModRoleOrHigher(member);
+}
+
+function canModerateMember(executor, target) {
+  if (!executor || !target) return false;
+  if (executor.id === target.id) return false;
+  if (target.guild.ownerId === target.id) return false;
+  if (executor.guild.ownerId === executor.id) return true;
+  return executor.roles.highest.position > target.roles.highest.position;
+}
+
+async function maybeRunTicketSlaChecks(client) {
+  const now = Date.now();
+  const openTickets = await all(
+    `SELECT t.guild_id, t.channel_id, t.opener_id, t.created_at, t.last_activity_at, t.sla_reminder_sent_at, t.sla_escalated_at,
+            ts.support_role_id, ts.sla_first_response_minutes, ts.sla_escalation_minutes, ts.sla_escalation_role_id
+     FROM tickets t
+     INNER JOIN ticket_settings ts ON ts.guild_id=t.guild_id
+     WHERE t.status='open'
+       AND ts.enabled=1
+       AND (
+         COALESCE(ts.sla_first_response_minutes, 0) > 0
+         OR COALESCE(ts.sla_escalation_minutes, 0) > 0
+       )`
+  ).catch(() => []);
+
+  for (const row of openTickets) {
+    const guild = client.guilds.cache.get(row.guild_id) || await client.guilds.fetch(row.guild_id).catch(() => null);
+    if (!guild) continue;
+    const channel = guild.channels.cache.get(row.channel_id) || await guild.channels.fetch(row.channel_id).catch(() => null);
+    if (!channel || !channel.isTextBased || !channel.isTextBased()) continue;
+
+    const baseTs = Number(row.last_activity_at || row.created_at || now);
+    const elapsedMs = Math.max(0, now - baseTs);
+    const reminderMs = Math.max(0, Number(row.sla_first_response_minutes || 0)) * 60_000;
+    const escalationMs = Math.max(0, Number(row.sla_escalation_minutes || 0)) * 60_000;
+    const hasReminder = Number(row.sla_reminder_sent_at || 0) > 0;
+    const hasEscalated = Number(row.sla_escalated_at || 0) > 0;
+
+    if (reminderMs > 0 && elapsedMs >= reminderMs && !hasReminder) {
+      const supportPing = row.support_role_id ? `<@&${row.support_role_id}>` : "Support team";
+      const sent = await channel.send({
+        content: `⏱️ SLA reminder: this ticket has been inactive for ${Math.floor(elapsedMs / 60_000)} minute(s). ${supportPing}`,
+        allowedMentions: { roles: row.support_role_id ? [row.support_role_id] : [], parse: [] }
+      }).catch(() => null);
+
+      if (sent) {
+        await run(
+          `UPDATE tickets SET sla_reminder_sent_at=? WHERE guild_id=? AND channel_id=? AND status='open'`,
+          [now, row.guild_id, row.channel_id]
+        ).catch(() => {});
+      }
+    }
+
+    if (escalationMs > 0 && elapsedMs >= escalationMs && !hasEscalated) {
+      const escalationRoleId = row.sla_escalation_role_id || row.support_role_id || null;
+      const escalationPing = escalationRoleId ? `<@&${escalationRoleId}>` : "Staff";
+      const sent = await channel.send({
+        content: `🚨 SLA escalation: this ticket exceeded escalation target (${Math.floor(elapsedMs / 60_000)} minute(s) inactive). ${escalationPing}`,
+        allowedMentions: { roles: escalationRoleId ? [escalationRoleId] : [], parse: [] }
+      }).catch(() => null);
+
+      if (sent) {
+        await run(
+          `UPDATE tickets SET sla_escalated_at=? WHERE guild_id=? AND channel_id=? AND status='open'`,
+          [now, row.guild_id, row.channel_id]
+        ).catch(() => {});
+      }
+    }
+  }
 }
 
 async function handleLevelUp(guild, userId, oldLevel, newLevel, message = null) {
@@ -874,6 +990,14 @@ client.once(Events.ClientReady, async () => {
         console.error("Voice XP interval failed:", err);
       }
     }, 60_000);
+
+    setInterval(async () => {
+      try {
+        await maybeRunTicketSlaChecks(client);
+      } catch (err) {
+        console.error("Ticket SLA interval failed:", err);
+      }
+    }, TICKET_SLA_INTERVAL_MS);
   } catch (err) {
     console.error("ClientReady startup failed:", err);
   }
@@ -890,6 +1014,8 @@ client.on(Events.MessageCreate, async (message) => {
   await handleCommands(message);
 
   if (!message.guild || message.author.bot) return;
+
+  await touchTicketActivity(message.guild.id, message.channel.id).catch(() => {});
 
   console.log("[MSG]", message.guild?.id, message.channel?.id, message.author?.tag, message.content);
 
@@ -1443,6 +1569,81 @@ client.login(process.env.DISCORD_TOKEN).catch((err) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    if (interaction.isButton() && interaction.customId.startsWith("modact:")) {
+      const [, action, targetUserId] = interaction.customId.split(":");
+      if (!interaction.guild || !interaction.member) {
+        await interaction.reply({ content: "This action can only be used in a server.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      const actor = interaction.member;
+      if (!(await canUseModeratorActions(actor))) {
+        await interaction.reply({ content: "You do not have permission to use this moderation action.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      const targetMember = await interaction.guild.members.fetch(targetUserId).catch(() => null);
+      if (!targetMember) {
+        await interaction.reply({ content: "Target member is no longer in this server.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      if (!canModerateMember(actor, targetMember)) {
+        await interaction.reply({ content: "You cannot moderate this member due to role hierarchy.", ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      if (action === "warn") {
+        const reason = "Quick action warning from log panel";
+        await run(
+          `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [interaction.guild.id, targetMember.id, actor.id, reason, Date.now()]
+        );
+        await run(
+          `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [interaction.guild.id, targetMember.id, actor.id, "warn", reason, "Triggered from log action button", Date.now()]
+        );
+        await interaction.reply({ content: `Warned ${targetMember.user.tag}.`, ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      if (action === "mute") {
+        const until = Date.now() + QUICK_MUTE_MS;
+        const muted = await targetMember.timeout(QUICK_MUTE_MS, `Quick mute by ${interaction.user.tag}`).catch(() => null);
+        if (!muted) {
+          await interaction.reply({ content: "I could not mute that member (check role hierarchy and permissions).", ephemeral: true }).catch(() => {});
+          return;
+        }
+        await run(
+          `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [interaction.guild.id, targetMember.id, actor.id, "mute", "Quick mute from log panel", `Muted until ${new Date(until).toISOString()}`, Date.now()]
+        );
+        await interaction.reply({ content: `Muted ${targetMember.user.tag} for 10 minutes.`, ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      if (action === "kick") {
+        const kicked = await targetMember.kick(`Quick kick by ${interaction.user.tag}`).catch(() => null);
+        if (!kicked) {
+          await interaction.reply({ content: "I could not kick that member (check role hierarchy and permissions).", ephemeral: true }).catch(() => {});
+          return;
+        }
+        await run(
+          `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [interaction.guild.id, targetUserId, actor.id, "kick", "Quick kick from log panel", "Triggered from log action button", Date.now()]
+        );
+        await interaction.reply({ content: `Kicked ${targetMember.user.tag}.`, ephemeral: true }).catch(() => {});
+        return;
+      }
+
+      await interaction.reply({ content: "Unknown moderation action.", ephemeral: true }).catch(() => {});
+      return;
+    }
+
     const handledTicket = await handleTicketInteraction(interaction);
     if (handledTicket) return;
 
@@ -1490,6 +1691,8 @@ client.on(Events.MessageDelete, async (message) => {
     title: "🗑️ Message Deleted",
     sourceChannelId: message.channel?.id,
     description: `A message was deleted in ${message.channel ? channelLabel(message.channel) : "unknown channel"}.`,
+    enableModActions: true,
+    targetUserId: message.author?.id || null,
     fields: [
       { name: "Author", value: userLabel(message.author), inline: true },
       { name: "Deleted By", value: deletedBy, inline: true },
@@ -1557,6 +1760,8 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
     title: "✏️ Message Edited",
     sourceChannelId: newMessage.channel?.id,
     description: `**Message Edited in** ${newMessage.channel ? channelLabel(newMessage.channel) : "unknown channel"}`,
+    enableModActions: true,
+    targetUserId: newMessage.author?.id || null,
     fields: [
       { name: "Author", value: userLabel(newMessage.author), inline: true },
       { name: "User ID", value: `\`${newMessage.author?.id}\``, inline: true },
@@ -1617,6 +1822,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
     renderSummaryImage: true,
     color: LOG_THEME.info,
     title: "📥 Member Joined",
+    enableModActions: true,
+    targetUserId: member.id,
     description: `${userLabel(member.user)} joined the server.`,
     fields: [
       { name: "User", value: userLabel(member.user), inline: true },
@@ -1638,6 +1845,8 @@ client.on(Events.GuildMemberAdd, async (member) => {
         renderSummaryImage: true,
         color: LOG_THEME.warn,
         title: "⚠️ New Account Joined",
+        enableModActions: true,
+        targetUserId: member.id,
         description: `${userLabel(member.user)} joined with a recently created account.`,
         fields: [
           { name: "User", value: userLabel(member.user), inline: true },
@@ -1771,6 +1980,8 @@ client.on(Events.GuildBanAdd, async (ban) => {
     actorUserId,
     color: LOG_THEME.mod,
     title: "⛔ Member Banned",
+    enableModActions: true,
+    targetUserId: ban.user.id,
     description: `${userLabel(ban.user)} was banned.`,
     fields: [{ name: "Moderator", value: actorLabel, inline: true }]
   });
@@ -1790,6 +2001,8 @@ client.on(Events.GuildBanRemove, async (ban) => {
     actorUserId: tracked?.actorId || executor?.id || null,
     color: LOG_THEME.mod,
     title: "✅ Member Unbanned",
+    enableModActions: true,
+    targetUserId: ban.user.id,
     description: `${userLabel(ban.user)} was unbanned.`,
     fields: [{ name: "Moderator", value: actorLabel, inline: true }]
   });
@@ -1817,6 +2030,8 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
       actorUserId: tracked?.actorId || executor?.id || null,
       color: LOG_THEME.mod,
       title: "🧩 Roles Updated",
+      enableModActions: true,
+      targetUserId: newMember.id,
       description: `${userLabel(newMember.user)} role membership changed.`,
       fields: [
         { name: "Added", value: added.length ? added.map((id) => roleLabel(newMember.guild, id)).join(", ") : "None" },
@@ -1840,6 +2055,8 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
       actorUserId: tracked?.actorId || nickExecutor?.id || newMember.id,
       color: LOG_THEME.info,
       title: "📝 Nickname Changed",
+      enableModActions: true,
+      targetUserId: newMember.id,
       description: `${userLabel(newMember.user)} nickname updated.`,
       fields: [
         { name: "Before", value: oldMember.nickname || "(none)", inline: true },
@@ -1864,6 +2081,8 @@ client.on(Events.GuildMemberUpdate, async (oldMember, newMember) => {
       actorUserId: tracked?.actorId || null,
       color: LOG_THEME.mod,
       title: newTimeout ? "🔇 Member Muted" : "🔊 Member Unmuted",
+      enableModActions: true,
+      targetUserId: newMember.id,
       description: `${userLabel(newMember.user)} ${newTimeout ? "was muted (timed out)" : "was unmuted"}.`,
       fields: [
         ...(newTimeout ? [{ name: "Until", value: `<t:${Math.floor(newTimeout / 1000)}:F>` }] : []),

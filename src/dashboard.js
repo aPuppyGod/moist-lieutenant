@@ -4193,6 +4193,16 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${activeModule === "moderation" ? `
 
       <h3>Moderation Settings</h3>
+      <div style="padding:10px;border:1px solid rgba(123,201,111,0.35);border-radius:8px;max-width:620px;margin-bottom:12px;">
+        <div style="font-weight:600;margin-bottom:6px;">Anti-Nuke Status</div>
+        <div style="font-size:0.95em;line-height:1.5;">
+          <div><b>Protection:</b> ${settings.anti_nuke_enabled ? "Enabled" : "Paused"}</div>
+          <div><b>Pending Auto-Unlocks:</b> ${pendingAntiNukeJobRows.length}</div>
+          <div><b>Next Auto-Unlock ETA:</b> ${pendingAntiNukeJobRows.length > 0 ? escapeHtml(pendingAntiNukeJobRows[0].eta) : "-"}</div>
+          <div><b>Alert Destination:</b> ${settings.anti_nuke_alert_channel_id ? escapeHtml(`#${(textChannels.find((c) => c.id === settings.anti_nuke_alert_channel_id)?.name || settings.anti_nuke_alert_channel_id)}`) : "Log Channel"}</div>
+          <div><b>Alert Ping Role:</b> ${settings.anti_nuke_alert_role_id ? escapeHtml(`@${(roleOptions.find((r) => r.id === settings.anti_nuke_alert_role_id)?.name || settings.anti_nuke_alert_role_id)}`) : "None"}</div>
+        </div>
+      </div>
       <form method="post" action="/guild/${guildId}/mod-settings">
         <label>Mod Role
           <select name="mod_role_id">

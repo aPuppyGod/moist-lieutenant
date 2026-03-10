@@ -3873,6 +3873,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
        LIMIT 50`,
       [guildId]
     );
+    const pendingAntiNukeUnlockJobs = await all(
+      `SELECT id, run_at, unlock_perms_json, created_at
+       FROM anti_nuke_unlock_jobs
+       WHERE guild_id=? AND executed_at IS NULL
+       ORDER BY run_at ASC
+       LIMIT 50`,
+      [guildId]
+    );
     const warningRows = modWarnings.map((w) => {
       const target = guild.members.cache.get(w.user_id);
       const moderator = guild.members.cache.get(w.moderator_id);
@@ -3921,6 +3929,28 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         initiatorName,
         detailsText,
         createdAt
+      };
+    });
+    const pendingAntiNukeJobRows = pendingAntiNukeUnlockJobs.map((row) => {
+      let permissions = [];
+      try {
+        const parsed = JSON.parse(String(row.unlock_perms_json || "[]"));
+        if (Array.isArray(parsed)) permissions = parsed;
+      } catch {
+        permissions = [];
+      }
+
+      const runAtTs = Number(row.run_at || 0);
+      const createdAtTs = Number(row.created_at || 0);
+      const etaMs = Math.max(0, runAtTs - Date.now());
+      const etaMinutes = Math.ceil(etaMs / 60_000);
+
+      return {
+        id: row.id,
+        runAt: Number.isFinite(runAtTs) && runAtTs > 0 ? new Date(runAtTs).toLocaleString() : "-",
+        createdAt: Number.isFinite(createdAtTs) && createdAtTs > 0 ? new Date(createdAtTs).toLocaleString() : "-",
+        eta: Number.isFinite(etaMinutes) && etaMinutes > 0 ? `${etaMinutes}m` : "due",
+        permissions: permissions.length ? permissions.join(", ") : "-"
       };
     });
 
@@ -4215,6 +4245,31 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <form method="post" action="/guild/${guildId}/anti-nuke/unlock" style="margin-top:8px;" onsubmit="return confirm('Restore anti-nuke locked permissions for @everyone across channels?')">
         <button type="submit" style="background:#f0ad4e;">Emergency Unlock Anti-Nuke Lockdown</button>
       </form>
+
+      <h3 style="margin-top:18px;">Pending Anti-Nuke Auto-Unlocks</h3>
+      <p class="section-description">Scheduled automatic unlock jobs waiting to run.</p>
+      ${pendingAntiNukeJobRows.length > 0 ? `
+      <table class="enhanced-table">
+        <tr><th>Job ID</th><th>ETA</th><th>Run At</th><th>Created</th><th>Permissions</th><th>Actions</th></tr>
+        ${pendingAntiNukeJobRows.map((j) => `
+          <tr>
+            <td>${escapeHtml(String(j.id))}</td>
+            <td>${escapeHtml(j.eta)}</td>
+            <td>${escapeHtml(j.runAt)}</td>
+            <td>${escapeHtml(j.createdAt)}</td>
+            <td>${escapeHtml(j.permissions)}</td>
+            <td>
+              ${canAccessAdminFeatures ? `
+              <form method="post" action="/guild/${guildId}/anti-nuke/unlock-jobs/cancel" style="display:inline;" onsubmit="return confirm('Cancel this pending auto-unlock job?')">
+                <input type="hidden" name="job_id" value="${escapeHtml(String(j.id))}" />
+                <button type="submit" style="background:#d9534f;">Cancel</button>
+              </form>
+              ` : "-"}
+            </td>
+          </tr>
+        `).join("")}
+      </table>
+      ` : `<div class="empty-state">No pending auto-unlock jobs</div>`}
 
       <h3 style="margin-top:18px;">Anti-Nuke Incidents</h3>
       <p class="section-description">Recent anti-nuke triggers and manual unlock actions.</p>
@@ -5527,6 +5582,63 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke incidents clear error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/anti-nuke/unlock-jobs/cancel", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const jobId = Number.parseInt(String(req.body.job_id || "0"), 10);
+      if (!Number.isInteger(jobId) || jobId <= 0) {
+        return res.redirect(getModuleRedirect(guildId, 'moderation'));
+      }
+
+      const existing = await get(
+        `SELECT id, run_at, unlock_perms_json, created_at
+         FROM anti_nuke_unlock_jobs
+         WHERE id=? AND guild_id=? AND executed_at IS NULL`,
+        [jobId, guildId]
+      );
+      if (!existing) {
+        return res.redirect(getModuleRedirect(guildId, 'moderation'));
+      }
+
+      await run(
+        `UPDATE anti_nuke_unlock_jobs SET executed_at=? WHERE id=? AND guild_id=? AND executed_at IS NULL`,
+        [Date.now(), jobId, guildId]
+      );
+
+      let unlockPerms = [];
+      try {
+        const parsed = JSON.parse(String(existing.unlock_perms_json || "[]"));
+        if (Array.isArray(parsed)) unlockPerms = parsed;
+      } catch {
+        unlockPerms = [];
+      }
+
+      await run(
+        `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          guildId,
+          "auto_unlock_canceled",
+          null,
+          null,
+          req.user?.id || null,
+          JSON.stringify({
+            job_id: jobId,
+            run_at: Number(existing.run_at || 0),
+            created_at: Number(existing.created_at || 0),
+            unlock_permissions: unlockPerms
+          }),
+          Date.now()
+        ]
+      ).catch(() => {});
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("anti-nuke unlock-job cancel error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

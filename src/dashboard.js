@@ -3865,13 +3865,61 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
        LIMIT 50`,
       [guildId]
     );
+    const antiNukeTypeOptions = new Set([
+      "all",
+      "trigger",
+      "manual_unlock",
+      "auto_unlock",
+      "history_cleared",
+      "auto_unlock_canceled"
+    ]);
+    const antiNukeTypeFilterRaw = String(req.query.anti_nuke_type || "all").trim().toLowerCase();
+    const antiNukeTypeFilter = antiNukeTypeOptions.has(antiNukeTypeFilterRaw)
+      ? antiNukeTypeFilterRaw
+      : "all";
+    const antiNukeSearch = String(req.query.anti_nuke_search || "").trim().slice(0, 80);
+    const antiNukePageRaw = Number.parseInt(String(req.query.anti_nuke_page || "1"), 10);
+    const antiNukePageSize = 25;
+
+    const antiNukeWhere = ["guild_id=?"];
+    const antiNukeParams = [guildId];
+
+    if (antiNukeTypeFilter !== "all") {
+      antiNukeWhere.push("incident_type=?");
+      antiNukeParams.push(antiNukeTypeFilter);
+    }
+
+    if (antiNukeSearch) {
+      const like = `%${antiNukeSearch}%`;
+      antiNukeWhere.push(`(
+        COALESCE(event_type, '') ILIKE ?
+        OR COALESCE(actor_user_id, '') ILIKE ?
+        OR COALESCE(initiated_by_user_id, '') ILIKE ?
+        OR COALESCE(details, '') ILIKE ?
+      )`);
+      antiNukeParams.push(like, like, like, like);
+    }
+
+    const antiNukeCountRow = await get(
+      `SELECT COUNT(*)::int AS count
+       FROM anti_nuke_incidents
+       WHERE ${antiNukeWhere.join(" AND ")}`,
+      antiNukeParams
+    );
+    const antiNukeTotal = Number(antiNukeCountRow?.count || 0);
+    const antiNukeTotalPages = Math.max(1, Math.ceil(antiNukeTotal / antiNukePageSize));
+    const antiNukePage = Number.isInteger(antiNukePageRaw)
+      ? Math.min(antiNukeTotalPages, Math.max(1, antiNukePageRaw))
+      : 1;
+    const antiNukeOffset = (antiNukePage - 1) * antiNukePageSize;
+
     const antiNukeIncidents = await all(
       `SELECT id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at
        FROM anti_nuke_incidents
-       WHERE guild_id=?
+       WHERE ${antiNukeWhere.join(" AND ")}
        ORDER BY created_at DESC
-       LIMIT 50`,
-      [guildId]
+       LIMIT ? OFFSET ?`,
+      [...antiNukeParams, antiNukePageSize, antiNukeOffset]
     );
     const pendingAntiNukeUnlockJobs = await all(
       `SELECT id, run_at, unlock_perms_json, created_at
@@ -3953,6 +4001,15 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         permissions: permissions.length ? permissions.join(", ") : "-"
       };
     });
+    const antiNukeTypeQuery = antiNukeTypeFilter !== "all"
+      ? `&anti_nuke_type=${encodeURIComponent(antiNukeTypeFilter)}`
+      : "";
+    const antiNukeSearchQuery = antiNukeSearch
+      ? `&anti_nuke_search=${encodeURIComponent(antiNukeSearch)}`
+      : "";
+    const antiNukeBaseQuery = `module=moderation${antiNukeTypeQuery}${antiNukeSearchQuery}`;
+    const antiNukeHasPrevPage = antiNukePage > 1;
+    const antiNukeHasNextPage = antiNukePage < antiNukeTotalPages;
 
     const claimLock = await get(`SELECT claim_all_done FROM guild_settings WHERE guild_id=?`, [guildId]);
     const claimLocked = claimLock?.claim_all_done === 1;
@@ -4273,8 +4330,33 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <h3 style="margin-top:18px;">Anti-Nuke Incidents</h3>
       <p class="section-description">Recent anti-nuke triggers and manual unlock actions.</p>
+      <form method="get" action="/guild/${guildId}" style="margin-bottom:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input type="hidden" name="module" value="moderation" />
+        <label>Type
+          <select name="anti_nuke_type">
+            <option value="all" ${antiNukeTypeFilter === "all" ? "selected" : ""}>All</option>
+            <option value="trigger" ${antiNukeTypeFilter === "trigger" ? "selected" : ""}>trigger</option>
+            <option value="manual_unlock" ${antiNukeTypeFilter === "manual_unlock" ? "selected" : ""}>manual_unlock</option>
+            <option value="auto_unlock" ${antiNukeTypeFilter === "auto_unlock" ? "selected" : ""}>auto_unlock</option>
+            <option value="history_cleared" ${antiNukeTypeFilter === "history_cleared" ? "selected" : ""}>history_cleared</option>
+            <option value="auto_unlock_canceled" ${antiNukeTypeFilter === "auto_unlock_canceled" ? "selected" : ""}>auto_unlock_canceled</option>
+          </select>
+        </label>
+        <label>Search
+          <input name="anti_nuke_search" value="${escapeHtml(antiNukeSearch)}" placeholder="actor id, details, event" style="min-width:220px;" />
+        </label>
+        <button type="submit">Apply</button>
+        <a class="btn" href="/guild/${guildId}?module=moderation">Reset</a>
+      </form>
       <form method="get" action="/guild/${guildId}/anti-nuke/incidents/export" style="margin-bottom:8px;">
+        <input type="hidden" name="incident_type" value="${escapeHtml(antiNukeTypeFilter)}" />
+        <input type="hidden" name="search" value="${escapeHtml(antiNukeSearch)}" />
         <button type="submit">Export Anti-Nuke Incidents (JSON)</button>
+      </form>
+      <form method="get" action="/guild/${guildId}/anti-nuke/incidents/export.csv" style="margin-bottom:8px;">
+        <input type="hidden" name="incident_type" value="${escapeHtml(antiNukeTypeFilter)}" />
+        <input type="hidden" name="search" value="${escapeHtml(antiNukeSearch)}" />
+        <button type="submit">Export Anti-Nuke Incidents (CSV)</button>
       </form>
       <form method="post" action="/guild/${guildId}/anti-nuke/incidents/clear" style="margin-bottom:8px;" onsubmit="return confirm('Clear all anti-nuke incident history for this guild?')">
         <button type="submit" style="background:#d9534f;">Clear Anti-Nuke Incident History</button>
@@ -4293,6 +4375,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </tr>
         `).join("")}
       </table>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+        <span>Page ${antiNukePage} of ${antiNukeTotalPages} (${antiNukeTotal} total)</span>
+        ${antiNukeHasPrevPage ? `<a class="btn" href="/guild/${guildId}?${antiNukeBaseQuery}&anti_nuke_page=${antiNukePage - 1}">Previous</a>` : ""}
+        ${antiNukeHasNextPage ? `<a class="btn" href="/guild/${guildId}?${antiNukeBaseQuery}&anti_nuke_page=${antiNukePage + 1}">Next</a>` : ""}
+      </div>
       ` : `<div class="empty-state">No anti-nuke incidents logged yet</div>`}
 
       <h3>Warnings</h3>
@@ -5646,12 +5733,34 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   app.get("/guild/:guildId/anti-nuke/incidents/export", requireGuildAdmin, async (req, res) => {
     try {
       const guildId = req.params.guildId;
+      const filterTypeRaw = String(req.query.incident_type || "all").trim().toLowerCase();
+      const allowedTypes = new Set(["all", "trigger", "manual_unlock", "auto_unlock", "history_cleared", "auto_unlock_canceled"]);
+      const filterType = allowedTypes.has(filterTypeRaw) ? filterTypeRaw : "all";
+      const search = String(req.query.search || "").trim().slice(0, 80);
+
+      const where = ["guild_id=?"];
+      const params = [guildId];
+      if (filterType !== "all") {
+        where.push("incident_type=?");
+        params.push(filterType);
+      }
+      if (search) {
+        const like = `%${search}%`;
+        where.push(`(
+          COALESCE(event_type, '') ILIKE ?
+          OR COALESCE(actor_user_id, '') ILIKE ?
+          OR COALESCE(initiated_by_user_id, '') ILIKE ?
+          OR COALESCE(details, '') ILIKE ?
+        )`);
+        params.push(like, like, like, like);
+      }
+
       const incidents = await all(
         `SELECT id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at
          FROM anti_nuke_incidents
-         WHERE guild_id=?
+         WHERE ${where.join(" AND ")}
          ORDER BY created_at DESC`,
-        [guildId]
+        params
       );
 
       const payload = {
@@ -5668,6 +5777,71 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.status(200).send(JSON.stringify(payload, null, 2));
     } catch (e) {
       console.error("anti-nuke incidents export error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/anti-nuke/incidents/export.csv", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const filterTypeRaw = String(req.query.incident_type || "all").trim().toLowerCase();
+      const allowedTypes = new Set(["all", "trigger", "manual_unlock", "auto_unlock", "history_cleared", "auto_unlock_canceled"]);
+      const filterType = allowedTypes.has(filterTypeRaw) ? filterTypeRaw : "all";
+      const search = String(req.query.search || "").trim().slice(0, 80);
+
+      const where = ["guild_id=?"];
+      const params = [guildId];
+      if (filterType !== "all") {
+        where.push("incident_type=?");
+        params.push(filterType);
+      }
+      if (search) {
+        const like = `%${search}%`;
+        where.push(`(
+          COALESCE(event_type, '') ILIKE ?
+          OR COALESCE(actor_user_id, '') ILIKE ?
+          OR COALESCE(initiated_by_user_id, '') ILIKE ?
+          OR COALESCE(details, '') ILIKE ?
+        )`);
+        params.push(like, like, like, like);
+      }
+
+      const incidents = await all(
+        `SELECT id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at
+         FROM anti_nuke_incidents
+         WHERE ${where.join(" AND ")}
+         ORDER BY created_at DESC`,
+        params
+      );
+
+      const escapeCsv = (value) => {
+        const text = String(value ?? "");
+        if (/[",\n]/.test(text)) {
+          return `"${text.replace(/"/g, '""')}"`;
+        }
+        return text;
+      };
+
+      const header = ["id", "incident_type", "event_type", "actor_user_id", "initiated_by_user_id", "details", "created_at"];
+      const lines = [header.join(",")];
+      for (const row of incidents) {
+        lines.push([
+          row.id,
+          row.incident_type,
+          row.event_type || "",
+          row.actor_user_id || "",
+          row.initiated_by_user_id || "",
+          row.details || "",
+          row.created_at
+        ].map(escapeCsv).join(","));
+      }
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-anti-nuke-incidents-${stamp}.csv"`);
+      return res.status(200).send(lines.join("\n"));
+    } catch (e) {
+      console.error("anti-nuke incidents csv export error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

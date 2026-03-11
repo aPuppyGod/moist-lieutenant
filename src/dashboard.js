@@ -1396,6 +1396,9 @@ const {
   getLoggingActorExclusions,
   addLoggingActorExclusion,
   removeLoggingActorExclusion,
+  getAntiNukeExemptions,
+  addAntiNukeExemption,
+  removeAntiNukeExemption,
   getReactionRoleBindings,
   upsertReactionRoleBinding,
   removeReactionRoleBinding,
@@ -3929,6 +3932,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
        LIMIT 50`,
       [guildId]
     );
+    const antiNukeExemptions = await getAntiNukeExemptions(guildId);
     const warningRows = modWarnings.map((w) => {
       const target = guild.members.cache.get(w.user_id);
       const moderator = guild.members.cache.get(w.moderator_id);
@@ -3999,6 +4003,22 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         createdAt: Number.isFinite(createdAtTs) && createdAtTs > 0 ? new Date(createdAtTs).toLocaleString() : "-",
         eta: Number.isFinite(etaMinutes) && etaMinutes > 0 ? `${etaMinutes}m` : "due",
         permissions: permissions.length ? permissions.join(", ") : "-"
+      };
+    });
+    const antiNukeExemptionRows = antiNukeExemptions.map((entry) => {
+      const role = roleOptions.find((r) => r.id === entry.target_id);
+      const member = guild.members.cache.get(entry.target_id);
+      const label = entry.target_type === "role"
+        ? `@${role?.name || entry.target_id}`
+        : (member ? `${member.displayName} (${member.user.username})` : entry.target_id);
+      const createdAt = Number.isFinite(Number(entry.created_at))
+        ? new Date(Number(entry.created_at)).toLocaleString()
+        : "-";
+      return {
+        targetId: entry.target_id,
+        targetType: entry.target_type,
+        label,
+        createdAt
       };
     });
     const antiNukeTypeQuery = antiNukeTypeFilter !== "all"
@@ -4312,6 +4332,30 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <form method="post" action="/guild/${guildId}/anti-nuke/unlock" style="margin-top:8px;" onsubmit="return confirm('Restore anti-nuke locked permissions for @everyone across channels?')">
         <button type="submit" style="background:#f0ad4e;">Emergency Unlock Anti-Nuke Lockdown</button>
       </form>
+
+      <h3 style="margin-top:18px;">Anti-Nuke Exemptions (Trusted Actors)</h3>
+      <p class="section-description">Exempt trusted users/roles from anti-nuke trigger counting.</p>
+      <form method="post" action="/guild/${guildId}/anti-nuke-exemptions/add">
+        <label>User ID <input name="user_id" /></label>
+        <label>Role
+          <select name="role_id">
+            <option value="">None</option>
+            ${roleOptions.map((r) => `<option value="${r.id}">@${escapeHtml(r.name)}</option>`).join("")}
+          </select>
+        </label>
+        <button type="submit">Add Anti-Nuke Exemption</button>
+      </form>
+      <ul>
+        ${antiNukeExemptionRows.map((entry) => `
+          <li>
+            ${escapeHtml(entry.targetType)} -> ${escapeHtml(entry.label)} (added ${escapeHtml(entry.createdAt)})
+            <form style="display:inline" method="post" action="/guild/${guildId}/anti-nuke-exemptions/delete">
+              <input type="hidden" name="target_id" value="${escapeHtml(entry.targetId)}" />
+              <button type="submit">Delete</button>
+            </form>
+          </li>
+        `).join("") || `<li>No anti-nuke exemptions configured.</li>`}
+      </ul>
 
       <h3 style="margin-top:18px;">Pending Anti-Nuke Auto-Unlocks</h3>
       <p class="section-description">Scheduled automatic unlock jobs waiting to run.</p>
@@ -5736,6 +5780,33 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke unlock-job cancel error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/anti-nuke-exemptions/add", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const userId = String(req.body.user_id || "").trim();
+      const roleId = String(req.body.role_id || "").trim();
+      if (userId) await addAntiNukeExemption(guildId, userId, "user");
+      if (roleId) await addAntiNukeExemption(guildId, roleId, "role");
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("anti-nuke exemptions add error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/anti-nuke-exemptions/delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const targetId = String(req.body.target_id || "").trim();
+      if (!targetId) return res.status(400).send("Target ID required.");
+      await removeAntiNukeExemption(guildId, targetId);
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("anti-nuke exemptions delete error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

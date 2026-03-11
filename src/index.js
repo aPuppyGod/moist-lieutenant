@@ -29,6 +29,7 @@ const { getIgnoredChannels } = require("./settings");
 const { getLoggingExclusions } = require("./settings");
 const { getLoggingEventConfigs } = require("./settings");
 const { getLoggingActorExclusions } = require("./settings");
+const { getAntiNukeExemptions } = require("./settings");
 const { getReactionRoleQuestion, getReactionRoleOptions } = require("./settings");
 const { touchTicketActivity } = require("./settings");
 const { findRecentModAction } = require("./modActionTracker");
@@ -198,6 +199,19 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
 
   const settings = await getGuildSettings(guild.id).catch(() => null);
   if (settings?.anti_nuke_enabled === false) return;
+
+  const antiNukeExemptions = await getAntiNukeExemptions(guild.id).catch(() => []);
+  if (antiNukeExemptions.length) {
+    const exemptUsers = new Set(antiNukeExemptions.filter((e) => e.target_type === "user").map((e) => e.target_id));
+    if (exemptUsers.has(actorUserId)) return;
+
+    const exemptRoles = new Set(antiNukeExemptions.filter((e) => e.target_type === "role").map((e) => e.target_id));
+    if (exemptRoles.size) {
+      const actorMember = guild.members.cache.get(actorUserId) || await guild.members.fetch(actorUserId).catch(() => null);
+      if (actorMember && actorMember.roles.cache.some((role) => exemptRoles.has(role.id))) return;
+    }
+  }
+
   const autoUnlockMinutes = Math.min(1440, Math.max(0, Number(settings?.anti_nuke_auto_unlock_minutes ?? 0)));
   const configuredWindowSeconds = Number(settings?.anti_nuke_window_seconds ?? 30);
   const configuredCooldownMinutes = Number(settings?.anti_nuke_cooldown_minutes ?? 10);

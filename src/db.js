@@ -343,6 +343,17 @@ async function initDb() {
     )
   `);
 
+  // Anti-nuke trusted actor exemptions (users/roles)
+  await run(`
+    CREATE TABLE IF NOT EXISTS anti_nuke_exemptions (
+      guild_id TEXT NOT NULL,
+      target_id TEXT NOT NULL,
+      target_type TEXT NOT NULL,
+      created_at BIGINT NOT NULL,
+      PRIMARY KEY (guild_id, target_id)
+    )
+  `);
+
   // Logging exclusions (channels/categories to skip logging)
   await run(`
     CREATE TABLE IF NOT EXISTS logging_exclusions (

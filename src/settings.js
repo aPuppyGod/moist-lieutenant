@@ -229,6 +229,33 @@ async function removeLoggingActorExclusion(guildId, targetId) {
   );
 }
 
+async function getAntiNukeExemptions(guildId) {
+  return await all(
+    `SELECT target_id, target_type, created_at
+     FROM anti_nuke_exemptions
+     WHERE guild_id=?
+     ORDER BY target_type, created_at DESC, target_id`,
+    [guildId]
+  );
+}
+
+async function addAntiNukeExemption(guildId, targetId, targetType) {
+  await run(
+    `INSERT INTO anti_nuke_exemptions (guild_id, target_id, target_type, created_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (guild_id, target_id)
+     DO UPDATE SET target_type=EXCLUDED.target_type`,
+    [guildId, targetId, targetType, Date.now()]
+  );
+}
+
+async function removeAntiNukeExemption(guildId, targetId) {
+  await run(
+    `DELETE FROM anti_nuke_exemptions WHERE guild_id=? AND target_id=?`,
+    [guildId, targetId]
+  );
+}
+
 async function getReactionRoleBindings(guildId) {
   return await all(
     `SELECT channel_id, message_id, emoji_key, role_id, mode
@@ -539,6 +566,9 @@ module.exports = {
   getLoggingActorExclusions,
   addLoggingActorExclusion,
   removeLoggingActorExclusion,
+  getAntiNukeExemptions,
+  addAntiNukeExemption,
+  removeAntiNukeExemption,
   getReactionRoleBindings,
   getReactionRoleBinding,
   upsertReactionRoleBinding,

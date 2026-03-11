@@ -306,7 +306,8 @@ async function cmdPublicCommands(message) {
     "`!reminders [limit]` - List your pending reminders",
     "`!remindcancel <id>` - Cancel one reminder",
     "`!remindclear` - Cancel all your pending reminders",
-    "`!birthday <MM/DD>` - Register your birthday",
+    "`!birthday set <MM/DD>` - Register your birthday",
+    "`!birthday list` / `!birthday remove`",
     economyCommands
   ].filter(Boolean));
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -3693,6 +3694,7 @@ function buildSlashCommands() {
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
     { name: "remindclear", description: "Cancel all your pending reminders" },
+    { name: "birthday", description: "Manage your birthday", options: [{ type: 3, name: "action", description: "set, list, or remove", required: true, choices: [{ name: "set", value: "set" }, { name: "list", value: "list" }, { name: "remove", value: "remove" }] }, { type: 3, name: "date", description: "MM/DD or MM/DD/YYYY (required for set)", required: false }] },
     // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
@@ -3901,6 +3903,11 @@ async function handleSlashCommand(interaction) {
   } else if (name === "remindcancel") {
     const id = optionValue(interaction, "id");
     if (id !== "") args.push(String(id));
+  } else if (name === "birthday") {
+    const action = optionValue(interaction, "action");
+    const date = optionValue(interaction, "date");
+    if (action) args.push(String(action));
+    if (date) args.push(String(date));
   } else {
     const keys = ["page", "limit", "name", "count", "seconds", "id"];
     for (const key of keys) {

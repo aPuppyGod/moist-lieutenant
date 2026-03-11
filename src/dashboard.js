@@ -4359,6 +4359,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <h3 style="margin-top:18px;">Pending Anti-Nuke Auto-Unlocks</h3>
       <p class="section-description">Scheduled automatic unlock jobs waiting to run.</p>
+      ${pendingAntiNukeJobRows.length > 0 && canAccessAdminFeatures ? `
+      <form method="post" action="/guild/${guildId}/anti-nuke/unlock-jobs/cancel-all" style="margin-bottom:8px;" onsubmit="return confirm('Cancel all pending anti-nuke auto-unlock jobs?')">
+        <button type="submit" style="background:#d9534f;">Cancel All Pending Auto-Unlock Jobs</button>
+      </form>
+      ` : ""}
       ${pendingAntiNukeJobRows.length > 0 ? `
       <table class="enhanced-table">
         <tr><th>Job ID</th><th>ETA</th><th>Run At</th><th>Created</th><th>Permissions</th><th>Actions</th></tr>
@@ -5780,6 +5785,49 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke unlock-job cancel error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/anti-nuke/unlock-jobs/cancel-all", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const now = Date.now();
+      const pendingCountRow = await get(
+        `SELECT COUNT(*)::int AS count
+         FROM anti_nuke_unlock_jobs
+         WHERE guild_id=? AND executed_at IS NULL`,
+        [guildId]
+      );
+      const pendingCount = Number(pendingCountRow?.count || 0);
+      if (pendingCount <= 0) {
+        return res.redirect(getModuleRedirect(guildId, 'moderation'));
+      }
+
+      await run(
+        `UPDATE anti_nuke_unlock_jobs
+         SET executed_at=?
+         WHERE guild_id=? AND executed_at IS NULL`,
+        [now, guildId]
+      );
+
+      await run(
+        `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          guildId,
+          "auto_unlock_canceled",
+          null,
+          null,
+          req.user?.id || null,
+          JSON.stringify({ cancel_all: true, canceled_count: pendingCount }),
+          now
+        ]
+      ).catch(() => {});
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("anti-nuke unlock-job cancel-all error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

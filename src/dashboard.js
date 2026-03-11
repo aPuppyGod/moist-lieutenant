@@ -4497,17 +4497,44 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <label style="margin-left:24px;">Messages in 10s:
           <input type="number" name="spam_threshold" value="${automodSettings?.spam_messages || 5}" min="2" max="20" style="width:80px;" />
         </label>
+        <label style="margin-left:24px;">Action:
+          <select name="spam_action" style="width:120px;">
+            <option value="delete" ${automodSettings?.spam_action === "delete" ? "selected" : ""}>Delete</option>
+            <option value="warn" ${automodSettings?.spam_action === "warn" ? "selected" : ""}>Warn</option>
+            <option value="timeout" ${automodSettings?.spam_action === "timeout" ? "selected" : ""}>Timeout 10m</option>
+          </select>
+        </label>
         <br/><br/>
 
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="invites_enabled" ${automodSettings?.invites_enabled ? "checked" : ""} />
           <span>Block Discord Invite Links</span>
         </label>
+        <label style="margin-left:24px;">Allowed invite codes (comma-separated)
+          <input name="invites_whitelist" value="${escapeHtml(automodSettings?.invites_whitelist || "")}" style="width:320px;" placeholder="mycode, partnercode" />
+        </label>
+        <label style="margin-left:24px;">Action:
+          <select name="invites_action" style="width:120px;">
+            <option value="delete" ${automodSettings?.invites_action === "delete" ? "selected" : ""}>Delete</option>
+            <option value="warn" ${automodSettings?.invites_action === "warn" ? "selected" : ""}>Warn</option>
+            <option value="timeout" ${automodSettings?.invites_action === "timeout" ? "selected" : ""}>Timeout 10m</option>
+          </select>
+        </label>
         <br/>
 
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="links_enabled" ${automodSettings?.links_enabled ? "checked" : ""} />
           <span>Block External Links</span>
+        </label>
+        <label style="margin-left:24px;">Allowed domains (comma-separated)
+          <input name="links_whitelist" value="${escapeHtml(automodSettings?.links_whitelist || "")}" style="width:320px;" placeholder="example.com, docs.example.com" />
+        </label>
+        <label style="margin-left:24px;">Action:
+          <select name="links_action" style="width:120px;">
+            <option value="delete" ${automodSettings?.links_action === "delete" ? "selected" : ""}>Delete</option>
+            <option value="warn" ${automodSettings?.links_action === "warn" ? "selected" : ""}>Warn</option>
+            <option value="timeout" ${automodSettings?.links_action === "timeout" ? "selected" : ""}>Timeout 10m</option>
+          </select>
         </label>
         <br/>
 
@@ -4518,6 +4545,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <label style="margin-left:24px;">Caps % threshold:
           <input type="number" name="caps_threshold" value="${automodSettings?.caps_percentage || 70}" min="50" max="100" style="width:80px;" />
         </label>
+        <label style="margin-left:24px;">Action:
+          <select name="caps_action" style="width:120px;">
+            <option value="delete" ${automodSettings?.caps_action === "delete" ? "selected" : ""}>Delete</option>
+            <option value="warn" ${automodSettings?.caps_action === "warn" ? "selected" : ""}>Warn</option>
+            <option value="timeout" ${automodSettings?.caps_action === "timeout" ? "selected" : ""}>Timeout 10m</option>
+          </select>
+        </label>
         <br/><br/>
 
         <label style="display:flex;align-items:center;gap:8px;">
@@ -4527,11 +4561,28 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <label style="margin-left:24px;">Max mentions:
           <input type="number" name="mentions_threshold" value="${automodSettings?.mentions_max || 5}" min="2" max="20" style="width:80px;" />
         </label>
+        <label style="margin-left:24px;">Action:
+          <select name="mentions_action" style="width:120px;">
+            <option value="delete" ${automodSettings?.mentions_action === "delete" ? "selected" : ""}>Delete</option>
+            <option value="warn" ${automodSettings?.mentions_action === "warn" ? "selected" : ""}>Warn</option>
+            <option value="timeout" ${automodSettings?.mentions_action === "timeout" ? "selected" : ""}>Timeout 10m</option>
+          </select>
+        </label>
         <br/><br/>
 
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="attachments_enabled" ${automodSettings?.attach_spam_enabled ? "checked" : ""} />
-          <span>Block All Attachments</span>
+          <span>Limit Attachments</span>
+        </label>
+        <label style="margin-left:24px;">Max attachments per message:
+          <input type="number" name="attachments_max" value="${automodSettings?.attach_spam_max || 1}" min="1" max="10" style="width:80px;" />
+        </label>
+        <label style="margin-left:24px;">Action:
+          <select name="attachments_action" style="width:120px;">
+            <option value="delete" ${automodSettings?.attach_spam_action === "delete" ? "selected" : ""}>Delete</option>
+            <option value="warn" ${automodSettings?.attach_spam_action === "warn" ? "selected" : ""}>Warn</option>
+            <option value="timeout" ${automodSettings?.attach_spam_action === "timeout" ? "selected" : ""}>Timeout 10m</option>
+          </select>
         </label>
         <br/><br/>
 
@@ -6476,35 +6527,85 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   app.post("/guild/:guildId/automod-settings", requireGuildAdmin, async (req, res) => {
     try {
       const guildId = req.params.guildId;
+      const allowedActions = new Set(["delete", "warn", "timeout"]);
       const spamEnabled = req.body.spam_enabled === "on" ? 1 : 0;
-      const spamMessages = parseInt(req.body.spam_threshold || "5", 10);
+      const spamMessagesRaw = parseInt(req.body.spam_threshold || "5", 10);
+      const spamMessages = Number.isInteger(spamMessagesRaw) ? Math.min(20, Math.max(2, spamMessagesRaw)) : 5;
+      const spamActionRaw = String(req.body.spam_action || "warn").trim().toLowerCase();
+      const spamAction = allowedActions.has(spamActionRaw) ? spamActionRaw : "warn";
       const invitesEnabled = req.body.invites_enabled === "on" ? 1 : 0;
+      const invitesActionRaw = String(req.body.invites_action || "delete").trim().toLowerCase();
+      const invitesAction = allowedActions.has(invitesActionRaw) ? invitesActionRaw : "delete";
+      const invitesWhitelist = String(req.body.invites_whitelist || "").trim().slice(0, 500) || null;
       const linksEnabled = req.body.links_enabled === "on" ? 1 : 0;
+      const linksActionRaw = String(req.body.links_action || "delete").trim().toLowerCase();
+      const linksAction = allowedActions.has(linksActionRaw) ? linksActionRaw : "delete";
+      const linksWhitelist = String(req.body.links_whitelist || "").trim().slice(0, 500) || null;
       const capsEnabled = req.body.caps_enabled === "on" ? 1 : 0;
-      const capsPercentage = parseInt(req.body.caps_threshold || "70", 10);
+      const capsPercentageRaw = parseInt(req.body.caps_threshold || "70", 10);
+      const capsPercentage = Number.isInteger(capsPercentageRaw) ? Math.min(100, Math.max(50, capsPercentageRaw)) : 70;
+      const capsActionRaw = String(req.body.caps_action || "delete").trim().toLowerCase();
+      const capsAction = allowedActions.has(capsActionRaw) ? capsActionRaw : "delete";
       const mentionsEnabled = req.body.mentions_enabled === "on" ? 1 : 0;
-      const mentionsMax = parseInt(req.body.mentions_threshold || "5", 10);
+      const mentionsMaxRaw = parseInt(req.body.mentions_threshold || "5", 10);
+      const mentionsMax = Number.isInteger(mentionsMaxRaw) ? Math.min(20, Math.max(2, mentionsMaxRaw)) : 5;
+      const mentionsActionRaw = String(req.body.mentions_action || "warn").trim().toLowerCase();
+      const mentionsAction = allowedActions.has(mentionsActionRaw) ? mentionsActionRaw : "warn";
       const attachSpamEnabled = req.body.attachments_enabled === "on" ? 1 : 0;
+      const attachSpamMaxRaw = parseInt(req.body.attachments_max || "1", 10);
+      const attachSpamMax = Number.isInteger(attachSpamMaxRaw) ? Math.min(10, Math.max(1, attachSpamMaxRaw)) : 1;
+      const attachSpamActionRaw = String(req.body.attachments_action || "warn").trim().toLowerCase();
+      const attachSpamAction = allowedActions.has(attachSpamActionRaw) ? attachSpamActionRaw : "warn";
 
       await run(`
         INSERT INTO automod_settings (
-          guild_id, spam_enabled, spam_messages, invites_enabled, links_enabled,
-          caps_enabled, caps_percentage, mentions_enabled, mentions_max, attach_spam_enabled
+          guild_id, spam_enabled, spam_messages, spam_action,
+          invites_enabled, invites_action, invites_whitelist,
+          links_enabled, links_action, links_whitelist,
+          caps_enabled, caps_percentage, caps_action,
+          mentions_enabled, mentions_max, mentions_action,
+          attach_spam_enabled, attach_spam_max, attach_spam_action
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
           spam_enabled=excluded.spam_enabled,
           spam_messages=excluded.spam_messages,
+          spam_action=excluded.spam_action,
           invites_enabled=excluded.invites_enabled,
+          invites_action=excluded.invites_action,
+          invites_whitelist=excluded.invites_whitelist,
           links_enabled=excluded.links_enabled,
+          links_action=excluded.links_action,
+          links_whitelist=excluded.links_whitelist,
           caps_enabled=excluded.caps_enabled,
           caps_percentage=excluded.caps_percentage,
+          caps_action=excluded.caps_action,
           mentions_enabled=excluded.mentions_enabled,
           mentions_max=excluded.mentions_max,
-          attach_spam_enabled=excluded.attach_spam_enabled
+          mentions_action=excluded.mentions_action,
+          attach_spam_enabled=excluded.attach_spam_enabled,
+          attach_spam_max=excluded.attach_spam_max,
+          attach_spam_action=excluded.attach_spam_action
       `, [
-        guildId, spamEnabled, spamMessages, invitesEnabled, linksEnabled,
-        capsEnabled, capsPercentage, mentionsEnabled, mentionsMax, attachSpamEnabled
+        guildId,
+        spamEnabled,
+        spamMessages,
+        spamAction,
+        invitesEnabled,
+        invitesAction,
+        invitesWhitelist,
+        linksEnabled,
+        linksAction,
+        linksWhitelist,
+        capsEnabled,
+        capsPercentage,
+        capsAction,
+        mentionsEnabled,
+        mentionsMax,
+        mentionsAction,
+        attachSpamEnabled,
+        attachSpamMax,
+        attachSpamAction
       ]);
 
       return res.redirect(getModuleRedirect(guildId, 'moderation'));

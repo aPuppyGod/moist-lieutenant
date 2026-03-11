@@ -1228,11 +1228,28 @@ client.on(Events.MessageCreate, async (message) => {
   // ─── Auto-Moderation ───
   const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [message.guild.id]);
   if (automodSettings) {
+    if (await canUseModeratorActions(message.member)) {
+      // Skip automod for trusted moderators/admins.
+    } else {
     let violationReason = null;
+    let violationAction = "delete";
+
+    const parseCsvSet = (value) => new Set(
+      String(value || "")
+        .split(",")
+        .map((v) => v.trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const normalizeAction = (value, fallback) => {
+      const action = String(value || fallback).trim().toLowerCase();
+      if (["delete", "warn", "timeout"].includes(action)) return action;
+      return fallback;
+    };
 
     // Check spam (repeated messages)
     if (automodSettings.spam_enabled) {
-      const spamThreshold = automodSettings.spam_threshold || 5;
+      const spamThreshold = Math.max(2, Number(automodSettings.spam_messages || 5));
       const recentMessages = [...message.channel.messages.cache.values()]
         .filter(m => m.author.id === message.author.id && Date.now() - m.createdTimestamp < 10000)
         .slice(0, 20);
@@ -1241,62 +1258,135 @@ client.on(Events.MessageCreate, async (message) => {
         const sameContent = recentMessages.filter(m => m.content === message.content).length;
         if (sameContent >= 3) {
           violationReason = "spam (repeated messages)";
+          violationAction = normalizeAction(automodSettings.spam_action, "warn");
         }
       }
     }
 
     // Check invite links
     if (!violationReason && automodSettings.invites_enabled) {
+      const inviteWhitelist = parseCsvSet(automodSettings.invites_whitelist);
       const inviteRegex = /discord\.gg\/[a-zA-Z0-9]+|discord\.com\/invite\/[a-zA-Z0-9]+|discordapp\.com\/invite\/[a-zA-Z0-9]+/gi;
-      if (inviteRegex.test(message.content)) {
+      const inviteMatches = [...message.content.matchAll(inviteRegex)];
+      const hasBlockedInvite = inviteMatches.some((m) => {
+        const raw = String(m[0] || "").toLowerCase();
+        const code = raw.split("/").pop() || "";
+        return !inviteWhitelist.has(code);
+      });
+      if (hasBlockedInvite) {
         violationReason = "Discord invite link";
+        violationAction = normalizeAction(automodSettings.invites_action, "delete");
       }
     }
 
     // Check external links
     if (!violationReason && automodSettings.links_enabled) {
+      const whitelistDomains = parseCsvSet(automodSettings.links_whitelist);
       const linkRegex = /https?:\/\/[^\s]+/gi;
-      if (linkRegex.test(message.content)) {
+      const links = message.content.match(linkRegex) || [];
+      const hasBlockedLink = links.some((url) => {
+        try {
+          const hostname = new URL(url).hostname.replace(/^www\./i, "").toLowerCase();
+          if (!whitelistDomains.size) return true;
+          for (const domain of whitelistDomains) {
+            if (hostname === domain || hostname.endsWith(`.${domain}`)) return false;
+          }
+          return true;
+        } catch {
+          return true;
+        }
+      });
+      if (hasBlockedLink) {
         violationReason = "external link";
+        violationAction = normalizeAction(automodSettings.links_action, "delete");
       }
     }
 
     // Check excessive caps
     if (!violationReason && automodSettings.caps_enabled) {
-      const capsThreshold = automodSettings.caps_threshold || 70;
+      const capsThreshold = Math.max(50, Number(automodSettings.caps_percentage || 70));
       if (message.content.length > 10) {
         const upperCount = (message.content.match(/[A-Z]/g) || []).length;
         const letterCount = (message.content.match(/[A-Za-z]/g) || []).length;
         if (letterCount > 0 && (upperCount / letterCount) * 100 > capsThreshold) {
           violationReason = "excessive caps";
+          violationAction = normalizeAction(automodSettings.caps_action, "delete");
         }
       }
     }
 
     // Check excessive mentions
     if (!violationReason && automodSettings.mentions_enabled) {
-      const mentionThreshold = automodSettings.mentions_threshold || 5;
+      const mentionThreshold = Math.max(2, Number(automodSettings.mentions_max || 5));
       const mentionCount = (message.mentions.users.size || 0) + (message.mentions.roles.size || 0);
       if (mentionCount >= mentionThreshold) {
         violationReason = "excessive mentions";
+        violationAction = normalizeAction(automodSettings.mentions_action, "warn");
       }
     }
 
     // Check attachments
-    if (!violationReason && automodSettings.attachments_enabled) {
-      if (message.attachments.size > 0) {
+    if (!violationReason && automodSettings.attach_spam_enabled) {
+      const attachMax = Math.max(1, Number(automodSettings.attach_spam_max || 1));
+      if (message.attachments.size > attachMax) {
         violationReason = "attachments not allowed";
+        violationAction = normalizeAction(automodSettings.attach_spam_action, "warn");
       }
     }
 
-    // If violation found, delete message and warn user
+    // If violation found, enforce selected action.
     if (violationReason) {
       try {
         await message.delete();
+        const actorId = message.client?.user?.id || BOT_MANAGER_ID;
+
+        if (violationAction === "warn") {
+          await run(
+            `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
+             VALUES (?, ?, ?, ?, ?)`,
+            [message.guild.id, message.author.id, actorId, `[AutoMod] ${violationReason}`, Date.now()]
+          ).catch(() => {});
+        }
+
+        if (violationAction === "timeout") {
+          const botMember = message.guild.members.me || await message.guild.members.fetchMe().catch(() => null);
+          if (botMember && message.member && canModerateMember(botMember, message.member)) {
+            await message.member.timeout(10 * 60 * 1000, `[AutoMod] ${violationReason}`).catch(() => {});
+          }
+        }
+
+        await run(
+          `INSERT INTO mod_logs (guild_id, user_id, moderator_id, action, reason, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            message.guild.id,
+            message.author.id,
+            actorId,
+            `automod_${violationAction}`,
+            `[AutoMod] ${violationReason}`,
+            `channel:${message.channel.id}`,
+            Date.now()
+          ]
+        ).catch(() => {});
+
+        await sendGuildLog(message.guild, {
+          eventKey: "message_delete",
+          actorUserId: actorId,
+          color: LOG_THEME.warn,
+          title: "🛡️ AutoMod Action",
+          sourceChannelId: message.channel?.id,
+          description: `AutoMod enforced **${violationAction}** for ${message.author}.`,
+          fields: [
+            { name: "Reason", value: violationReason, inline: true },
+            { name: "User", value: userLabel(message.author), inline: true },
+            { name: "Channel", value: channelLabel(message.channel), inline: true }
+          ]
+        });
+
         const warningEmbed = new EmbedBuilder()
           .setColor("#ff4444")
           .setTitle("⚠️ Auto-Moderation")
-          .setDescription(`${message.author}, your message was deleted: **${violationReason}**`)
+          .setDescription(`${message.author}, your message was moderated: **${violationReason}** (action: **${violationAction}**)`)
           .setTimestamp();
         
         const warningMsg = await message.channel.send({ embeds: [warningEmbed] });
@@ -1307,6 +1397,7 @@ client.on(Events.MessageCreate, async (message) => {
       } catch (err) {
         console.error("Auto-mod deletion error:", err);
       }
+    }
     }
   }
 

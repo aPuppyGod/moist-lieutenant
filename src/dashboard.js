@@ -4609,6 +4609,17 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
               ${textChannels.map((c) => `<option value="${c.id}" ${suggestionSettings?.channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
             </select>
           </label>
+          <label>
+            <span>Review Channel (optional)</span>
+            <select name="review_channel_id">
+              <option value="">None</option>
+              ${textChannels.map((c) => `<option value="${c.id}" ${suggestionSettings?.review_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" name="require_review" ${suggestionSettings?.require_review ? "checked" : ""} />
+            <span>Require staff review before publishing</span>
+          </label>
           <button type="submit">Save Suggestions Settings</button>
         </div>
       </form>
@@ -4623,13 +4634,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             <td>${escapeHtml(s.user_id)}</td>
             <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.content)}</td>
             <td>👍 ${s.upvotes || 0} | 👎 ${s.downvotes || 0}</td>
-            <td>${s.status === "approved" ? "✅" : s.status === "denied" ? "❌" : "🟡"} ${escapeHtml(s.status)}</td>
+            <td>${s.status === "approved" ? "✅" : s.status === "denied" ? "❌" : s.status === "under_review" ? "🕵️" : "🟡"} ${escapeHtml(s.status)}</td>
             <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.staff_response || "-")}</td>
             <td>
               <form method="post" action="/guild/${guildId}/suggestions/update" style="display:inline;">
                 <input type="hidden" name="suggestion_id" value="${s.id}" />
                 <select name="status" style="padding:2px;">
                   <option value="pending" ${s.status === "pending" ? "selected" : ""}>Pending</option>
+                  <option value="under_review" ${s.status === "under_review" ? "selected" : ""}>Under Review</option>
                   <option value="approved" ${s.status === "approved" ? "selected" : ""}>Approved</option>
                   <option value="denied" ${s.status === "denied" ? "selected" : ""}>Denied</option>
                 </select>
@@ -6626,14 +6638,18 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const guildId = req.params.guildId;
       const enabled = req.body.suggestions_enabled === "on" ? 1 : 0;
       const channelId = String(req.body.channel_id || "").trim() || null;
+      const reviewChannelId = String(req.body.review_channel_id || "").trim() || null;
+      const requireReview = req.body.require_review === "on" ? 1 : 0;
 
       await run(`
-        INSERT INTO suggestion_settings (guild_id, enabled, channel_id)
-        VALUES (?, ?, ?)
+        INSERT INTO suggestion_settings (guild_id, enabled, channel_id, review_channel_id, require_review)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
           enabled=excluded.enabled,
-          channel_id=excluded.channel_id
-      `, [guildId, enabled, channelId]);
+          channel_id=excluded.channel_id,
+          review_channel_id=excluded.review_channel_id,
+          require_review=excluded.require_review
+      `, [guildId, enabled, channelId, reviewChannelId, requireReview]);
 
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
@@ -6647,14 +6663,21 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const guildId = req.params.guildId;
       const suggestionId = parseInt(req.body.suggestion_id, 10);
       const statusRaw = String(req.body.status || "pending").trim().toLowerCase();
-      const status = ["pending", "approved", "denied"].includes(statusRaw) ? statusRaw : "pending";
+      const status = ["pending", "under_review", "approved", "denied"].includes(statusRaw) ? statusRaw : "pending";
       const staffResponse = String(req.body.staff_response || "").trim().slice(0, 300) || null;
 
       if (!suggestionId) {
         return res.status(400).send("Suggestion ID required.");
       }
 
-      // Update status in database
+      const suggestion = await get(`SELECT * FROM suggestions WHERE id=? AND guild_id=?`, [suggestionId, guildId]);
+      if (!suggestion) {
+        return res.status(404).send("Suggestion not found.");
+      }
+
+      const settings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guildId]);
+
+      // Update status/note in database first.
       await run(
         `UPDATE suggestions
          SET status=?, staff_response=?
@@ -6662,41 +6685,117 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         [status, staffResponse, suggestionId, guildId]
       );
 
-      // Update the embed in Discord
-      const suggestion = await get(`SELECT * FROM suggestions WHERE id=?`, [suggestionId]);
-      if (suggestion && suggestion.message_id) {
-        const guild = await client.guilds.fetch(guildId).catch(() => null);
-        if (guild) {
-          const settings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [guildId]);
-          if (settings && settings.channel_id) {
-            const channel = guild.channels.cache.get(settings.channel_id);
-            if (channel && channel.isTextBased()) {
-              const message = await channel.messages.fetch(suggestion.message_id).catch(() => null);
-              if (message && message.embeds.length > 0) {
-                const embed = EmbedBuilder.from(message.embeds[0]);
-                const statusText = status === "approved" ? "✅ Approved" : status === "denied" ? "❌ Denied" : "🟡 Pending";
-                const statusColor = status === "approved" ? "#7bc96f" : status === "denied" ? "#ff4444" : "#ffaa00";
-                embed.setColor(statusColor);
-                embed.data.fields = embed.data.fields || [];
-                const statusFieldIndex = embed.data.fields.findIndex(f => f.name === "Status");
-                if (statusFieldIndex >= 0) {
-                  embed.data.fields[statusFieldIndex].value = statusText;
-                } else {
-                  embed.addFields({ name: "Status", value: statusText, inline: true });
-                }
-                const responseFieldIndex = embed.data.fields.findIndex(f => f.name === "Staff Response");
-                if (staffResponse) {
-                  if (responseFieldIndex >= 0) {
-                    embed.data.fields[responseFieldIndex].value = staffResponse;
-                  } else {
-                    embed.addFields({ name: "Staff Response", value: staffResponse, inline: false });
-                  }
-                } else if (responseFieldIndex >= 0) {
-                  embed.data.fields.splice(responseFieldIndex, 1);
-                }
-                await message.edit({ embeds: [embed] }).catch(() => {});
-              }
+      const guild = await client.guilds.fetch(guildId).catch(() => null);
+      if (guild && settings?.channel_id && status === "approved" && !suggestion.message_id) {
+        const publishChannel = guild.channels.cache.get(settings.channel_id) || await guild.channels.fetch(settings.channel_id).catch(() => null);
+        if (publishChannel && publishChannel.isTextBased()) {
+          const statusText = "✅ Approved";
+          const embed = new EmbedBuilder()
+            .setColor("#7bc96f")
+            .setAuthor({ name: suggestion.user_id, iconURL: guild.iconURL() || undefined })
+            .setTitle(`💡 Suggestion #${suggestion.id}`)
+            .setDescription(suggestion.content)
+            .addFields({ name: "Status", value: statusText, inline: true })
+            .setFooter({ text: `👍 ${suggestion.upvotes || 0} | 👎 ${suggestion.downvotes || 0}` })
+            .setTimestamp(Number(suggestion.created_at || Date.now()));
+
+          if (staffResponse) {
+            embed.addFields({ name: "Staff Response", value: staffResponse, inline: false });
+          }
+
+          const publishedMsg = await publishChannel.send({ embeds: [embed] }).catch(() => null);
+          if (publishedMsg) {
+            await publishedMsg.react("👍").catch(() => {});
+            await publishedMsg.react("👎").catch(() => {});
+            await run(
+              `UPDATE suggestions
+               SET message_id=?, published_message_id=?, upvotes=0, downvotes=0
+               WHERE id=? AND guild_id=?`,
+              [publishedMsg.id, publishedMsg.id, suggestionId, guildId]
+            ).catch(() => {});
+          }
+        }
+      }
+
+      // Update review queue message (if any)
+      if (guild && suggestion.review_message_id) {
+        const reviewChannelId = settings?.review_channel_id || settings?.channel_id || null;
+        const reviewChannel = reviewChannelId
+          ? (guild.channels.cache.get(reviewChannelId) || await guild.channels.fetch(reviewChannelId).catch(() => null))
+          : null;
+        if (reviewChannel && reviewChannel.isTextBased()) {
+          const reviewMsg = await reviewChannel.messages.fetch(suggestion.review_message_id).catch(() => null);
+          if (reviewMsg && reviewMsg.embeds.length > 0) {
+            const statusText = status === "approved"
+              ? "✅ Approved"
+              : status === "denied"
+                ? "❌ Denied"
+                : status === "under_review"
+                  ? "🕵️ Under Review"
+                  : "🟡 Pending";
+            const statusColor = status === "approved"
+              ? "#7bc96f"
+              : status === "denied"
+                ? "#ff4444"
+                : status === "under_review"
+                  ? "#5bc0de"
+                  : "#ffaa00";
+            const embed = EmbedBuilder.from(reviewMsg.embeds[0]);
+            embed.setColor(statusColor);
+            embed.data.fields = embed.data.fields || [];
+            const statusFieldIndex = embed.data.fields.findIndex((f) => f.name === "Status");
+            if (statusFieldIndex >= 0) {
+              embed.data.fields[statusFieldIndex].value = statusText;
+            } else {
+              embed.addFields({ name: "Status", value: statusText, inline: true });
             }
+            const responseFieldIndex = embed.data.fields.findIndex((f) => f.name === "Staff Response");
+            if (staffResponse) {
+              if (responseFieldIndex >= 0) embed.data.fields[responseFieldIndex].value = staffResponse;
+              else embed.addFields({ name: "Staff Response", value: staffResponse, inline: false });
+            } else if (responseFieldIndex >= 0) {
+              embed.data.fields.splice(responseFieldIndex, 1);
+            }
+            await reviewMsg.edit({ embeds: [embed] }).catch(() => {});
+          }
+        }
+      }
+
+      // Update published suggestion message (if already published)
+      const refreshed = await get(`SELECT * FROM suggestions WHERE id=? AND guild_id=?`, [suggestionId, guildId]);
+      if (guild && settings?.channel_id && refreshed?.message_id) {
+        const publishChannel = guild.channels.cache.get(settings.channel_id) || await guild.channels.fetch(settings.channel_id).catch(() => null);
+        if (publishChannel && publishChannel.isTextBased()) {
+          const message = await publishChannel.messages.fetch(refreshed.message_id).catch(() => null);
+          if (message && message.embeds.length > 0) {
+            const statusText = status === "approved"
+              ? "✅ Approved"
+              : status === "denied"
+                ? "❌ Denied"
+                : status === "under_review"
+                  ? "🕵️ Under Review"
+                  : "🟡 Pending";
+            const statusColor = status === "approved"
+              ? "#7bc96f"
+              : status === "denied"
+                ? "#ff4444"
+                : status === "under_review"
+                  ? "#5bc0de"
+                  : "#ffaa00";
+            const embed = EmbedBuilder.from(message.embeds[0]);
+            embed.setColor(statusColor);
+            embed.data.fields = embed.data.fields || [];
+            const statusFieldIndex = embed.data.fields.findIndex((f) => f.name === "Status");
+            if (statusFieldIndex >= 0) embed.data.fields[statusFieldIndex].value = statusText;
+            else embed.addFields({ name: "Status", value: statusText, inline: true });
+            const responseFieldIndex = embed.data.fields.findIndex((f) => f.name === "Staff Response");
+            if (staffResponse) {
+              if (responseFieldIndex >= 0) embed.data.fields[responseFieldIndex].value = staffResponse;
+              else embed.addFields({ name: "Staff Response", value: staffResponse, inline: false });
+            } else if (responseFieldIndex >= 0) {
+              embed.data.fields.splice(responseFieldIndex, 1);
+            }
+            await message.edit({ embeds: [embed] }).catch(() => {});
           }
         }
       }

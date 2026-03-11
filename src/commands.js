@@ -1023,13 +1023,22 @@ async function cmdSuggest(message, args) {
     return;
   }
 
+  const requireReview = Number(settings.require_review || 0) === 1;
+  const reviewChannel = settings.review_channel_id
+    ? guild.channels.cache.get(settings.review_channel_id)
+    : null;
+  const targetChannel = (requireReview && reviewChannel && reviewChannel.isTextBased())
+    ? reviewChannel
+    : channel;
+
   const suggestion = args.join(" ");
+  const initialStatus = requireReview ? "under_review" : "pending";
 
   // Create suggestion in database
   const result = await run(`
     INSERT INTO suggestions (guild_id, user_id, content, status)
     VALUES (?, ?, ?, ?)
-  `, [guild.id, message.author.id, suggestion, "pending"]);
+  `, [guild.id, message.author.id, suggestion, initialStatus]);
 
   const suggestionId = result.lastID;
 
@@ -1039,18 +1048,20 @@ async function cmdSuggest(message, args) {
     .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
     .setTitle(`💡 Suggestion #${suggestionId}`)
     .setDescription(suggestion)
-    .addFields({ name: "Status", value: "🟡 Pending", inline: true })
-    .setFooter({ text: `👍 0 | 👎 0` })
+    .addFields({ name: "Status", value: requireReview ? "🕵️ Under Review" : "🟡 Pending", inline: true })
+    .setFooter({ text: requireReview ? "Awaiting staff review" : `👍 0 | 👎 0` })
     .setTimestamp();
 
-  const suggestionMsg = await channel.send({ embeds: [embed] });
+  const suggestionMsg = await targetChannel.send({ embeds: [embed] });
 
-  // React with voting emojis
-  await suggestionMsg.react("👍");
-  await suggestionMsg.react("👎");
-
-  // Update database with message ID
-  await run(`UPDATE suggestions SET message_id=?, upvotes=0, downvotes=0 WHERE id=?`, [suggestionMsg.id, suggestionId]);
+  if (requireReview) {
+    await run(`UPDATE suggestions SET review_message_id=? WHERE id=?`, [suggestionMsg.id, suggestionId]);
+  } else {
+    // React with voting emojis only for directly published suggestions.
+    await suggestionMsg.react("👍").catch(() => {});
+    await suggestionMsg.react("👎").catch(() => {});
+    await run(`UPDATE suggestions SET message_id=?, published_message_id=?, upvotes=0, downvotes=0 WHERE id=?`, [suggestionMsg.id, suggestionMsg.id, suggestionId]);
+  }
 
   await message.react("✅").catch(() => {});
 }

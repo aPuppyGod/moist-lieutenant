@@ -662,6 +662,8 @@ async function initDb() {
       content TEXT NOT NULL,
       status TEXT DEFAULT 'pending',
       message_id TEXT DEFAULT NULL,
+      review_message_id TEXT DEFAULT NULL,
+      published_message_id TEXT DEFAULT NULL,
       upvotes INTEGER DEFAULT 0,
       downvotes INTEGER DEFAULT 0,
       staff_response TEXT DEFAULT NULL,
@@ -926,6 +928,10 @@ async function initDb() {
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_cooldown INTEGER DEFAULT 3600`);
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS economy_prefix TEXT DEFAULT '$'`);
+    await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS review_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS require_review INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS review_message_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS published_message_id TEXT DEFAULT NULL`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

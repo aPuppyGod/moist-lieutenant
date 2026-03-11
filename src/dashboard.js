@@ -4190,6 +4190,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             <input type="number" name="threshold" value="${starboardSettings?.threshold || 5}" min="1" max="50" style="max-width:120px;" />
           </label>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;">
+          <input type="checkbox" name="self_star" ${starboardSettings?.self_star ? "checked" : ""} />
+          <span>Allow users to star their own messages</span>
+        </label>
         
         <button type="submit">Save Starboard Settings</button>
       </form>
@@ -6711,16 +6715,18 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const channelId = String(req.body.channel_id || "").trim() || null;
       const emoji = String(req.body.emoji || "⭐").trim();
       const threshold = parseInt(req.body.threshold || "5", 10);
+      const selfStar = req.body.self_star === "on" ? 1 : 0;
 
       await run(`
-        INSERT INTO starboard_settings (guild_id, enabled, channel_id, emoji, threshold)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO starboard_settings (guild_id, enabled, channel_id, emoji, threshold, self_star)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
           enabled=excluded.enabled,
           channel_id=excluded.channel_id,
           emoji=excluded.emoji,
-          threshold=excluded.threshold
-      `, [guildId, enabled, channelId, emoji, threshold]);
+          threshold=excluded.threshold,
+          self_star=excluded.self_star
+      `, [guildId, enabled, channelId, emoji, threshold, selfStar]);
 
       return res.redirect(getModuleRedirect(guildId, 'overview'));
     } catch (e) {

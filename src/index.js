@@ -1507,6 +1507,9 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
   if (reaction.emoji.name === "⭐") {
     const starboardSettings = await get(`SELECT * FROM starboard_settings WHERE guild_id=?`, [msg.guild.id]);
     if (starboardSettings && starboardSettings.enabled) {
+      if (!Number(starboardSettings.self_star || 0) && msg.author?.id === user.id) {
+        return;
+      }
       const starCount = reaction.count || 0;
       const threshold = starboardSettings.threshold || 5;
       

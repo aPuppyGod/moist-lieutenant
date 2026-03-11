@@ -305,6 +305,7 @@ async function cmdPublicCommands(message) {
     "`!remindme <duration> <message>` - Set a reminder",
     "`!reminders [limit]` - List your pending reminders",
     "`!remindcancel <id>` - Cancel one reminder",
+    "`!remindclear` - Cancel all your pending reminders",
     "`!birthday <MM/DD>` - Register your birthday",
     economyCommands
   ].filter(Boolean));
@@ -3207,6 +3208,30 @@ async function cmdRemindCancel(message, args) {
   await message.reply(`✅ Canceled reminder #${reminderId}${preview ? `: "${preview}"` : ""}`).catch(() => {});
 }
 
+async function cmdRemindClear(message) {
+  const pending = await get(
+    `SELECT COUNT(*) AS count
+     FROM reminders
+     WHERE user_id=? AND guild_id=? AND completed=0`,
+    [message.author.id, message.guild.id]
+  );
+
+  const count = Number(pending?.count || 0);
+  if (count <= 0) {
+    await message.reply("You have no pending reminders to clear.").catch(() => {});
+    return;
+  }
+
+  await run(
+    `UPDATE reminders
+     SET completed=1
+     WHERE user_id=? AND guild_id=? AND completed=0`,
+    [message.author.id, message.guild.id]
+  );
+
+  await message.reply(`✅ Cleared ${count} pending reminder${count === 1 ? "" : "s"}.`).catch(() => {});
+}
+
 // ─────────────────────────────────────────────────────
 // Birthday Commands
 // ─────────────────────────────────────────────────────
@@ -3532,6 +3557,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "remindclear" || cmd === "clearreminders") {
+    await cmdRemindClear(message);
+    return true;
+  }
+
   if (cmd === "birthday" || cmd === "bday") {
     await cmdBirthday(message, args);
     return true;
@@ -3662,6 +3692,7 @@ function buildSlashCommands() {
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
+    { name: "remindclear", description: "Cancel all your pending reminders" },
     // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },

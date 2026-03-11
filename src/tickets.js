@@ -83,6 +83,55 @@ async function generateTranscript(channel) {
   return Buffer.from(transcriptText, 'utf-8');
 }
 
+async function saveTicketTranscript(guild, channel, ticket, actorUser) {
+  const settings = await getTicketSettings(guild.id);
+  if (!settings.ticket_transcript_channel_id) {
+    return { ok: false, reason: "Transcript channel not configured." };
+  }
+
+  const transcriptChannel = guild.channels.cache.get(settings.ticket_transcript_channel_id)
+    || await guild.channels.fetch(settings.ticket_transcript_channel_id).catch(() => null);
+
+  if (!transcriptChannel || !transcriptChannel.isTextBased || !transcriptChannel.isTextBased()) {
+    return { ok: false, reason: "Transcript channel not configured or not accessible." };
+  }
+
+  const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
+  const transcriptBuffer = await generateTranscript(channel);
+  const attachment = new AttachmentBuilder(transcriptBuffer, { name: `ticket-${channel.name}-${Date.now()}.txt` });
+
+  const transcriptEmbed = new EmbedBuilder()
+    .setColor(0x8b7355)
+    .setTitle("📜 Ticket Transcript")
+    .addFields(
+      { name: "Ticket", value: `#${channel.name}`, inline: true },
+      { name: "Opened By", value: opener ? `${opener.user.tag}` : `Unknown (${ticket.opener_id})`, inline: true },
+      { name: "Saved By", value: actorUser ? `${actorUser.tag}` : "System", inline: true }
+    )
+    .setTimestamp(new Date());
+
+  await transcriptChannel.send({
+    embeds: [transcriptEmbed],
+    files: [attachment]
+  });
+
+  const logEmbed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle("📜 Ticket Transcript Saved")
+    .addFields(
+      { name: "Ticket", value: `#${channel.name}`, inline: true },
+      {
+        name: "Saved By",
+        value: actorUser ? `${actorUser.tag} (${actorUser.id})` : "System",
+        inline: true
+      }
+    )
+    .setTimestamp(new Date());
+
+  await sendTicketLog(guild, logEmbed);
+  return { ok: true };
+}
+
 function cleanPrefix(prefix) {
   const value = String(prefix || "ticket").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 16);
   return value || "ticket";
@@ -287,6 +336,25 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
   
   await sendTicketLog(guild, logEmbed);
 
+  if (settings.save_transcript) {
+    await saveTicketTranscript(guild, channel, ticket, closedBy?.user || null).catch(() => {});
+  }
+
+  if (settings.delete_on_close) {
+    await channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor(0x8b7355)
+          .setTitle("Ticket Closed")
+          .setDescription("This ticket has been closed and will now be deleted.")
+          .setTimestamp(new Date())
+      ]
+    }).catch(() => {});
+
+    await channel.delete("Ticket closed with auto-delete enabled").catch(() => {});
+    return { ok: true, deleted: true };
+  }
+
   // Rename and lock the channel (no automatic deletion)
   {
     const safeName = String(channel.name || "ticket").replace(/^closed-/, "");
@@ -358,7 +426,7 @@ async function handleTicketInteraction(interaction) {
       await interaction.reply({ content: `❌ ${closed.reason}`, ephemeral: true }).catch(() => {});
       return true;
     }
-    await interaction.reply({ content: "✅ Ticket closed.", ephemeral: true }).catch(() => {});
+    await interaction.reply({ content: closed.deleted ? "✅ Ticket closed and deleted." : "✅ Ticket closed.", ephemeral: true }).catch(() => {});
     return true;
   }
 
@@ -378,48 +446,16 @@ async function handleTicketInteraction(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const transcriptBuffer = await generateTranscript(channel);
-      const attachment = new AttachmentBuilder(transcriptBuffer, { name: `ticket-${channel.name}-${Date.now()}.txt` });
 
-      if (settings.ticket_transcript_channel_id) {
-        const transcriptChannel = guild.channels.cache.get(settings.ticket_transcript_channel_id)
-          || await guild.channels.fetch(settings.ticket_transcript_channel_id).catch(() => null);
         
-        if (transcriptChannel && transcriptChannel.isTextBased && transcriptChannel.isTextBased()) {
-          const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
-          const transcriptEmbed = new EmbedBuilder()
-            .setColor(0x8b7355)
-            .setTitle("📜 Ticket Transcript")
-            .addFields(
-              { name: "Ticket", value: `#${channel.name}`, inline: true },
-              { name: "Opened By", value: opener ? `${opener.user.tag}` : `Unknown (${ticket.opener_id})`, inline: true },
-              { name: "Saved By", value: `${interaction.user.tag}`, inline: true }
-            )
-            .setTimestamp(new Date());
 
-          await transcriptChannel.send({
-            embeds: [transcriptEmbed],
-            files: [attachment],
-          }).catch(() => {});
           
-          // Log transcript save
-          const logEmbed = new EmbedBuilder()
-            .setColor(0x7bc96f)
-            .setTitle("📜 Ticket Transcript Saved")
-            .addFields(
-              { name: "Ticket", value: `#${channel.name}`, inline: true },
-              { name: "Saved By", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true }
-            )
-            .setTimestamp(new Date());
-          await sendTicketLog(guild, logEmbed);
-          
-          await interaction.editReply({ content: "✅ Transcript saved to transcript channel." });
-        } else {
-          await interaction.editReply({ content: "❌ Transcript channel not configured or not accessible." });
-        }
-      } else {
-        await interaction.editReply({ content: "❌ Transcript channel not configured." });
+      const saved = await saveTicketTranscript(guild, channel, ticket, interaction.user);
+      if (!saved.ok) {
+        await interaction.editReply({ content: `❌ ${saved.reason}` });
+        return true;
       }
+      await interaction.editReply({ content: "✅ Transcript saved to transcript channel." });
     } catch (err) {
       console.error("Failed to save transcript:", err);
       await interaction.editReply({ content: "❌ Failed to generate transcript." });

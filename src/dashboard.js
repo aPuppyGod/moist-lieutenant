@@ -5231,6 +5231,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <button type="submit">Send Ticket Panel</button>
       </form>
 
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0;">
+        <a href="/guild/${guildId}/tickets/open/export?format=json" style="display:inline-block;padding:8px 12px;border:1px solid rgba(255,255,255,0.2);border-radius:8px;text-decoration:none;">Export Open Tickets (JSON)</a>
+        <a href="/guild/${guildId}/tickets/open/export?format=csv" style="display:inline-block;padding:8px 12px;border:1px solid rgba(255,255,255,0.2);border-radius:8px;text-decoration:none;">Export Open Tickets (CSV)</a>
+      </div>
+
       <table>
         <tr><th>Open Ticket Channel</th><th>Opened By</th><th>Created</th><th>SLA Status</th><th>Actions</th></tr>
         ${openTickets.map((t) => {
@@ -7102,6 +7107,65 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'tickets'));
     } catch (e) {
       console.error("tickets close error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/tickets/open/export", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const format = String(req.query.format || "json").trim().toLowerCase() === "csv" ? "csv" : "json";
+      const rows = await getOpenTickets(guildId);
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+      const payload = rows.map((t) => ({
+        channel_id: t.channel_id || null,
+        opener_id: t.opener_id || null,
+        status: t.status || "open",
+        created_at: Number(t.created_at || 0) || null,
+        last_activity_at: Number(t.last_activity_at || 0) || null,
+        sla_reminder_sent_at: Number(t.sla_reminder_sent_at || 0) || null,
+        sla_escalated_at: Number(t.sla_escalated_at || 0) || null
+      }));
+
+      if (format === "json") {
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-open-tickets-${stamp}.json"`);
+        return res.status(200).send(JSON.stringify({
+          guild_id: guildId,
+          exported_at: Date.now(),
+          count: payload.length,
+          tickets: payload
+        }, null, 2));
+      }
+
+      const escapeCsv = (value) => {
+        if (value === null || value === undefined) return "";
+        const s = String(value);
+        if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+
+      const lines = [
+        ["channel_id", "opener_id", "status", "created_at", "last_activity_at", "sla_reminder_sent_at", "sla_escalated_at"].join(",")
+      ];
+      for (const row of payload) {
+        lines.push([
+          row.channel_id,
+          row.opener_id,
+          row.status,
+          row.created_at,
+          row.last_activity_at,
+          row.sla_reminder_sent_at,
+          row.sla_escalated_at
+        ].map(escapeCsv).join(","));
+      }
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-open-tickets-${stamp}.csv"`);
+      return res.status(200).send(lines.join("\n"));
+    } catch (e) {
+      console.error("tickets open export error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

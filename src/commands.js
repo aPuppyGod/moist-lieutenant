@@ -303,6 +303,8 @@ async function cmdPublicCommands(message) {
     "`!suggest <suggestion>` - Submit a suggestion",
     "`!giveaway <duration> <winners> <prize>` - Start a giveaway",
     "`!remindme <duration> <message>` - Set a reminder",
+    "`!reminders [limit]` - List your pending reminders",
+    "`!remindcancel <id>` - Cancel one reminder",
     "`!birthday <MM/DD>` - Register your birthday",
     economyCommands
   ].filter(Boolean));
@@ -3132,6 +3134,79 @@ async function cmdRemindMe(message, args) {
   await message.reply(`✅ I'll remind you in ${args[0]}: "${reminderText}"`).catch(() => {});
 }
 
+async function cmdReminders(message, args) {
+  const limitRaw = Number.parseInt(String(args[0] || "10"), 10);
+  const limit = Math.max(1, Math.min(25, Number.isFinite(limitRaw) ? limitRaw : 10));
+  const now = Date.now();
+
+  const reminders = await all(
+    `SELECT id, reminder_text, remind_at, created_at
+     FROM reminders
+     WHERE user_id=? AND guild_id=? AND completed=0
+     ORDER BY remind_at ASC
+     LIMIT ?`,
+    [message.author.id, message.guild.id, limit]
+  );
+
+  if (!reminders.length) {
+    await message.reply("You have no pending reminders in this server.").catch(() => {});
+    return;
+  }
+
+  const lines = reminders.map((reminder) => {
+    const dueAt = Number(reminder.remind_at || 0);
+    const dueTs = dueAt > 0 ? Math.floor(dueAt / 1000) : null;
+    const status = dueAt > now
+      ? (dueTs ? `<t:${dueTs}:R>` : "in the future")
+      : "due now";
+    const createdAt = Number(reminder.created_at || 0);
+    const createdTs = createdAt > 0 ? Math.floor(createdAt / 1000) : null;
+    const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
+    const text = String(reminder.reminder_text || "").replace(/\n+/g, " ").slice(0, 120);
+    return `**#${reminder.id}** • ${status} • created ${createdText}\n${text || "(no text)"}`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2b2d31)
+    .setTitle("⏰ Your Pending Reminders")
+    .setDescription(lines.join("\n\n"))
+    .setFooter({ text: `Use !remindcancel <id> to cancel one.` })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdRemindCancel(message, args) {
+  const idRaw = String(args[0] || "").trim();
+  const reminderId = Number.parseInt(idRaw, 10);
+  if (!Number.isFinite(reminderId) || reminderId <= 0) {
+    await message.reply("Usage: `!remindcancel <id>`\nFind IDs with `!reminders`.").catch(() => {});
+    return;
+  }
+
+  const reminder = await get(
+    `SELECT id, reminder_text, remind_at
+     FROM reminders
+     WHERE id=? AND user_id=? AND guild_id=? AND completed=0`,
+    [reminderId, message.author.id, message.guild.id]
+  );
+
+  if (!reminder) {
+    await message.reply("❌ Reminder not found (or already completed/canceled). Use `!reminders` to check active IDs.").catch(() => {});
+    return;
+  }
+
+  await run(
+    `UPDATE reminders
+     SET completed=1
+     WHERE id=? AND user_id=? AND guild_id=? AND completed=0`,
+    [reminderId, message.author.id, message.guild.id]
+  );
+
+  const preview = String(reminder.reminder_text || "").replace(/\n+/g, " ").slice(0, 140);
+  await message.reply(`✅ Canceled reminder #${reminderId}${preview ? `: "${preview}"` : ""}`).catch(() => {});
+}
+
 // ─────────────────────────────────────────────────────
 // Birthday Commands
 // ─────────────────────────────────────────────────────
@@ -3447,6 +3522,16 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "reminders" || cmd === "reminderlist") {
+    await cmdReminders(message, args);
+    return true;
+  }
+
+  if (cmd === "remindcancel" || cmd === "cancelreminder") {
+    await cmdRemindCancel(message, args);
+    return true;
+  }
+
   if (cmd === "birthday" || cmd === "bday") {
     await cmdBirthday(message, args);
     return true;
@@ -3574,6 +3659,9 @@ function buildSlashCommands() {
     { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
+    { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
+    { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
+    { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
     // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
@@ -3774,8 +3862,16 @@ async function handleSlashCommand(interaction) {
   } else if (name === "suggest") {
     const suggestion = optionValue(interaction, "suggestion");
     if (suggestion) args.push(...String(suggestion).split(/\s+/));
+  } else if (name === "remindme") {
+    const duration = optionValue(interaction, "duration");
+    const reminderMessage = optionValue(interaction, "message");
+    if (duration) args.push(String(duration));
+    if (reminderMessage) args.push(...String(reminderMessage).split(/\s+/));
+  } else if (name === "remindcancel") {
+    const id = optionValue(interaction, "id");
+    if (id !== "") args.push(String(id));
   } else {
-    const keys = ["page", "limit", "name", "count", "seconds"];
+    const keys = ["page", "limit", "name", "count", "seconds", "id"];
     for (const key of keys) {
       const value = optionValue(interaction, key);
       if (value !== "" && value !== null && value !== undefined) {

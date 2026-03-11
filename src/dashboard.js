@@ -4361,6 +4361,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <h3 style="margin-top:18px;">Pending Anti-Nuke Auto-Unlocks</h3>
       <p class="section-description">Scheduled automatic unlock jobs waiting to run.</p>
+      ${pendingAntiNukeJobRows.length > 0 ? `
+      <form method="get" action="/guild/${guildId}/anti-nuke/unlock-jobs/export" style="margin-bottom:8px;display:inline-block;margin-right:8px;">
+        <button type="submit">Export Pending Auto-Unlock Jobs (JSON)</button>
+      </form>
+      <form method="get" action="/guild/${guildId}/anti-nuke/unlock-jobs/export.csv" style="margin-bottom:8px;display:inline-block;">
+        <button type="submit">Export Pending Auto-Unlock Jobs (CSV)</button>
+      </form>
+      ` : ""}
       ${pendingAntiNukeJobRows.length > 0 && canAccessAdminFeatures ? `
       <form method="post" action="/guild/${guildId}/anti-nuke/unlock-jobs/cancel-all" style="margin-bottom:8px;" onsubmit="return confirm('Cancel all pending anti-nuke auto-unlock jobs?')">
         <button type="submit" style="background:#d9534f;">Cancel All Pending Auto-Unlock Jobs</button>
@@ -5832,6 +5840,76 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke unlock-job cancel-all error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/anti-nuke/unlock-jobs/export", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const jobs = await all(
+        `SELECT id, guild_id, run_at, unlock_perms_json, created_at
+         FROM anti_nuke_unlock_jobs
+         WHERE guild_id=? AND executed_at IS NULL
+         ORDER BY run_at ASC`,
+        [guildId]
+      );
+
+      const payload = {
+        version: 1,
+        exported_at: Date.now(),
+        guild_id: guildId,
+        count: jobs.length,
+        jobs
+      };
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-pending-anti-nuke-unlock-jobs-${stamp}.json"`);
+      return res.status(200).send(JSON.stringify(payload, null, 2));
+    } catch (e) {
+      console.error("anti-nuke unlock-jobs export error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/anti-nuke/unlock-jobs/export.csv", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const jobs = await all(
+        `SELECT id, guild_id, run_at, unlock_perms_json, created_at
+         FROM anti_nuke_unlock_jobs
+         WHERE guild_id=? AND executed_at IS NULL
+         ORDER BY run_at ASC`,
+        [guildId]
+      );
+
+      const escapeCsv = (value) => {
+        const text = String(value ?? "");
+        if (/[",\n]/.test(text)) {
+          return `"${text.replace(/"/g, '""')}"`;
+        }
+        return text;
+      };
+
+      const header = ["id", "guild_id", "run_at", "unlock_perms_json", "created_at"];
+      const lines = [header.join(",")];
+      for (const row of jobs) {
+        lines.push([
+          row.id,
+          row.guild_id,
+          row.run_at,
+          row.unlock_perms_json,
+          row.created_at
+        ].map(escapeCsv).join(","));
+      }
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-pending-anti-nuke-unlock-jobs-${stamp}.csv"`);
+      return res.status(200).send(lines.join("\n"));
+    } catch (e) {
+      console.error("anti-nuke unlock-jobs csv export error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

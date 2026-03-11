@@ -4258,16 +4258,16 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input name="anti_nuke_cooldown_minutes" value="${escapeHtml(settings.anti_nuke_cooldown_minutes || 10)}" style="max-width:120px;" />
         </label>
         <br/><br/>
-        <label>Channel Delete Trigger Count
-          <input name="anti_nuke_channel_delete_threshold" value="${escapeHtml(settings.anti_nuke_channel_delete_threshold || 3)}" style="max-width:120px;" />
+        <label>Channel Delete Trigger Count (0 = disabled)
+          <input name="anti_nuke_channel_delete_threshold" value="${escapeHtml(settings.anti_nuke_channel_delete_threshold ?? 3)}" style="max-width:120px;" />
         </label>
         <br/><br/>
-        <label>Role Delete Trigger Count
-          <input name="anti_nuke_role_delete_threshold" value="${escapeHtml(settings.anti_nuke_role_delete_threshold || 3)}" style="max-width:120px;" />
+        <label>Role Delete Trigger Count (0 = disabled)
+          <input name="anti_nuke_role_delete_threshold" value="${escapeHtml(settings.anti_nuke_role_delete_threshold ?? 3)}" style="max-width:120px;" />
         </label>
         <br/><br/>
-        <label>Ban Add Trigger Count
-          <input name="anti_nuke_ban_add_threshold" value="${escapeHtml(settings.anti_nuke_ban_add_threshold || 4)}" style="max-width:120px;" />
+        <label>Ban Add Trigger Count (0 = disabled)
+          <input name="anti_nuke_ban_add_threshold" value="${escapeHtml(settings.anti_nuke_ban_add_threshold ?? 4)}" style="max-width:120px;" />
         </label>
         <br/><br/>
         <label>Anti-Nuke Alert Channel Override
@@ -5611,9 +5611,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const antiNukeWindowSeconds = Number.isInteger(antiNukeWindowRaw) ? Math.min(300, Math.max(5, antiNukeWindowRaw)) : 30;
       const antiNukeAutoUnlockMinutes = Number.isInteger(antiNukeAutoUnlockRaw) ? Math.min(1440, Math.max(0, antiNukeAutoUnlockRaw)) : 0;
       const antiNukeCooldownMinutes = Number.isInteger(antiNukeCooldownRaw) ? Math.min(120, Math.max(1, antiNukeCooldownRaw)) : 10;
-      const antiNukeChannelDeleteThreshold = Number.isInteger(antiNukeChannelDeleteThresholdRaw) ? Math.min(20, Math.max(2, antiNukeChannelDeleteThresholdRaw)) : 3;
-      const antiNukeRoleDeleteThreshold = Number.isInteger(antiNukeRoleDeleteThresholdRaw) ? Math.min(20, Math.max(2, antiNukeRoleDeleteThresholdRaw)) : 3;
-      const antiNukeBanAddThreshold = Number.isInteger(antiNukeBanAddThresholdRaw) ? Math.min(30, Math.max(2, antiNukeBanAddThresholdRaw)) : 4;
+      const antiNukeChannelDeleteThreshold = Number.isInteger(antiNukeChannelDeleteThresholdRaw) ? Math.min(20, Math.max(0, antiNukeChannelDeleteThresholdRaw)) : 3;
+      const antiNukeRoleDeleteThreshold = Number.isInteger(antiNukeRoleDeleteThresholdRaw) ? Math.min(20, Math.max(0, antiNukeRoleDeleteThresholdRaw)) : 3;
+      const antiNukeBanAddThreshold = Number.isInteger(antiNukeBanAddThresholdRaw) ? Math.min(30, Math.max(0, antiNukeBanAddThresholdRaw)) : 4;
       const commandPrefix = (!commandPrefixRaw || commandPrefixRaw.length > 3 || /\s/.test(commandPrefixRaw))
         ? "!"
         : commandPrefixRaw;

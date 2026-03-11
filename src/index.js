@@ -223,9 +223,9 @@ async function triggerAntiNukeIfNeeded(guild, eventType, actorUserId) {
     : DEFAULT_ANTI_NUKE_COOLDOWN_MS;
 
   const thresholds = {
-    channel_delete: Math.min(20, Math.max(2, Number(settings?.anti_nuke_channel_delete_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.channel_delete))),
-    role_delete: Math.min(20, Math.max(2, Number(settings?.anti_nuke_role_delete_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.role_delete))),
-    ban_add: Math.min(30, Math.max(2, Number(settings?.anti_nuke_ban_add_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.ban_add)))
+    channel_delete: Math.min(20, Math.max(0, Number(settings?.anti_nuke_channel_delete_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.channel_delete))),
+    role_delete: Math.min(20, Math.max(0, Number(settings?.anti_nuke_role_delete_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.role_delete))),
+    ban_add: Math.min(30, Math.max(0, Number(settings?.anti_nuke_ban_add_threshold ?? DEFAULT_ANTI_NUKE_THRESHOLDS.ban_add)))
   };
 
   const threshold = thresholds[eventType];

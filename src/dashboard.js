@@ -4337,6 +4337,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       <h3 style="margin-top:18px;">Anti-Nuke Exemptions (Trusted Actors)</h3>
       <p class="section-description">Exempt trusted users/roles from anti-nuke trigger counting.</p>
+      ${antiNukeExemptionRows.length > 0 ? `
+      <form method="get" action="/guild/${guildId}/anti-nuke-exemptions/export" style="margin-bottom:8px;display:inline-block;margin-right:8px;">
+        <button type="submit">Export Anti-Nuke Exemptions (JSON)</button>
+      </form>
+      <form method="get" action="/guild/${guildId}/anti-nuke-exemptions/export.csv" style="margin-bottom:8px;display:inline-block;">
+        <button type="submit">Export Anti-Nuke Exemptions (CSV)</button>
+      </form>
+      ` : ""}
       <form method="post" action="/guild/${guildId}/anti-nuke-exemptions/add">
         <label>User ID <input name="user_id" /></label>
         <label>Role
@@ -5991,6 +5999,61 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke exemptions delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/anti-nuke-exemptions/export", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const exemptions = await getAntiNukeExemptions(guildId);
+      const payload = {
+        version: 1,
+        exported_at: Date.now(),
+        guild_id: guildId,
+        count: exemptions.length,
+        exemptions
+      };
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-anti-nuke-exemptions-${stamp}.json"`);
+      return res.status(200).send(JSON.stringify(payload, null, 2));
+    } catch (e) {
+      console.error("anti-nuke exemptions export error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.get("/guild/:guildId/anti-nuke-exemptions/export.csv", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const exemptions = await getAntiNukeExemptions(guildId);
+
+      const escapeCsv = (value) => {
+        const text = String(value ?? "");
+        if (/[",\n]/.test(text)) {
+          return `"${text.replace(/"/g, '""')}"`;
+        }
+        return text;
+      };
+
+      const header = ["target_id", "target_type", "created_at"];
+      const lines = [header.join(",")];
+      for (const row of exemptions) {
+        lines.push([
+          row.target_id,
+          row.target_type,
+          row.created_at
+        ].map(escapeCsv).join(","));
+      }
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="guild-${guildId}-anti-nuke-exemptions-${stamp}.csv"`);
+      return res.status(200).send(lines.join("\n"));
+    } catch (e) {
+      console.error("anti-nuke exemptions csv export error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

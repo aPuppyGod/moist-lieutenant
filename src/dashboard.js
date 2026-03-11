@@ -3874,7 +3874,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       "manual_unlock",
       "auto_unlock",
       "history_cleared",
-      "auto_unlock_canceled"
+      "auto_unlock_canceled",
+      "exemption_added",
+      "exemption_removed"
     ]);
     const antiNukeTypeFilterRaw = String(req.query.anti_nuke_type || "all").trim().toLowerCase();
     const antiNukeTypeFilter = antiNukeTypeOptions.has(antiNukeTypeFilterRaw)
@@ -4399,6 +4401,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             <option value="auto_unlock" ${antiNukeTypeFilter === "auto_unlock" ? "selected" : ""}>auto_unlock</option>
             <option value="history_cleared" ${antiNukeTypeFilter === "history_cleared" ? "selected" : ""}>history_cleared</option>
             <option value="auto_unlock_canceled" ${antiNukeTypeFilter === "auto_unlock_canceled" ? "selected" : ""}>auto_unlock_canceled</option>
+            <option value="exemption_added" ${antiNukeTypeFilter === "exemption_added" ? "selected" : ""}>exemption_added</option>
+            <option value="exemption_removed" ${antiNukeTypeFilter === "exemption_removed" ? "selected" : ""}>exemption_removed</option>
           </select>
         </label>
         <label>Search
@@ -5837,8 +5841,39 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const guildId = req.params.guildId;
       const userId = String(req.body.user_id || "").trim();
       const roleId = String(req.body.role_id || "").trim();
-      if (userId) await addAntiNukeExemption(guildId, userId, "user");
-      if (roleId) await addAntiNukeExemption(guildId, roleId, "role");
+      const now = Date.now();
+      if (userId) {
+        await addAntiNukeExemption(guildId, userId, "user");
+        await run(
+          `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            guildId,
+            "exemption_added",
+            null,
+            userId,
+            req.user?.id || null,
+            JSON.stringify({ target_type: "user", target_id: userId }),
+            now
+          ]
+        ).catch(() => {});
+      }
+      if (roleId) {
+        await addAntiNukeExemption(guildId, roleId, "role");
+        await run(
+          `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            guildId,
+            "exemption_added",
+            null,
+            null,
+            req.user?.id || null,
+            JSON.stringify({ target_type: "role", target_id: roleId }),
+            now
+          ]
+        ).catch(() => {});
+      }
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke exemptions add error:", e);
@@ -5851,7 +5886,30 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const guildId = req.params.guildId;
       const targetId = String(req.body.target_id || "").trim();
       if (!targetId) return res.status(400).send("Target ID required.");
+
+      const existing = await get(
+        `SELECT target_id, target_type
+         FROM anti_nuke_exemptions
+         WHERE guild_id=? AND target_id=?`,
+        [guildId, targetId]
+      );
+
       await removeAntiNukeExemption(guildId, targetId);
+
+      await run(
+        `INSERT INTO anti_nuke_incidents (guild_id, incident_type, event_type, actor_user_id, initiated_by_user_id, details, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          guildId,
+          "exemption_removed",
+          null,
+          existing?.target_type === "user" ? targetId : null,
+          req.user?.id || null,
+          JSON.stringify({ target_type: existing?.target_type || "unknown", target_id: targetId }),
+          Date.now()
+        ]
+      ).catch(() => {});
+
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("anti-nuke exemptions delete error:", e);
@@ -5863,7 +5921,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const filterTypeRaw = String(req.query.incident_type || "all").trim().toLowerCase();
-      const allowedTypes = new Set(["all", "trigger", "manual_unlock", "auto_unlock", "history_cleared", "auto_unlock_canceled"]);
+      const allowedTypes = new Set(["all", "trigger", "manual_unlock", "auto_unlock", "history_cleared", "auto_unlock_canceled", "exemption_added", "exemption_removed"]);
       const filterType = allowedTypes.has(filterTypeRaw) ? filterTypeRaw : "all";
       const search = String(req.query.search || "").trim().slice(0, 80);
 
@@ -5914,7 +5972,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const filterTypeRaw = String(req.query.incident_type || "all").trim().toLowerCase();
-      const allowedTypes = new Set(["all", "trigger", "manual_unlock", "auto_unlock", "history_cleared", "auto_unlock_canceled"]);
+      const allowedTypes = new Set(["all", "trigger", "manual_unlock", "auto_unlock", "history_cleared", "auto_unlock_canceled", "exemption_added", "exemption_removed"]);
       const filterType = allowedTypes.has(filterTypeRaw) ? filterTypeRaw : "all";
       const search = String(req.query.search || "").trim().slice(0, 80);
 

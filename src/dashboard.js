@@ -4612,7 +4612,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${allSuggestions.length > 0 ? `
       <h4 style="margin-top:24px;">Recent Suggestions</h4>
       <table class="enhanced-table">
-        <tr><th>ID</th><th>User</th><th>Suggestion</th><th>Votes</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>ID</th><th>User</th><th>Suggestion</th><th>Votes</th><th>Status</th><th>Staff Note</th><th>Actions</th></tr>
         ${allSuggestions.slice(0, 10).map((s) => `
           <tr>
             <td>#${s.id}</td>
@@ -4620,6 +4620,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.content)}</td>
             <td>👍 ${s.upvotes || 0} | 👎 ${s.downvotes || 0}</td>
             <td>${s.status === "approved" ? "✅" : s.status === "denied" ? "❌" : "🟡"} ${escapeHtml(s.status)}</td>
+            <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(s.staff_response || "-")}</td>
             <td>
               <form method="post" action="/guild/${guildId}/suggestions/update" style="display:inline;">
                 <input type="hidden" name="suggestion_id" value="${s.id}" />
@@ -4628,6 +4629,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                   <option value="approved" ${s.status === "approved" ? "selected" : ""}>Approved</option>
                   <option value="denied" ${s.status === "denied" ? "selected" : ""}>Denied</option>
                 </select>
+                <input name="staff_response" value="${escapeHtml(s.staff_response || "")}" placeholder="Optional staff note" style="width:180px;" />
                 <button type="submit">Update</button>
               </form>
             </td>
@@ -6640,14 +6642,21 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const suggestionId = parseInt(req.body.suggestion_id, 10);
-      const status = String(req.body.status || "pending").trim();
+      const statusRaw = String(req.body.status || "pending").trim().toLowerCase();
+      const status = ["pending", "approved", "denied"].includes(statusRaw) ? statusRaw : "pending";
+      const staffResponse = String(req.body.staff_response || "").trim().slice(0, 300) || null;
 
       if (!suggestionId) {
         return res.status(400).send("Suggestion ID required.");
       }
 
       // Update status in database
-      await run(`UPDATE suggestions SET status=? WHERE id=? AND guild_id=?`, [status, suggestionId, guildId]);
+      await run(
+        `UPDATE suggestions
+         SET status=?, staff_response=?
+         WHERE id=? AND guild_id=?`,
+        [status, staffResponse, suggestionId, guildId]
+      );
 
       // Update the embed in Discord
       const suggestion = await get(`SELECT * FROM suggestions WHERE id=?`, [suggestionId]);
@@ -6670,6 +6679,16 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                   embed.data.fields[statusFieldIndex].value = statusText;
                 } else {
                   embed.addFields({ name: "Status", value: statusText, inline: true });
+                }
+                const responseFieldIndex = embed.data.fields.findIndex(f => f.name === "Staff Response");
+                if (staffResponse) {
+                  if (responseFieldIndex >= 0) {
+                    embed.data.fields[responseFieldIndex].value = staffResponse;
+                  } else {
+                    embed.addFields({ name: "Staff Response", value: staffResponse, inline: false });
+                  }
+                } else if (responseFieldIndex >= 0) {
+                  embed.data.fields.splice(responseFieldIndex, 1);
                 }
                 await message.edit({ embeds: [embed] }).catch(() => {});
               }

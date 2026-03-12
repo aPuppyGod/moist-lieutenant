@@ -298,7 +298,8 @@ async function cmdPublicCommands(message) {
     "`!moist-lieutenant` - Get website URL",
     "`!8ball <question>`",
     "`!flip` - Flip a coin",
-    "`!poll <duration> <question> | <option1> | <option2> ...`",
+    "`!poll create <question> | <option1> | <option2> ...`",
+    "`!poll end <message_id>`",
     "`!choose <option1> <option2> ...`",
     "`!suggest <suggestion>` - Submit a suggestion",
     "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
@@ -3756,7 +3757,7 @@ function buildSlashCommands() {
     { name: "8ball", description: "Ask the magic 8-ball", options: [{ type: 3, name: "question", description: "Your question", required: true }] },
     { name: "flip", description: "Flip a coin" },
     { name: "roll", description: "Roll dice", options: [{ type: 4, name: "sides", description: "Number of sides (default: 6)", required: false }, { type: 4, name: "count", description: "Number of dice (default: 1)", required: false }] },
-    { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
+    { name: "poll", description: "Create or end a poll", options: [{ type: 3, name: "action", description: "create or end", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end)", required: false }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
     { name: "giveaway", description: "Start/end/reroll/cancel/list giveaways", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
@@ -3954,9 +3955,17 @@ async function handleSlashCommand(interaction) {
     if (sides) args.push(String(sides));
     if (count) args.push(String(count));
   } else if (name === "poll") {
+    const action = String(optionValue(interaction, "action") || "").toLowerCase();
     const question = optionValue(interaction, "question");
     const options = optionValue(interaction, "options");
-    if (question && options) {
+    const messageId = optionValue(interaction, "message_id");
+    if (action === "create") {
+      args.push("create");
+    }
+    if (action === "end") {
+      args.push("end");
+      if (messageId) args.push(String(messageId));
+    } else if (question && options) {
       args.push(`${question} | ${options}`);
     }
   } else if (name === "choose") {

@@ -3690,6 +3690,7 @@ function buildSlashCommands() {
     { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
+    { name: "giveaway", description: "Start/end/reroll giveaways", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "start, end, or reroll", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
@@ -3895,6 +3896,20 @@ async function handleSlashCommand(interaction) {
   } else if (name === "suggest") {
     const suggestion = optionValue(interaction, "suggestion");
     if (suggestion) args.push(...String(suggestion).split(/\s+/));
+  } else if (name === "giveaway") {
+    const action = String(optionValue(interaction, "action") || "").toLowerCase();
+    const duration = optionValue(interaction, "duration");
+    const winners = optionValue(interaction, "winners");
+    const prize = optionValue(interaction, "prize");
+    const messageId = optionValue(interaction, "message_id");
+    if (action) args.push(action);
+    if (action === "start") {
+      if (duration) args.push(String(duration));
+      if (winners !== "") args.push(String(winners));
+      if (prize) args.push(...String(prize).split(/\s+/));
+    } else if (action === "end" || action === "reroll") {
+      if (messageId) args.push(String(messageId));
+    }
   } else if (name === "remindme") {
     const duration = optionValue(interaction, "duration");
     const reminderMessage = optionValue(interaction, "message");

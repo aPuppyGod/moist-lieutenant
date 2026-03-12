@@ -311,6 +311,7 @@ async function cmdPublicCommands(message) {
     "`!remindme <duration> <message>` - Set a reminder",
     "`!reminders [limit]` - List your pending reminders",
     "`!remindcancel <id>` - Cancel one reminder",
+    "`!remindsnooze <id> <duration>` - Delay a reminder",
     "`!remindclear` - Cancel all your pending reminders",
     "`!birthday set <MM/DD>` - Register your birthday",
     "`!birthday list` / `!birthday remove`",
@@ -3457,6 +3458,44 @@ async function cmdRemindClear(message) {
   await message.reply(`✅ Cleared ${count} pending reminder${count === 1 ? "" : "s"}.`).catch(() => {});
 }
 
+async function cmdRemindSnooze(message, args) {
+  const reminderId = Number.parseInt(String(args[0] || "").trim(), 10);
+  const durationText = String(args[1] || "").trim();
+  if (!Number.isFinite(reminderId) || reminderId <= 0 || !durationText) {
+    await message.reply("Usage: `!remindsnooze <id> <duration>`\nExample: `!remindsnooze 42 30m`").catch(() => {});
+    return;
+  }
+
+  const durationMs = parseDurationMs(durationText);
+  if (!durationMs) {
+    await message.reply("❌ Invalid duration. Use format like: 10m, 1h, 1d").catch(() => {});
+    return;
+  }
+
+  const reminder = await get(
+    `SELECT id
+     FROM reminders
+     WHERE id=? AND user_id=? AND guild_id=? AND completed=0`,
+    [reminderId, message.author.id, message.guild.id]
+  );
+
+  if (!reminder) {
+    await message.reply("❌ Active reminder not found for that ID.").catch(() => {});
+    return;
+  }
+
+  const newTime = Date.now() + durationMs;
+  await run(
+    `UPDATE reminders
+     SET remind_at=?
+     WHERE id=? AND user_id=? AND guild_id=? AND completed=0`,
+    [newTime, reminderId, message.author.id, message.guild.id]
+  );
+
+  const ts = Math.floor(newTime / 1000);
+  await message.reply(`✅ Snoozed reminder #${reminderId} to <t:${ts}:R>.`).catch(() => {});
+}
+
 // ─────────────────────────────────────────────────────
 // Birthday Commands
 // ─────────────────────────────────────────────────────
@@ -3797,6 +3836,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "remindsnooze" || cmd === "snoozereminder") {
+    await cmdRemindSnooze(message, args);
+    return true;
+  }
+
   if (cmd === "birthday" || cmd === "bday") {
     await cmdBirthday(message, args);
     return true;
@@ -3930,6 +3974,7 @@ function buildSlashCommands() {
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
+    { name: "remindsnooze", description: "Delay one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID", required: true }, { type: 3, name: "duration", description: "e.g. 10m, 1h, 1d", required: true }] },
     { name: "remindclear", description: "Cancel all your pending reminders" },
     { name: "birthday", description: "Manage your birthday", options: [{ type: 3, name: "action", description: "set, list, or remove", required: true, choices: [{ name: "set", value: "set" }, { name: "list", value: "list" }, { name: "remove", value: "remove" }] }, { type: 3, name: "date", description: "MM/DD or MM/DD/YYYY (required for set)", required: false }] },
     // Moderation commands
@@ -4174,6 +4219,11 @@ async function handleSlashCommand(interaction) {
   } else if (name === "remindcancel") {
     const id = optionValue(interaction, "id");
     if (id !== "") args.push(String(id));
+  } else if (name === "remindsnooze") {
+    const id = optionValue(interaction, "id");
+    const duration = optionValue(interaction, "duration");
+    if (id !== "") args.push(String(id));
+    if (duration) args.push(String(duration));
   } else if (name === "birthday") {
     const action = optionValue(interaction, "action");
     const date = optionValue(interaction, "date");

@@ -303,6 +303,8 @@ async function cmdPublicCommands(message) {
     "`!poll list` - View active polls",
     "`!choose <option1> <option2> ...`",
     "`!suggest <suggestion>` - Submit a suggestion",
+    "`!suggestions [mine|all] [limit]` - View suggestion queue",
+    "`!suggestion-status <id>` - View one suggestion status",
     "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
     "`!giveaway list` - View active giveaways",
     "`!giveaway cancel <message_id> [reason]` - Cancel without winners",
@@ -1072,6 +1074,116 @@ async function cmdSuggest(message, args) {
   }
 
   await message.react("✅").catch(() => {});
+}
+
+function renderSuggestionStatus(statusRaw) {
+  const status = String(statusRaw || "pending").toLowerCase();
+  if (status === "approved") return "✅ Approved";
+  if (status === "denied") return "❌ Denied";
+  if (status === "under_review") return "🕵️ Under Review";
+  return "🟡 Pending";
+}
+
+async function cmdSuggestions(message, args) {
+  const modeRaw = String(args[0] || "mine").trim().toLowerCase();
+  const mode = modeRaw === "all" ? "all" : "mine";
+  const limitRaw = Number.parseInt(String(args[1] || "10"), 10);
+  const limit = Math.max(1, Math.min(25, Number.isFinite(limitRaw) ? limitRaw : 10));
+
+  if (mode === "all" && !(await isModerator(message.member)) && !isAdminOrManager(message.member)) {
+    await message.reply("Only moderators/admins can view all suggestions. Use `!suggestions mine`.").catch(() => {});
+    return;
+  }
+
+  const params = [message.guild.id];
+  let where = "guild_id=?";
+  if (mode === "mine") {
+    where += " AND user_id=?";
+    params.push(message.author.id);
+  }
+  params.push(limit);
+
+  const rows = await all(
+    `SELECT id, user_id, content, status, upvotes, downvotes, staff_response, created_at
+     FROM suggestions
+     WHERE ${where}
+     ORDER BY id DESC
+     LIMIT ?`,
+    params
+  );
+
+  if (!rows.length) {
+    await message.reply(mode === "all" ? "No suggestions found for this server." : "You have no suggestions yet.").catch(() => {});
+    return;
+  }
+
+  const lines = rows.map((s) => {
+    const createdTs = Number(s.created_at || 0) > 0 ? Math.floor(Number(s.created_at) / 1000) : null;
+    const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
+    const authorText = mode === "all" ? ` • by <@${s.user_id}>` : "";
+    const preview = String(s.content || "").replace(/\n+/g, " ").slice(0, 120);
+    const note = s.staff_response ? `\nStaff: ${String(s.staff_response).replace(/\n+/g, " ").slice(0, 90)}` : "";
+    return `**#${s.id}** ${renderSuggestionStatus(s.status)}${authorText} • ${createdText}\n${preview || "(no content)"}${note}`;
+  });
+
+  const embed = new EmbedBuilder()
+    .setColor(0x2b2d31)
+    .setTitle(mode === "all" ? "💡 Server Suggestions" : "💡 Your Suggestions")
+    .setDescription(lines.join("\n\n"))
+    .setFooter({ text: "Use !suggestion-status <id> for full details." })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdSuggestionStatus(message, args) {
+  const idRaw = String(args[0] || "").trim();
+  const suggestionId = Number.parseInt(idRaw, 10);
+  if (!Number.isFinite(suggestionId) || suggestionId <= 0) {
+    await message.reply("Usage: `!suggestion-status <id>`").catch(() => {});
+    return;
+  }
+
+  const suggestion = await get(
+    `SELECT *
+     FROM suggestions
+     WHERE guild_id=? AND id=?`,
+    [message.guild.id, suggestionId]
+  );
+
+  if (!suggestion) {
+    await message.reply("❌ Suggestion not found for this server.").catch(() => {});
+    return;
+  }
+
+  const createdTs = Number(suggestion.created_at || 0) > 0 ? Math.floor(Number(suggestion.created_at) / 1000) : null;
+  const fields = [
+    { name: "Status", value: renderSuggestionStatus(suggestion.status), inline: true },
+    { name: "Author", value: `<@${suggestion.user_id}>`, inline: true },
+    { name: "Votes", value: `👍 ${Number(suggestion.upvotes || 0)} | 👎 ${Number(suggestion.downvotes || 0)}`, inline: true }
+  ];
+
+  if (suggestion.staff_response) {
+    fields.push({ name: "Staff Response", value: String(suggestion.staff_response).slice(0, 1024), inline: false });
+  }
+
+  if (suggestion.review_message_id) {
+    fields.push({ name: "Review Message ID", value: `\`${suggestion.review_message_id}\``, inline: true });
+  }
+
+  if (suggestion.message_id) {
+    fields.push({ name: "Published Message ID", value: `\`${suggestion.message_id}\``, inline: true });
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor(0x7bc96f)
+    .setTitle(`💡 Suggestion #${suggestion.id}`)
+    .setDescription(String(suggestion.content || "(no content)").slice(0, 4096))
+    .addFields(fields)
+    .setFooter({ text: createdTs ? `Created <t:${createdTs}:R>` : "Created time unknown" })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -3570,6 +3682,16 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "suggestions") {
+    await cmdSuggestions(message, args);
+    return true;
+  }
+
+  if (cmd === "suggestion-status" || cmd === "suggestionstatus") {
+    await cmdSuggestionStatus(message, args);
+    return true;
+  }
+
   if (cmd === "giveaway") {
     await cmdGiveaway(message, args);
     return true;
@@ -3802,6 +3924,8 @@ function buildSlashCommands() {
     { name: "poll", description: "Create, end, or list polls", options: [{ type: 3, name: "action", description: "create, end, or list", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }, { name: "list", value: "list" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end)", required: false }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
+    { name: "suggestions", description: "List suggestions", options: [{ type: 3, name: "scope", description: "mine or all", required: false, choices: [{ name: "mine", value: "mine" }, { name: "all", value: "all" }] }, { type: 4, name: "limit", description: "How many to show (1-25)", required: false }] },
+    { name: "suggestion-status", description: "View a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
     { name: "giveaway", description: "Start/end/reroll/cancel/list giveaways", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
@@ -4016,6 +4140,14 @@ async function handleSlashCommand(interaction) {
   } else if (name === "suggest") {
     const suggestion = optionValue(interaction, "suggestion");
     if (suggestion) args.push(...String(suggestion).split(/\s+/));
+  } else if (name === "suggestions") {
+    const scope = optionValue(interaction, "scope");
+    const limit = optionValue(interaction, "limit");
+    if (scope) args.push(String(scope));
+    if (limit !== "") args.push(String(limit));
+  } else if (name === "suggestion-status") {
+    const id = optionValue(interaction, "id");
+    if (id !== "") args.push(String(id));
   } else if (name === "giveaway") {
     const action = String(optionValue(interaction, "action") || "").toLowerCase();
     const duration = optionValue(interaction, "duration");

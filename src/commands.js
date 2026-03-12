@@ -2086,7 +2086,8 @@ async function cancelGiveaway(client, giveaway, reason = "Canceled by staff.", c
   await run(`UPDATE giveaways SET ended=1, winner_ids=? WHERE id=?`, ["", giveaway.id]);
 
   if (!guild) return;
-  const channel = guild.channels.cache.get(giveaway.channel_id);
+  const channel = guild.channels.cache.get(giveaway.channel_id)
+    || await guild.channels.fetch(giveaway.channel_id).catch(() => null);
   if (!channel) return;
 
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
@@ -2106,7 +2107,8 @@ async function endGiveaway(client, giveaway) {
   const guild = client.guilds.cache.get(giveaway.guild_id);
   if (!guild) return;
 
-  const channel = guild.channels.cache.get(giveaway.channel_id);
+  const channel = guild.channels.cache.get(giveaway.channel_id)
+    || await guild.channels.fetch(giveaway.channel_id).catch(() => null);
   if (!channel) return;
 
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
@@ -2155,7 +2157,8 @@ async function rerollGiveaway(client, giveaway) {
   const guild = client.guilds.cache.get(giveaway.guild_id);
   if (!guild) return;
 
-  const channel = guild.channels.cache.get(giveaway.channel_id);
+  const channel = guild.channels.cache.get(giveaway.channel_id)
+    || await guild.channels.fetch(giveaway.channel_id).catch(() => null);
   if (!channel) return;
 
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
@@ -2303,7 +2306,8 @@ async function endPoll(client, poll) {
   const guild = client.guilds.cache.get(poll.guild_id);
   if (!guild) return;
 
-  const channel = guild.channels.cache.get(poll.channel_id);
+  const channel = guild.channels.cache.get(poll.channel_id)
+    || await guild.channels.fetch(poll.channel_id).catch(() => null);
   if (!channel) return;
 
   const pollMsg = await channel.messages.fetch(poll.message_id).catch(() => null);

@@ -303,6 +303,7 @@ async function cmdPublicCommands(message) {
     "`!suggest <suggestion>` - Submit a suggestion",
     "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
     "`!giveaway list` - View active giveaways",
+    "`!giveaway cancel <message_id> [reason]` - Cancel without winners",
     "`!remindme <duration> <message>` - Set a reminder",
     "`!reminders [limit]` - List your pending reminders",
     "`!remindcancel <id>` - Cancel one reminder",
@@ -2027,6 +2028,21 @@ async function cmdGiveaway(message, args) {
 
     await rerollGiveaway(message.client, giveaway);
     await message.reply("✅ Giveaway rerolled!").catch(() => {});
+  } else if (subcommand === "cancel") {
+    if (!args[1]) {
+      await message.reply("Usage: `!giveaway cancel <message_id> [reason]`").catch(() => {});
+      return;
+    }
+
+    const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
+    if (!giveaway) {
+      await message.reply("❌ Active giveaway not found.").catch(() => {});
+      return;
+    }
+
+    const reason = args.slice(2).join(" ").trim() || "Canceled by staff.";
+    await cancelGiveaway(message.client, giveaway, reason, message.author);
+    await message.reply("✅ Giveaway canceled.").catch(() => {});
   } else if (subcommand === "list") {
     const activeGiveaways = await all(
       `SELECT id, channel_id, message_id, host_id, prize, winners_count, end_time
@@ -2053,13 +2069,35 @@ async function cmdGiveaway(message, args) {
       .setColor(0x00ff99)
       .setTitle("🎉 Active Giveaways")
       .setDescription(lines.join("\n\n"))
-      .setFooter({ text: "Use !giveaway end <message_id> or !giveaway reroll <message_id>" })
+      .setFooter({ text: "Use !giveaway end|reroll|cancel <message_id>" })
       .setTimestamp();
 
     await message.reply({ embeds: [embed] }).catch(() => {});
   } else {
-    await message.reply("Usage: `!giveaway <start|end|reroll|list> ...`").catch(() => {});
+    await message.reply("Usage: `!giveaway <start|end|reroll|cancel|list> ...`").catch(() => {});
   }
+}
+
+async function cancelGiveaway(client, giveaway, reason = "Canceled by staff.", canceledBy = null) {
+  const guild = client.guilds.cache.get(giveaway.guild_id);
+
+  await run(`UPDATE giveaways SET ended=1, winner_ids=? WHERE id=?`, ["", giveaway.id]);
+
+  if (!guild) return;
+  const channel = guild.channels.cache.get(giveaway.channel_id);
+  if (!channel) return;
+
+  const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
+  if (!giveawayMsg) return;
+
+  const cancelEmbed = {
+    color: 0x808080,
+    title: "🚫 GIVEAWAY CANCELED",
+    description: `**Prize:** ${giveaway.prize}\n**Reason:** ${reason}`,
+    footer: { text: canceledBy ? `Canceled by ${canceledBy.tag}` : `Hosted by ${giveaway.host_id}` }
+  };
+
+  await giveawayMsg.edit({ embeds: [cancelEmbed], components: [] }).catch(() => {});
 }
 
 async function endGiveaway(client, giveaway) {
@@ -3721,7 +3759,7 @@ function buildSlashCommands() {
     { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
-    { name: "giveaway", description: "Start/end/reroll/list giveaways", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "start, end, reroll, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll)", required: false }] },
+    { name: "giveaway", description: "Start/end/reroll/cancel/list giveaways", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
@@ -3933,6 +3971,7 @@ async function handleSlashCommand(interaction) {
     const winners = optionValue(interaction, "winners");
     const prize = optionValue(interaction, "prize");
     const messageId = optionValue(interaction, "message_id");
+    const reason = optionValue(interaction, "reason");
     if (action) args.push(action);
     if (action === "start") {
       if (duration) args.push(String(duration));
@@ -3940,6 +3979,9 @@ async function handleSlashCommand(interaction) {
       if (prize) args.push(...String(prize).split(/\s+/));
     } else if (action === "end" || action === "reroll") {
       if (messageId) args.push(String(messageId));
+    } else if (action === "cancel") {
+      if (messageId) args.push(String(messageId));
+      if (reason) args.push(...String(reason).split(/\s+/));
     }
   } else if (name === "remindme") {
     const duration = optionValue(interaction, "duration");

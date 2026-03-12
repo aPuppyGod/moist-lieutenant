@@ -1028,7 +1028,8 @@ async function cmdSuggest(message, args) {
     return;
   }
 
-  const channel = guild.channels.cache.get(settings.channel_id);
+  const channel = guild.channels.cache.get(settings.channel_id)
+    || await guild.channels.fetch(settings.channel_id).catch(() => null);
   if (!channel || !channel.isTextBased()) {
     await message.reply("Suggestion channel not found or invalid.").catch(() => {});
     return;
@@ -1036,7 +1037,8 @@ async function cmdSuggest(message, args) {
 
   const requireReview = Number(settings.require_review || 0) === 1;
   const reviewChannel = settings.review_channel_id
-    ? guild.channels.cache.get(settings.review_channel_id)
+    ? (guild.channels.cache.get(settings.review_channel_id)
+      || await guild.channels.fetch(settings.review_channel_id).catch(() => null))
     : null;
   const targetChannel = (requireReview && reviewChannel && reviewChannel.isTextBased())
     ? reviewChannel
@@ -4188,8 +4190,12 @@ async function handleSlashCommand(interaction) {
   } else if (name === "suggestions") {
     const scope = optionValue(interaction, "scope");
     const limit = optionValue(interaction, "limit");
-    if (scope) args.push(String(scope));
-    if (limit !== "") args.push(String(limit));
+    if (scope) {
+      args.push(String(scope));
+      if (limit !== "") args.push(String(limit));
+    } else if (limit !== "") {
+      args.push("mine", String(limit));
+    }
   } else if (name === "suggestion-status") {
     const id = optionValue(interaction, "id");
     if (id !== "") args.push(String(id));

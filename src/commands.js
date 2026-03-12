@@ -308,6 +308,7 @@ async function cmdPublicCommands(message) {
     "`!suggestion-withdraw <id>` - Remove your suggestion",
     "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
     "`!giveaway list` - View active giveaways",
+    "`!giveaway status <message_id>` - View giveaway details",
     "`!giveaway cancel <message_id> [reason]` - Cancel without winners",
     "`!remindme <duration> <message>` - Set a reminder",
     "`!reminders [limit]` - List your pending reminders",
@@ -2250,8 +2251,48 @@ async function cmdGiveaway(message, args) {
       .setTimestamp();
 
     await message.reply({ embeds: [embed] }).catch(() => {});
+  } else if (subcommand === "status") {
+    if (!args[1]) {
+      await message.reply("Usage: `!giveaway status <message_id>`").catch(() => {});
+      return;
+    }
+
+    const giveaway = await get(
+      `SELECT id, message_id, prize, host_id, winners_count, end_time, ended, winner_ids
+       FROM giveaways
+       WHERE guild_id=? AND message_id=?`,
+      [message.guild.id, args[1]]
+    );
+
+    if (!giveaway) {
+      await message.reply("❌ Giveaway not found.").catch(() => {});
+      return;
+    }
+
+    const endTs = Number(giveaway.end_time || 0) > 0 ? Math.floor(Number(giveaway.end_time) / 1000) : null;
+    const winnerMentions = String(giveaway.winner_ids || "")
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean)
+      .map((id) => `<@${id}>`);
+
+    const embed = new EmbedBuilder()
+      .setColor(Number(giveaway.ended || 0) === 1 ? 0x8b0000 : 0x00ff99)
+      .setTitle(`🎉 Giveaway #${giveaway.id}`)
+      .addFields(
+        { name: "Prize", value: String(giveaway.prize || "Unknown"), inline: false },
+        { name: "Status", value: Number(giveaway.ended || 0) === 1 ? "Ended" : "Active", inline: true },
+        { name: "Host", value: `<@${giveaway.host_id}>`, inline: true },
+        { name: "Winners", value: String(giveaway.winners_count || 0), inline: true },
+        { name: "End Time", value: endTs ? `<t:${endTs}:F> (<t:${endTs}:R>)` : "Unknown", inline: false },
+        { name: "Winner Results", value: winnerMentions.length ? winnerMentions.join(", ") : "Not selected yet", inline: false }
+      )
+      .setFooter({ text: `Message ID: ${giveaway.message_id}` })
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] }).catch(() => {});
   } else {
-    await message.reply("Usage: `!giveaway <start|end|reroll|cancel|list> ...`").catch(() => {});
+    await message.reply("Usage: `!giveaway <start|end|reroll|cancel|list|status> ...`").catch(() => {});
   }
 }
 
@@ -4038,7 +4079,7 @@ function buildSlashCommands() {
     { name: "suggestions", description: "List suggestions", options: [{ type: 3, name: "scope", description: "mine or all", required: false, choices: [{ name: "mine", value: "mine" }, { name: "all", value: "all" }] }, { type: 4, name: "limit", description: "How many to show (1-25)", required: false }] },
     { name: "suggestion-status", description: "View a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
     { name: "suggestion-withdraw", description: "Withdraw a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
-    { name: "giveaway", description: "Start/end/reroll/cancel/list giveaways", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
+    { name: "giveaway", description: "Start/end/reroll/cancel/list/status giveaways", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, list, or status", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }, { name: "status", value: "status" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel/status)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },
@@ -4280,7 +4321,7 @@ async function handleSlashCommand(interaction) {
       if (duration) args.push(String(duration));
       if (winners !== "") args.push(String(winners));
       if (prize) args.push(...String(prize).split(/\s+/));
-    } else if (action === "end" || action === "reroll") {
+    } else if (action === "end" || action === "reroll" || action === "status") {
       if (messageId) args.push(String(messageId));
     } else if (action === "cancel") {
       if (messageId) args.push(String(messageId));

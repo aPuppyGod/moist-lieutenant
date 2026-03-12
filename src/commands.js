@@ -305,6 +305,7 @@ async function cmdPublicCommands(message) {
     "`!suggest <suggestion>` - Submit a suggestion",
     "`!suggestions [mine|all] [limit]` - View suggestion queue",
     "`!suggestion-status <id>` - View one suggestion status",
+    "`!suggestion-withdraw <id>` - Remove your suggestion",
     "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
     "`!giveaway list` - View active giveaways",
     "`!giveaway cancel <message_id> [reason]` - Cancel without winners",
@@ -1187,6 +1188,65 @@ async function cmdSuggestionStatus(message, args) {
     .setTimestamp();
 
   await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdSuggestionWithdraw(message, args) {
+  const idRaw = String(args[0] || "").trim();
+  const suggestionId = Number.parseInt(idRaw, 10);
+  if (!Number.isFinite(suggestionId) || suggestionId <= 0) {
+    await message.reply("Usage: `!suggestion-withdraw <id>`").catch(() => {});
+    return;
+  }
+
+  const suggestion = await get(
+    `SELECT *
+     FROM suggestions
+     WHERE guild_id=? AND id=?`,
+    [message.guild.id, suggestionId]
+  );
+
+  if (!suggestion) {
+    await message.reply("❌ Suggestion not found for this server.").catch(() => {});
+    return;
+  }
+
+  const staff = isAdminOrManager(message.member) || await isModerator(message.member);
+  const isOwner = String(suggestion.user_id) === String(message.author.id);
+  if (!staff && !isOwner) {
+    await message.reply("❌ You can only withdraw your own suggestions.").catch(() => {});
+    return;
+  }
+
+  if (!staff && ["approved", "denied"].includes(String(suggestion.status || "").toLowerCase())) {
+    await message.reply("❌ You can only withdraw pending or under-review suggestions.").catch(() => {});
+    return;
+  }
+
+  const settings = await get(`SELECT * FROM suggestion_settings WHERE guild_id=?`, [message.guild.id]);
+
+  if (suggestion.review_message_id) {
+    const reviewChannelId = settings?.review_channel_id || settings?.channel_id || null;
+    if (reviewChannelId) {
+      const reviewChannel = message.guild.channels.cache.get(reviewChannelId)
+        || await message.guild.channels.fetch(reviewChannelId).catch(() => null);
+      if (reviewChannel && reviewChannel.isTextBased()) {
+        const reviewMsg = await reviewChannel.messages.fetch(suggestion.review_message_id).catch(() => null);
+        if (reviewMsg) await reviewMsg.delete().catch(() => {});
+      }
+    }
+  }
+
+  if (suggestion.message_id && settings?.channel_id) {
+    const publishChannel = message.guild.channels.cache.get(settings.channel_id)
+      || await message.guild.channels.fetch(settings.channel_id).catch(() => null);
+    if (publishChannel && publishChannel.isTextBased()) {
+      const publishedMsg = await publishChannel.messages.fetch(suggestion.message_id).catch(() => null);
+      if (publishedMsg) await publishedMsg.delete().catch(() => {});
+    }
+  }
+
+  await run(`DELETE FROM suggestions WHERE guild_id=? AND id=?`, [message.guild.id, suggestionId]);
+  await message.reply(`✅ Suggestion #${suggestionId} has been withdrawn.`).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -3733,6 +3793,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "suggestion-withdraw" || cmd === "suggestionwithdraw") {
+    await cmdSuggestionWithdraw(message, args);
+    return true;
+  }
+
   if (cmd === "giveaway") {
     await cmdGiveaway(message, args);
     return true;
@@ -3972,6 +4037,7 @@ function buildSlashCommands() {
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
     { name: "suggestions", description: "List suggestions", options: [{ type: 3, name: "scope", description: "mine or all", required: false, choices: [{ name: "mine", value: "mine" }, { name: "all", value: "all" }] }, { type: 4, name: "limit", description: "How many to show (1-25)", required: false }] },
     { name: "suggestion-status", description: "View a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
+    { name: "suggestion-withdraw", description: "Withdraw a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
     { name: "giveaway", description: "Start/end/reroll/cancel/list giveaways", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
@@ -4197,6 +4263,9 @@ async function handleSlashCommand(interaction) {
       args.push("mine", String(limit));
     }
   } else if (name === "suggestion-status") {
+    const id = optionValue(interaction, "id");
+    if (id !== "") args.push(String(id));
+  } else if (name === "suggestion-withdraw") {
     const id = optionValue(interaction, "id");
     if (id !== "") args.push(String(id));
   } else if (name === "giveaway") {

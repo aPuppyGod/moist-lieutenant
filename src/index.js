@@ -1094,17 +1094,43 @@ client.once(Events.ClientReady, async () => {
         const now = Date.now();
         const dueReminders = await all(`SELECT * FROM reminders WHERE completed=0 AND remind_at <= ?`, [now]);
         for (const reminder of dueReminders) {
+          const embed = {
+            color: 0x3498db,
+            title: "⏰ Reminder",
+            description: reminder.reminder_text,
+            footer: { text: `Set ${new Date(reminder.created_at).toLocaleString()}` }
+          };
+
+          let delivered = false;
+
           const user = await client.users.fetch(reminder.user_id).catch(() => null);
           if (user) {
-            const embed = {
-              color: 0x3498db,
-              title: "⏰ Reminder",
-              description: reminder.reminder_text,
-              footer: { text: `Set ${new Date(reminder.created_at).toLocaleString()}` }
-            };
-            await user.send({ embeds: [embed] }).catch(() => {});
+            const dm = await user.send({ embeds: [embed] }).catch(() => null);
+            if (dm) delivered = true;
           }
-          await run(`UPDATE reminders SET completed=1 WHERE id=?`, [reminder.id]);
+
+          // Fallback to original guild channel if DM fails.
+          if (!delivered && reminder.guild_id && reminder.channel_id) {
+            const guild = client.guilds.cache.get(reminder.guild_id)
+              || await client.guilds.fetch(reminder.guild_id).catch(() => null);
+            const channel = guild
+              ? (guild.channels.cache.get(reminder.channel_id)
+                || await guild.channels.fetch(reminder.channel_id).catch(() => null))
+              : null;
+
+            if (channel && channel.isTextBased && channel.isTextBased()) {
+              const sent = await channel.send({
+                content: `<@${reminder.user_id}>`,
+                embeds: [embed],
+                allowedMentions: { users: [reminder.user_id] }
+              }).catch(() => null);
+              if (sent) delivered = true;
+            }
+          }
+
+          if (delivered) {
+            await run(`UPDATE reminders SET completed=1 WHERE id=?`, [reminder.id]);
+          }
         }
       } catch (err) {
         console.error("Reminder check failed:", err);

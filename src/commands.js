@@ -300,6 +300,7 @@ async function cmdPublicCommands(message) {
     "`!flip` - Flip a coin",
     "`!poll create <question> | <option1> | <option2> ...`",
     "`!poll end <message_id>`",
+    "`!poll list` - View active polls",
     "`!choose <option1> <option2> ...`",
     "`!suggest <suggestion>` - Submit a suggestion",
     "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
@@ -2192,6 +2193,7 @@ async function rerollGiveaway(client, giveaway) {
 async function cmdAdvancedPoll(message, args) {
   // !poll create <question> | <option1> | <option2> | ...
   // !poll end <message_id>
+  // !poll list
   
   const subcommand = args[0]?.toLowerCase();
 
@@ -2248,16 +2250,52 @@ async function cmdAdvancedPoll(message, args) {
       return;
     }
 
-    const poll = await get(`SELECT * FROM polls WHERE message_id=? AND guild_id=?`, [args[1], message.guild.id]);
+    const poll = await get(`SELECT * FROM polls WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!poll) {
-      await message.reply("❌ Poll not found.").catch(() => {});
+      await message.reply("❌ Active poll not found.").catch(() => {});
+      return;
+    }
+
+    const canManage = poll.creator_id === message.author.id || isAdminOrManager(message.member) || await isModerator(message.member);
+    if (!canManage) {
+      await message.reply("❌ Only the poll creator or server staff can end this poll.").catch(() => {});
       return;
     }
 
     await endPoll(message.client, poll);
     await message.reply("✅ Poll ended!").catch(() => {});
+  } else if (subcommand === "list") {
+    const polls = await all(
+      `SELECT id, message_id, question, creator_id, created_at
+       FROM polls
+       WHERE guild_id=? AND ended=0
+       ORDER BY created_at DESC
+       LIMIT 15`,
+      [message.guild.id]
+    );
+
+    if (!polls.length) {
+      await message.reply("There are no active polls in this server.").catch(() => {});
+      return;
+    }
+
+    const lines = polls.map((poll) => {
+      const createdTs = Number(poll.created_at || 0) > 0 ? Math.floor(Number(poll.created_at) / 1000) : null;
+      const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
+      const question = String(poll.question || "").slice(0, 140);
+      return `**${question || "Untitled poll"}**\nMessage ID: \`${poll.message_id}\` • Creator: <@${poll.creator_id}> • Created: ${createdText}`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle("📊 Active Polls")
+      .setDescription(lines.join("\n\n"))
+      .setFooter({ text: "Use !poll end <message_id> to close one." })
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] }).catch(() => {});
   } else {
-    await message.reply("Usage: `!poll <create|end> ...`").catch(() => {});
+    await message.reply("Usage: `!poll <create|end|list> ...`").catch(() => {});
   }
 }
 
@@ -3757,7 +3795,7 @@ function buildSlashCommands() {
     { name: "8ball", description: "Ask the magic 8-ball", options: [{ type: 3, name: "question", description: "Your question", required: true }] },
     { name: "flip", description: "Flip a coin" },
     { name: "roll", description: "Roll dice", options: [{ type: 4, name: "sides", description: "Number of sides (default: 6)", required: false }, { type: 4, name: "count", description: "Number of dice (default: 1)", required: false }] },
-    { name: "poll", description: "Create or end a poll", options: [{ type: 3, name: "action", description: "create or end", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end)", required: false }] },
+    { name: "poll", description: "Create, end, or list polls", options: [{ type: 3, name: "action", description: "create, end, or list", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }, { name: "list", value: "list" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end)", required: false }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
     { name: "giveaway", description: "Start/end/reroll/cancel/list giveaways", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
@@ -3961,12 +3999,12 @@ async function handleSlashCommand(interaction) {
     const messageId = optionValue(interaction, "message_id");
     if (action === "create") {
       args.push("create");
-    }
-    if (action === "end") {
+      if (question && options) args.push(`${question} | ${options}`);
+    } else if (action === "end") {
       args.push("end");
       if (messageId) args.push(String(messageId));
-    } else if (question && options) {
-      args.push(`${question} | ${options}`);
+    } else if (action === "list") {
+      args.push("list");
     }
   } else if (name === "choose") {
     const options = optionValue(interaction, "options");

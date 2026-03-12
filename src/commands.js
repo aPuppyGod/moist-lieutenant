@@ -301,7 +301,8 @@ async function cmdPublicCommands(message) {
     "`!poll <duration> <question> | <option1> | <option2> ...`",
     "`!choose <option1> <option2> ...`",
     "`!suggest <suggestion>` - Submit a suggestion",
-    "`!giveaway <duration> <winners> <prize>` - Start a giveaway",
+    "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
+    "`!giveaway list` - View active giveaways",
     "`!remindme <duration> <message>` - Set a reminder",
     "`!reminders [limit]` - List your pending reminders",
     "`!remindcancel <id>` - Cancel one reminder",
@@ -2026,8 +2027,38 @@ async function cmdGiveaway(message, args) {
 
     await rerollGiveaway(message.client, giveaway);
     await message.reply("✅ Giveaway rerolled!").catch(() => {});
+  } else if (subcommand === "list") {
+    const activeGiveaways = await all(
+      `SELECT id, channel_id, message_id, host_id, prize, winners_count, end_time
+       FROM giveaways
+       WHERE guild_id=? AND ended=0
+       ORDER BY end_time ASC
+       LIMIT 15`,
+      [message.guild.id]
+    );
+
+    if (!activeGiveaways.length) {
+      await message.reply("There are no active giveaways in this server.").catch(() => {});
+      return;
+    }
+
+    const lines = activeGiveaways.map((g) => {
+      const endsAtTs = Number(g.end_time || 0) > 0 ? Math.floor(Number(g.end_time) / 1000) : null;
+      const endText = endsAtTs ? `<t:${endsAtTs}:R>` : "unknown";
+      const link = `https://discord.com/channels/${message.guild.id}/${g.channel_id}/${g.message_id}`;
+      return `**#${g.id}** • ${g.prize}\nWinners: ${g.winners_count} • Ends: ${endText} • Host: <@${g.host_id}>\n[Jump to giveaway](${link})`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(0x00ff99)
+      .setTitle("🎉 Active Giveaways")
+      .setDescription(lines.join("\n\n"))
+      .setFooter({ text: "Use !giveaway end <message_id> or !giveaway reroll <message_id>" })
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] }).catch(() => {});
   } else {
-    await message.reply("Usage: `!giveaway <start|end|reroll> ...`").catch(() => {});
+    await message.reply("Usage: `!giveaway <start|end|reroll|list> ...`").catch(() => {});
   }
 }
 
@@ -3690,7 +3721,7 @@ function buildSlashCommands() {
     { name: "poll", description: "Create a poll", options: [{ type: 3, name: "question", description: "Poll question", required: true }, { type: 3, name: "options", description: "Options separated by |", required: true }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
-    { name: "giveaway", description: "Start/end/reroll giveaways", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "start, end, or reroll", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll)", required: false }] },
+    { name: "giveaway", description: "Start/end/reroll/list giveaways", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "start, end, reroll, or list", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "list", value: "list" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },

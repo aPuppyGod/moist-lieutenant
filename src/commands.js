@@ -960,44 +960,6 @@ async function cmdRoll(message, args) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
-async function cmdPoll(message, args) {
-  if (args.length < 3) {
-    await message.reply("Usage: `!poll <question> | <option1> | <option2> [| option3...]`").catch(() => {});
-    return;
-  }
-  
-  const parts = args.join(" ").split("|").map(p => p.trim());
-  if (parts.length < 3) {
-    await message.reply("Usage: `!poll <question> | <option1> | <option2> [| option3...]`").catch(() => {});
-    return;
-  }
-  
-  const question = parts[0];
-  const options = parts.slice(1);
-  
-  if (options.length > 10) {
-    await message.reply("❌ Maximum 10 options allowed.").catch(() => {});
-    return;
-  }
-  
-  const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
-  
-  const optionsText = options.map((opt, i) => `${emojis[i]} ${opt}`).join("\n");
-  
-  const embed = new EmbedBuilder()
-    .setColor(0x7bc96f)
-    .setTitle("📊 " + question)
-    .setDescription(optionsText)
-    .setFooter({ text: `Poll by ${message.author.tag}` })
-    .setTimestamp();
-  
-  const pollMessage = await message.channel.send({ embeds: [embed] });
-  
-  for (let i = 0; i < options.length; i++) {
-    await pollMessage.react(emojis[i]).catch(() => {});
-  }
-}
-
 async function cmdChoose(message, args) {
   if (args.length < 2) {
     await message.reply("Usage: `!choose <option1> <option2> [option3...]`").catch(() => {});

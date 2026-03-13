@@ -2127,11 +2127,15 @@ async function cmdVoiceBan(message, args = []) {
 // ─────────────────────────────────────────────────────
 
 async function cmdGiveaway(message, args) {
-  if (!(await requireAdministrator(message))) return;
-
   const subcommand = args[0]?.toLowerCase();
+  const isStaff = isAdminOrManager(message.member) || await isModerator(message.member);
 
   if (subcommand === "start") {
+    if (!isStaff) {
+      await message.reply("❌ Only moderators/admins can start giveaways.").catch(() => {});
+      return;
+    }
+
     // !giveaway start <duration> <winners> <prize>
     // Example: !giveaway start 1d 1 Discord Nitro
     if (args.length < 4) {
@@ -2189,6 +2193,11 @@ async function cmdGiveaway(message, args) {
       return;
     }
 
+    if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
+      await message.reply("❌ Only the giveaway host or server staff can end this giveaway.").catch(() => {});
+      return;
+    }
+
     await endGiveaway(message.client, giveaway);
     await message.reply("✅ Giveaway ended!").catch(() => {});
   } else if (subcommand === "reroll") {
@@ -2204,6 +2213,11 @@ async function cmdGiveaway(message, args) {
       return;
     }
 
+    if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
+      await message.reply("❌ Only the giveaway host or server staff can reroll this giveaway.").catch(() => {});
+      return;
+    }
+
     await rerollGiveaway(message.client, giveaway);
     await message.reply("✅ Giveaway rerolled!").catch(() => {});
   } else if (subcommand === "cancel") {
@@ -2215,6 +2229,11 @@ async function cmdGiveaway(message, args) {
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!giveaway) {
       await message.reply("❌ Active giveaway not found.").catch(() => {});
+      return;
+    }
+
+    if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
+      await message.reply("❌ Only the giveaway host or server staff can cancel this giveaway.").catch(() => {});
       return;
     }
 
@@ -4079,7 +4098,7 @@ function buildSlashCommands() {
     { name: "suggestions", description: "List suggestions", options: [{ type: 3, name: "scope", description: "mine or all", required: false, choices: [{ name: "mine", value: "mine" }, { name: "all", value: "all" }] }, { type: 4, name: "limit", description: "How many to show (1-25)", required: false }] },
     { name: "suggestion-status", description: "View a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
     { name: "suggestion-withdraw", description: "Withdraw a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
-    { name: "giveaway", description: "Start/end/reroll/cancel/list/status giveaways", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, list, or status", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }, { name: "status", value: "status" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel/status)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
+    { name: "giveaway", description: "Start/end/reroll/cancel/list/status giveaways", options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, list, or status", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }, { name: "status", value: "status" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel/status)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
     { name: "remindcancel", description: "Cancel one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID from /reminders", required: true }] },

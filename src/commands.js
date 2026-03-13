@@ -301,6 +301,7 @@ async function cmdPublicCommands(message) {
     "`!poll create <question> | <option1> | <option2> ...`",
     "`!poll end <message_id>`",
     "`!poll list` - View active polls",
+    "`!poll status <message_id>`",
     "`!choose <option1> <option2> ...`",
     "`!suggest <suggestion>` - Submit a suggestion",
     "`!suggestions [mine|all] [limit]` - View suggestion queue",
@@ -2432,6 +2433,7 @@ async function cmdAdvancedPoll(message, args) {
   // !poll create <question> | <option1> | <option2> | ...
   // !poll end <message_id>
   // !poll list
+  // !poll status <message_id>
   
   const subcommand = args[0]?.toLowerCase();
 
@@ -2532,8 +2534,49 @@ async function cmdAdvancedPoll(message, args) {
       .setTimestamp();
 
     await message.reply({ embeds: [embed] }).catch(() => {});
+  } else if (subcommand === "status") {
+    if (!args[1]) {
+      await message.reply("Usage: `!poll status <message_id>`").catch(() => {});
+      return;
+    }
+
+    const poll = await get(
+      `SELECT id, message_id, creator_id, question, options, created_at, ended
+       FROM polls
+       WHERE guild_id=? AND message_id=?`,
+      [message.guild.id, args[1]]
+    );
+
+    if (!poll) {
+      await message.reply("❌ Poll not found.").catch(() => {});
+      return;
+    }
+
+    const createdTs = Number(poll.created_at || 0) > 0 ? Math.floor(Number(poll.created_at) / 1000) : null;
+    const options = (() => {
+      try {
+        return JSON.parse(String(poll.options || "[]"));
+      } catch {
+        return [];
+      }
+    })();
+
+    const embed = new EmbedBuilder()
+      .setColor(Number(poll.ended || 0) === 1 ? 0x2ecc71 : 0x3498db)
+      .setTitle(`📊 Poll #${poll.id}`)
+      .setDescription(`**${poll.question || "Untitled poll"}**`)
+      .addFields(
+        { name: "Status", value: Number(poll.ended || 0) === 1 ? "Ended" : "Active", inline: true },
+        { name: "Creator", value: `<@${poll.creator_id}>`, inline: true },
+        { name: "Options", value: String(options.length || 0), inline: true },
+        { name: "Message ID", value: `\`${poll.message_id}\``, inline: false }
+      )
+      .setFooter({ text: createdTs ? `Created <t:${createdTs}:R>` : "Created time unknown" })
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] }).catch(() => {});
   } else {
-    await message.reply("Usage: `!poll <create|end|list> ...`").catch(() => {});
+    await message.reply("Usage: `!poll <create|end|list|status> ...`").catch(() => {});
   }
 }
 
@@ -4092,7 +4135,7 @@ function buildSlashCommands() {
     { name: "8ball", description: "Ask the magic 8-ball", options: [{ type: 3, name: "question", description: "Your question", required: true }] },
     { name: "flip", description: "Flip a coin" },
     { name: "roll", description: "Roll dice", options: [{ type: 4, name: "sides", description: "Number of sides (default: 6)", required: false }, { type: 4, name: "count", description: "Number of dice (default: 1)", required: false }] },
-    { name: "poll", description: "Create, end, or list polls", options: [{ type: 3, name: "action", description: "create, end, or list", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }, { name: "list", value: "list" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end)", required: false }] },
+    { name: "poll", description: "Create, end, list, or inspect polls", options: [{ type: 3, name: "action", description: "create, end, list, or status", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }, { name: "list", value: "list" }, { name: "status", value: "status" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end/status)", required: false }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
     { name: "suggest", description: "Submit a suggestion", options: [{ type: 3, name: "suggestion", description: "Your suggestion", required: true }] },
     { name: "suggestions", description: "List suggestions", options: [{ type: 3, name: "scope", description: "mine or all", required: false, choices: [{ name: "mine", value: "mine" }, { name: "all", value: "all" }] }, { type: 4, name: "limit", description: "How many to show (1-25)", required: false }] },
@@ -4303,6 +4346,9 @@ async function handleSlashCommand(interaction) {
       if (question && options) args.push(`${question} | ${options}`);
     } else if (action === "end") {
       args.push("end");
+      if (messageId) args.push(String(messageId));
+    } else if (action === "status") {
+      args.push("status");
       if (messageId) args.push(String(messageId));
     } else if (action === "list") {
       args.push("list");

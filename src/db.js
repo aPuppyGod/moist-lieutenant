@@ -851,6 +851,22 @@ async function initDb() {
     )
   `);
 
+  // Temporary bans (auto-unban scheduler source)
+  await run(`
+    CREATE TABLE IF NOT EXISTS temp_bans (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT DEFAULT NULL,
+      reason TEXT DEFAULT NULL,
+      ban_at BIGINT NOT NULL,
+      unban_at BIGINT NOT NULL,
+      completed INTEGER DEFAULT 0,
+      completed_at BIGINT DEFAULT NULL,
+      UNIQUE (guild_id, user_id, unban_at)
+    )
+  `);
+
   // Birthdays
   await run(`
     CREATE TABLE IF NOT EXISTS birthdays (
@@ -932,6 +948,18 @@ async function initDb() {
     await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS require_review INTEGER DEFAULT 0`);
     await run(`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS review_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS published_message_id TEXT DEFAULT NULL`);
+    await run(`CREATE TABLE IF NOT EXISTS temp_bans (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      moderator_id TEXT DEFAULT NULL,
+      reason TEXT DEFAULT NULL,
+      ban_at BIGINT NOT NULL,
+      unban_at BIGINT NOT NULL,
+      completed INTEGER DEFAULT 0,
+      completed_at BIGINT DEFAULT NULL,
+      UNIQUE (guild_id, user_id, unban_at)
+    )`);
   } catch (e) {
     // Columns might already exist, ignore error
   }

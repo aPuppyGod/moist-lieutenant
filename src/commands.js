@@ -1260,6 +1260,52 @@ async function cmdBan(message, args) {
   await message.reply(`✅ Banned ${target.user.tag}.`).catch(() => {});
 }
 
+async function cmdTempBan(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0];
+  if (!arg || !args[1]) {
+    await message.reply("Usage: `?tempban <user> <duration like 1d> [reason]`").catch(() => {});
+    return;
+  }
+
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `?tempban <user> <duration like 1d> [reason]`").catch(() => {});
+    return;
+  }
+
+  const target = pick.member;
+  if (!canModerate(message.member, target)) {
+    await message.reply("❌ You cannot temp-ban someone with a higher or equal role.").catch(() => {});
+    return;
+  }
+  if (!target.bannable) {
+    await message.reply("I can't temp-ban that user.").catch(() => {});
+    return;
+  }
+
+  const durationMs = parseDurationMs(args[1]);
+  if (!durationMs || durationMs < 60_000) {
+    await message.reply("❌ Invalid duration. Use format like 10m, 1h, 1d (minimum 1m).").catch(() => {});
+    return;
+  }
+
+  const reason = args.slice(2).join(" ").trim() || "No reason provided";
+  const now = Date.now();
+  const unbanAt = now + durationMs;
+
+  trackModerationAction(message, "ban_add", { targetUserId: target.id });
+  await target.ban({ reason: `[TEMP] ${reason}` }).catch(() => {});
+  await run(
+    `INSERT INTO temp_bans (guild_id, user_id, moderator_id, reason, ban_at, unban_at, completed)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    [message.guild.id, target.id, message.author.id, reason, now, unbanAt]
+  );
+  await logModAction(message.guild.id, target.id, message.author.id, "tempban", reason, `Until: ${new Date(unbanAt).toISOString()}`);
+
+  await message.reply(`✅ Temp-banned ${target.user.tag} until <t:${Math.floor(unbanAt / 1000)}:F> (<t:${Math.floor(unbanAt / 1000)}:R>).`).catch(() => {});
+}
+
 async function cmdUnban(message, args) {
   if (!(await requireModerator(message))) return;
   const userId = (args[0] || "").replace(/[<@!>]/g, "");
@@ -3983,6 +4029,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "tempban") {
+    await cmdTempBan(message, args);
+    return true;
+  }
+
   if (cmd === "unban") {
     await cmdUnban(message, args);
     return true;
@@ -4112,6 +4163,7 @@ function buildSlashCommands() {
     { name: "birthday", description: "Manage your birthday", options: [{ type: 3, name: "action", description: "set, list, or remove", required: true, choices: [{ name: "set", value: "set" }, { name: "list", value: "list" }, { name: "remove", value: "remove" }] }, { type: 3, name: "date", description: "MM/DD or MM/DD/YYYY (required for set)", required: false }] },
     // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "tempban", description: "Temporarily ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "duration", description: "e.g. 10m, 1h, 1d", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unban", description: "Unban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "user_id", description: "User ID", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "kick", description: "Kick member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "mute", description: "Mute (timeout) member", default_member_permissions: slashPerm(MODERATION_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "duration", description: "e.g. 10m", required: false }, { type: 3, name: "reason", description: "Reason", required: false }] },
@@ -4262,6 +4314,12 @@ async function handleSlashCommand(interaction) {
   } else if (name === "ban" || name === "kick" || name === "warn" || name === "softban") {
     if (userOption) args.push(userOption.id);
     const reason = optionValue(interaction, "reason");
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "tempban") {
+    if (userOption) args.push(userOption.id);
+    const duration = optionValue(interaction, "duration");
+    const reason = optionValue(interaction, "reason");
+    if (duration) args.push(String(duration));
     if (reason) args.push(...String(reason).split(/\s+/));
   } else if (name === "role") {
     if (userOption) args.push(userOption.id);

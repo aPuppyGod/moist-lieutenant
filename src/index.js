@@ -1184,6 +1184,38 @@ client.once(Events.ClientReady, async () => {
     checkBirthdays();
     setInterval(checkBirthdays, 3600000);
 
+    // Auto-unban expired temporary bans
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const expired = await all(
+          `SELECT id, guild_id, user_id
+           FROM temp_bans
+           WHERE completed=0 AND unban_at <= ?
+           ORDER BY unban_at ASC
+           LIMIT 100`,
+          [now]
+        );
+
+        for (const row of expired) {
+          const guild = client.guilds.cache.get(row.guild_id)
+            || await client.guilds.fetch(row.guild_id).catch(() => null);
+          if (!guild) continue;
+
+          // Unban can fail if already manually unbanned; either way mark completed.
+          await guild.members.unban(row.user_id, "Temporary ban expired").catch(() => {});
+          await run(
+            `UPDATE temp_bans
+             SET completed=1, completed_at=?
+             WHERE id=?`,
+            [Date.now(), row.id]
+          );
+        }
+      } catch (err) {
+        console.error("Temp-ban scheduler failed:", err);
+      }
+    }, 30_000);
+
     setInterval(async () => {
       try {
         const voiceXp = parseInt(process.env.VOICE_XP_PER_MINUTE || "5", 10);

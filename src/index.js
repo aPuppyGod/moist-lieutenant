@@ -1036,6 +1036,35 @@ async function addXp(guildId, userId, amount) {
   };
 }
 
+async function updateMemberCountChannels(client) {
+  const guildSettings = await all(
+    `SELECT guild_id, member_count_channel_id FROM guild_settings WHERE member_count_channel_id IS NOT NULL`
+  );
+
+  for (const settings of guildSettings) {
+    try {
+      const guild = client.guilds.cache.get(settings.guild_id);
+      if (!guild) continue;
+
+      const channel = guild.channels.cache.get(settings.member_count_channel_id);
+      if (!channel) continue;
+
+      const memberCount = guild.memberCount;
+      const newName = `👥 Members: ${memberCount}`;
+
+      if (channel.name !== newName) {
+        await channel.setName(newName).catch((err) => {
+          if (err.code !== 50013) {
+            console.error(`[members] Failed to update channel name for ${settings.guild_id}:`, err.message);
+          }
+        });
+      }
+    } catch (err) {
+      console.error(`[members] Error updating member count for guild ${settings.guild_id}:`, err);
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────
 // Client
 // ─────────────────────────────────────────────────────
@@ -1065,8 +1094,8 @@ client.once(Events.ClientReady, async () => {
       console.error("Slash command registration failed:", err);
     });
 
-    startDashboard(client);
-    startSocialFeedNotifier(client);
+    const dashboardApp = startDashboard(client);
+    startSocialFeedNotifier(client, dashboardApp);
 
     setInterval(() => {
       cleanupPrivateRooms(client).catch((err) => {
@@ -1257,6 +1286,14 @@ client.once(Events.ClientReady, async () => {
         console.error("Anti-nuke auto-unlock interval failed:", err);
       }
     }, ANTI_NUKE_UNLOCK_INTERVAL_MS);
+
+    setInterval(async () => {
+      try {
+        await updateMemberCountChannels(client);
+      } catch (err) {
+        console.error("Member count update interval failed:", err);
+      }
+    }, 300000); // 5 minutes
   } catch (err) {
     console.error("ClientReady startup failed:", err);
   }

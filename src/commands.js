@@ -2132,6 +2132,65 @@ async function cmdVoiceBan(message, args = []) {
 }
 
 // ─────────────────────────────────────────────────────
+// Member Count Channel
+// ─────────────────────────────────────────────────────
+
+async function cmdMemberCount(message, args) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("❌ Only administrators can use this command.").catch(() => {});
+    return;
+  }
+
+  const subcommand = (args[0] || "").toLowerCase();
+
+  if (subcommand === "set") {
+    let channelMention = args[1];
+    if (!channelMention) {
+      await message.reply("❌ Usage: `!member-count set <#channel>`").catch(() => {});
+      return;
+    }
+
+    let targetChannel = null;
+    const channelId = channelMention.replace(/[<#>]/g, "");
+    targetChannel = message.guild.channels.cache.get(channelId);
+
+    if (!targetChannel) {
+      await message.reply("❌ Channel not found.").catch(() => {});
+      return;
+    }
+
+    if (!targetChannel.isTextBased() && !["GUILD_VOICE", "GUILD_STAGE_VOICE"].includes(targetChannel.type)) {
+      await message.reply("❌ Member count can only be displayed in text or voice channels.").catch(() => {});
+      return;
+    }
+
+    await run(
+      `UPDATE guild_settings SET member_count_channel_id=? WHERE guild_id=?`,
+      [targetChannel.id, message.guild.id]
+    );
+
+    const memberCount = message.guild.memberCount;
+    const newName = `👥 Members: ${memberCount}`;
+    await targetChannel.setName(newName).catch(() => {});
+
+    await message.reply(`✅ Member count channel set to ${targetChannel}. Will update every 5 minutes.`).catch(() => {});
+    return;
+  }
+
+  if (subcommand === "disable" || subcommand === "off") {
+    await run(
+      `UPDATE guild_settings SET member_count_channel_id=NULL WHERE guild_id=?`,
+      [message.guild.id]
+    );
+
+    await message.reply(`✅ Member count channel disabled.`).catch(() => {});
+    return;
+  }
+
+  await message.reply(`🔧 **Member Count Commands**\n\n\`!member-count set #channel\` - Set the member count channel\n\`!member-count disable\` - Disable member count updates`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
 // Giveaway Commands
 // ─────────────────────────────────────────────────────
 
@@ -3909,6 +3968,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "member-count" || cmd === "membercount") {
+    await cmdMemberCount(message, args);
+    return true;
+  }
+
   if (cmd === "giveaway") {
     await cmdGiveaway(message, args);
     return true;
@@ -4154,6 +4218,7 @@ function buildSlashCommands() {
     { name: "suggestions", description: "List suggestions", options: [{ type: 3, name: "scope", description: "mine or all", required: false, choices: [{ name: "mine", value: "mine" }, { name: "all", value: "all" }] }, { type: 4, name: "limit", description: "How many to show (1-25)", required: false }] },
     { name: "suggestion-status", description: "View a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
     { name: "suggestion-withdraw", description: "Withdraw a suggestion by ID", options: [{ type: 4, name: "id", description: "Suggestion ID", required: true }] },
+    { name: "member-count", description: "Set member count channel", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "action", description: "set or disable", required: true, choices: [{ name: "set", value: "set" }, { name: "disable", value: "disable" }] }, { type: 7, name: "channel", description: "Text or voice channel (for set)", required: false }] },
     { name: "giveaway", description: "Start/end/reroll/cancel/list/status giveaways", options: [{ type: 3, name: "action", description: "start, end, reroll, cancel, list, or status", required: true, choices: [{ name: "start", value: "start" }, { name: "end", value: "end" }, { name: "reroll", value: "reroll" }, { name: "cancel", value: "cancel" }, { name: "list", value: "list" }, { name: "status", value: "status" }] }, { type: 3, name: "duration", description: "e.g. 10m, 2h, 1d (for start)", required: false }, { type: 4, name: "winners", description: "Number of winners (for start)", required: false }, { type: 3, name: "prize", description: "Giveaway prize (for start)", required: false }, { type: 3, name: "message_id", description: "Giveaway message ID (for end/reroll/cancel/status)", required: false }, { type: 3, name: "reason", description: "Cancel reason (for cancel)", required: false }] },
     { name: "remindme", description: "Set a reminder", options: [{ type: 3, name: "duration", description: "e.g. 10m, 2h, 1d", required: true }, { type: 3, name: "message", description: "What to remind you about", required: true }] },
     { name: "reminders", description: "List your pending reminders", options: [{ type: 4, name: "limit", description: "How many reminders to show (1-25)", required: false }] },
@@ -4394,6 +4459,11 @@ async function handleSlashCommand(interaction) {
   } else if (name === "suggestion-withdraw") {
     const id = optionValue(interaction, "id");
     if (id !== "") args.push(String(id));
+  } else if (name === "member-count") {
+    const action = String(optionValue(interaction, "action") || "").toLowerCase();
+    const channel = interaction.options.getChannel("channel");
+    if (action) args.push(action);
+    if (action === "set" && channel) args.push(channel.id);
   } else if (name === "giveaway") {
     const action = String(optionValue(interaction, "action") || "").toLowerCase();
     const duration = optionValue(interaction, "duration");

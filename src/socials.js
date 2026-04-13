@@ -1,3 +1,5 @@
+const crypto = require("crypto");
+const express = require("express");
 const { all, get, run } = require("./db");
 
 const SOCIAL_PLATFORM_OPTIONS = [
@@ -421,6 +423,330 @@ function renderTemplate(template, vars) {
     .trim();
 }
 
+function getTwitchEventSubCallbackUrl() {
+  if (process.env.TWITCH_EVENTSUB_CALLBACK_URL) {
+    return process.env.TWITCH_EVENTSUB_CALLBACK_URL;
+  }
+
+  const discordCallbackUrl = process.env.DISCORD_CALLBACK_URL;
+  if (!discordCallbackUrl) return null;
+
+  try {
+    const url = new URL(discordCallbackUrl);
+    url.pathname = "/twitch/eventsub";
+    url.search = "";
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+function getTwitchEventSubSecret() {
+  return String(process.env.TWITCH_EVENTSUB_SECRET || "").trim() || null;
+}
+
+function buildTwitchRequestHeaders(token) {
+  const clientId = process.env.TWITCH_CLIENT_ID;
+  return {
+    "Client-Id": clientId,
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json"
+  };
+}
+
+async function fetchTwitchUserByLogin(login) {
+  if (!login) return null;
+  const token = await getTwitchToken();
+  if (!token) return null;
+  const headers = buildTwitchRequestHeaders(token);
+  const response = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(login)}`, { headers });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return Array.isArray(data?.data) && data.data[0] ? data.data[0] : null;
+}
+
+async function fetchTwitchUserById(id) {
+  if (!id) return null;
+  const token = await getTwitchToken();
+  if (!token) return null;
+  const headers = buildTwitchRequestHeaders(token);
+  const response = await fetch(`https://api.twitch.tv/helix/users?id=${encodeURIComponent(id)}`, { headers });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return Array.isArray(data?.data) && data.data[0] ? data.data[0] : null;
+}
+
+async function fetchTwitchStreamByBroadcasterId(broadcasterId) {
+  if (!broadcasterId) return null;
+  const token = await getTwitchToken();
+  if (!token) return null;
+  const headers = buildTwitchRequestHeaders(token);
+  const response = await fetch(`https://api.twitch.tv/helix/streams?user_id=${encodeURIComponent(broadcasterId)}`, { headers });
+  if (!response.ok) return null;
+  const data = await response.json();
+  return Array.isArray(data?.data) && data.data[0] ? data.data[0] : null;
+}
+
+async function getExistingTwitchEventSubSubscriptions() {
+  const token = await getTwitchToken();
+  if (!token) return [];
+  const headers = buildTwitchRequestHeaders(token);
+  let cursor = null;
+  const subscriptions = [];
+
+  do {
+    const url = new URL("https://api.twitch.tv/helix/eventsub/subscriptions");
+    if (cursor) url.searchParams.set("after", cursor);
+    const response = await fetch(url.toString(), { headers });
+    if (!response.ok) break;
+    const data = await response.json();
+    if (Array.isArray(data?.data)) {
+      subscriptions.push(...data.data);
+    }
+    cursor = data?.pagination?.cursor || null;
+  } while (cursor);
+
+  return subscriptions;
+}
+
+async function createTwitchEventSubSubscription(broadcasterId) {
+  const callbackUrl = getTwitchEventSubCallbackUrl();
+  const secret = getTwitchEventSubSecret();
+  if (!callbackUrl || !secret) return null;
+
+  const token = await getTwitchToken();
+  if (!token) return null;
+
+  const headers = buildTwitchRequestHeaders(token);
+  const body = JSON.stringify({
+    type: "stream.online",
+    version: "1",
+    condition: { broadcaster_user_id: broadcasterId },
+    transport: {
+      method: "webhook",
+      callback: callbackUrl,
+      secret
+    }
+  });
+
+  const response = await fetch("https://api.twitch.tv/helix/eventsub/subscriptions", {
+    method: "POST",
+    headers,
+    body
+  });
+
+  if (response.ok) return await response.json();
+  if (response.status === 409) return null;
+
+  const errorBody = await response.text().catch(() => "");
+  console.warn("[socials] Twitch EventSub subscribe failed:", response.status, errorBody);
+  return null;
+}
+
+async function syncTwitchEventSubSubscriptions() {
+  const callbackUrl = getTwitchEventSubCallbackUrl();
+  const secret = getTwitchEventSubSecret();
+  if (!callbackUrl || !secret) {
+    console.warn("[socials] Twitch EventSub not enabled because callback URL or secret is missing.");
+    return;
+  }
+
+  const existing = await getExistingTwitchEventSubSubscriptions();
+  const existingBroadcasters = new Set(
+    existing
+      .filter((sub) => sub.transport?.method === "webhook" && sub.condition?.broadcaster_user_id)
+      .map((sub) => sub.condition.broadcaster_user_id)
+  );
+
+  const links = await all(
+    `SELECT external_id FROM social_links WHERE platform='twitch' AND enabled=1`,
+    []
+  );
+
+  for (const link of links) {
+    const login = stripAt(String(link.external_id || "")).toLowerCase();
+    if (!login) continue;
+    const user = await fetchTwitchUserByLogin(login);
+    if (!user?.id) continue;
+
+    if (existingBroadcasters.has(user.id)) continue;
+    await createTwitchEventSubSubscription(user.id);
+  }
+}
+
+async function getTwitchLinksByLogin(login) {
+  const normalizedLogin = String(login || "").toLowerCase().trim();
+  if (!normalizedLogin) return [];
+
+  const links = await all(
+    `SELECT * FROM social_links WHERE platform='twitch' AND enabled=1`,
+    []
+  );
+
+  return links.filter((link) => stripAt(String(link.external_id || "")).toLowerCase() === normalizedLogin);
+}
+
+async function dispatchSocialEvent(client, link, event, guild = null) {
+  if (!event?.uid || !event?.url) return false;
+
+  if (!guild) {
+    guild = client.guilds.cache.get(link.guild_id) || await client.guilds.fetch(link.guild_id).catch(() => null);
+  }
+  if (!guild) return false;
+
+  await ensureDefaultRulesForLink(link);
+
+  const rules = await all(
+    `SELECT id, event_type, enabled, channel_id, role_id, message_template
+     FROM social_link_rules
+     WHERE link_id=?`,
+    [link.id]
+  );
+  const ruleMap = new Map(rules.map((row) => [String(row.event_type), row]));
+
+  const guildSettings = await get(
+    `SELECT social_default_channel_id FROM guild_settings WHERE guild_id=?`,
+    [link.guild_id]
+  );
+
+  const alreadySent = await get(
+    `SELECT id FROM social_announcements WHERE link_id=? AND event_uid=?`,
+    [link.id, event.uid]
+  );
+  if (alreadySent) return false;
+
+  const rule = ruleMap.get(String(event.eventType || "post"));
+  if (!rule || Number(rule.enabled) !== 1) return false;
+
+  const channelId = rule.channel_id || link.channel_id || guildSettings?.social_default_channel_id || null;
+  if (!channelId) return false;
+
+  const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel || !channel.isTextBased || !channel.isTextBased()) return false;
+
+  const roleMention = rule.role_id ? `<@&${rule.role_id}>` : "";
+  const platformLabel = SOCIAL_PLATFORM_OPTIONS.find((p) => p.key === normalizePlatform(link.platform))?.label || link.platform;
+  const template = rule.message_template || defaultTemplateForEvent(event.eventType);
+
+  const message = renderTemplate(template, {
+    platform: platformLabel,
+    handle: link.label || link.external_id,
+    title: event.title || "New update",
+    url: event.url,
+    event: SOCIAL_EVENT_LABELS[event.eventType] || event.eventType,
+    role: roleMention
+  });
+
+  const sent = await channel.send({
+    content: message,
+    allowedMentions: {
+      parse: [],
+      roles: rule.role_id ? [rule.role_id] : []
+    }
+  }).catch(() => null);
+
+  await run(
+    `INSERT INTO social_announcements (guild_id, link_id, event_type, event_uid, posted_message_id, sent_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (link_id, event_uid)
+     DO NOTHING`,
+    [link.guild_id, link.id, event.eventType || "post", event.uid, sent?.id || null, Date.now()]
+  );
+
+  return !!sent;
+}
+
+async function installTwitchEventSubRoutes(app, client) {
+  const callbackUrl = getTwitchEventSubCallbackUrl();
+  const secret = getTwitchEventSubSecret();
+  if (!callbackUrl || !secret) {
+    console.warn("[socials] Twitch EventSub route not enabled; callback URL or secret is missing.");
+    return;
+  }
+
+  app.post("/twitch/eventsub", express.text({ type: "application/json" }), async (req, res) => {
+    const rawBody = req.body || "";
+    let payload;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return res.status(400).send("Invalid JSON");
+    }
+
+    const messageId = req.header("Twitch-Eventsub-Message-Id");
+    const timestamp = req.header("Twitch-Eventsub-Message-Timestamp");
+    const signature = req.header("Twitch-Eventsub-Message-Signature");
+    if (!messageId || !timestamp || !signature) {
+      return res.status(400).send("Missing Twitch EventSub headers");
+    }
+
+    const expected = crypto
+      .createHmac("sha256", secret)
+      .update(messageId + timestamp + rawBody)
+      .digest("hex");
+
+    if (signature !== `sha256=${expected}`) {
+      return res.status(403).send("Invalid signature");
+    }
+
+    const messageType = req.header("Twitch-Eventsub-Message-Type");
+    if (messageType === "webhook_callback_verification") {
+      return res.status(200).send(payload.challenge || "");
+    }
+
+    if (messageType === "revocation") {
+      console.warn("[socials] Twitch EventSub revoked:", payload.subscription || payload);
+      return res.status(200).send("ok");
+    }
+
+    if (messageType !== "notification") {
+      return res.status(200).send("ignored");
+    }
+
+    if (payload.subscription?.type !== "stream.online") {
+      return res.status(200).send("ignored");
+    }
+
+    handleTwitchEventSubNotification(client, payload).catch((err) => {
+      console.error("[socials] EventSub notification failed:", err);
+    });
+
+    return res.status(200).send("ok");
+  });
+}
+
+async function handleTwitchEventSubNotification(client, payload) {
+  const event = payload.event || {};
+  const broadcasterId = event.broadcaster_user_id;
+  if (!broadcasterId) return;
+
+  const user = await fetchTwitchUserById(broadcasterId);
+  const login = String(user?.login || "").trim();
+  if (!login) return;
+
+  const links = await getTwitchLinksByLogin(login);
+  if (!links.length) return;
+
+  const stream = await fetchTwitchStreamByBroadcasterId(broadcasterId);
+  const title = stream?.title || `${login} is live`;
+  const publishedAt = stream?.started_at || event.started_at || null;
+  const uid = stream?.id ? `twitch-live-${stream.id}` : `twitch-live-${broadcasterId}-${publishedAt || Date.now()}`;
+
+  const socialEvent = {
+    eventType: "live",
+    uid,
+    title,
+    url: `https://twitch.tv/${login}`,
+    publishedAt
+  };
+
+  for (const link of links) {
+    await dispatchSocialEvent(client, link, socialEvent).catch((err) => {
+      console.error("[socials] dispatchSocialEvent failed:", err);
+    });
+  }
+}
+
 async function ensureDefaultRulesForLink(link) {
   const events = getSupportedEventsForPlatform(link.platform);
   for (const eventType of events) {
@@ -465,51 +791,7 @@ async function runSocialNotifierTick(client) {
       if (!guild) continue;
 
       for (const event of events) {
-        if (!event?.uid || !event?.url) continue;
-
-        const alreadySent = await get(
-          `SELECT id FROM social_announcements WHERE link_id=? AND event_uid=?`,
-          [link.id, event.uid]
-        );
-        if (alreadySent) continue;
-
-        const rule = ruleMap.get(String(event.eventType || "post"));
-        if (!rule || Number(rule.enabled) !== 1) continue;
-
-        const channelId = rule.channel_id || link.channel_id || guildSettings?.social_default_channel_id || null;
-        if (!channelId) continue;
-
-        const channel = guild.channels.cache.get(channelId) || await guild.channels.fetch(channelId).catch(() => null);
-        if (!channel || !channel.isTextBased || !channel.isTextBased()) continue;
-
-        const roleMention = rule.role_id ? `<@&${rule.role_id}>` : "";
-        const platformLabel = SOCIAL_PLATFORM_OPTIONS.find((p) => p.key === normalizePlatform(link.platform))?.label || link.platform;
-        const template = rule.message_template || defaultTemplateForEvent(event.eventType);
-
-        const message = renderTemplate(template, {
-          platform: platformLabel,
-          handle: link.label || link.external_id,
-          title: event.title || "New update",
-          url: event.url,
-          event: SOCIAL_EVENT_LABELS[event.eventType] || event.eventType,
-          role: roleMention
-        });
-
-        const sent = await channel.send({
-          content: message,
-          allowedMentions: {
-            parse: [],
-            roles: rule.role_id ? [rule.role_id] : []
-          }
-        }).catch(() => null);
-
-        await run(
-          `INSERT INTO social_announcements (guild_id, link_id, event_type, event_uid, posted_message_id, sent_at)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT (link_id, event_uid)
-           DO NOTHING`,
-          [link.guild_id, link.id, event.eventType || "post", event.uid, sent?.id || null, Date.now()]
-        );
+        await dispatchSocialEvent(client, link, event, guild);
       }
 
       await run(
@@ -522,7 +804,17 @@ async function runSocialNotifierTick(client) {
   }
 }
 
-function startSocialFeedNotifier(client) {
+function startSocialFeedNotifier(client, app = null) {
+  if (app) {
+    installTwitchEventSubRoutes(app, client);
+  }
+
+  if (getTwitchEventSubCallbackUrl() && getTwitchEventSubSecret()) {
+    syncTwitchEventSubSubscriptions().catch((err) => {
+      console.error("[socials] Twitch EventSub sync failed:", err);
+    });
+  }
+
   runSocialNotifierTick(client).catch((err) => {
     console.error("[socials] Initial poll failed:", err);
   });

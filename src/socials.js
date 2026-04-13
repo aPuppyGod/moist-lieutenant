@@ -114,7 +114,7 @@ function inferSourceUrl(platformRaw, externalIdRaw, sourceUrlRaw) {
   }
 
   if (platform === "twitter") {
-    return `https://nitter.net/${stripAt(externalId)}/rss`;
+    return `https://rss-bridge.org/bridge01/?action=display&bridge=TwitterBridge&context=By+username&u=${stripAt(externalId)}&format=Atom`;
   }
 
   if (platform === "tiktok") {
@@ -155,7 +155,9 @@ function getSupportedEventsForPlatform(platformRaw) {
   if (platform === "twitch") return ["live"];
   if (platform === "instagram") return ["post", "story"];
   if (platform === "twitter") return ["post"];
-  if (platform === "tiktok") return ["post"];
+  if (platform === "tiktok") return ["live", "post"];
+  if (platform === "facebook") return ["post"];
+  if (platform === "kick") return ["live"];
   if (platform === "custom_rss") return ["post"];
   return ["post"];
 }
@@ -377,25 +379,69 @@ async function pollTwitch(link) {
   ];
 }
 
+async function pollKick(link) {
+  const username = String(link.external_id || "").trim().replace(/^@/, "");
+  if (!username) return [];
+
+  try {
+    // Try to get stream info from Kick's API or page
+    const apiUrl = `https://kick.com/api/v1/channels/${username}`;
+    const response = await fetch(apiUrl, {
+      headers: {
+        "User-Agent": "moist-lieutenant/1.0"
+      }
+    });
+
+    if (!response.ok) return [];
+
+    const data = await response.json();
+    if (!data?.livestream) return [];
+
+    const stream = data.livestream;
+    if (!stream.is_live) return [];
+
+    return [
+      {
+        eventType: "live",
+        uid: `kick-live-${stream.id}`,
+        title: stream.session_title || `${username} is live on Kick`,
+        url: `https://kick.com/${username}`,
+        publishedAt: stream.created_at || null
+      }
+    ];
+  } catch (err) {
+    console.warn("[socials] Kick API failed for", username, err.message);
+    return [];
+  }
+}
+
 async function pollRssLike(link) {
   const sourceUrl = String(link.source_url || "").trim();
   if (!sourceUrl) return [];
   const xml = await fetchText(sourceUrl);
   const items = parseRssItems(xml).concat(parseAtomEntries(xml)).slice(0, 10);
-  return items.map((item) => ({
-    eventType: "post",
-    uid: String(item.uid || item.url),
-    title: item.title,
-    url: item.url,
-    publishedAt: item.publishedAt
-  }));
-}
 
-async function pollSocialLink(link) {
   const platform = normalizePlatform(link.platform);
-  if (platform === "youtube") return await pollYoutube(link);
-  if (platform === "twitch") return await pollTwitch(link);
-  return await pollRssLike(link);
+  return items.map((item) => {
+    let eventType = "post";
+
+    // Detect live streams based on title/content
+    if (platform === "tiktok") {
+      const titleLower = String(item.title || "").toLowerCase();
+      const isLikelyLive = /\blive\b|\blivestream\b|\bgoing live\b|\bstreaming\b/i.test(titleLower);
+      if (isLikelyLive) {
+        eventType = "live";
+      }
+    }
+
+    return {
+      eventType,
+      uid: String(item.uid || item.url),
+      title: item.title,
+      url: item.url,
+      publishedAt: item.publishedAt
+    };
+  });
 }
 
 function defaultTemplateForEvent(eventType) {

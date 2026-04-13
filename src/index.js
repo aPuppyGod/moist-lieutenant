@@ -21,7 +21,7 @@ const { createCanvas } = require("canvas");
 
 const { initDb, get, run, all } = require("./db");
 const { levelFromXp } = require("./xp");
-const { handleCommands, handleSlashCommand, registerSlashCommands } = require("./commands");
+const { handleCommands, handleSlashCommand, registerSlashCommands, ensureDefaultShopItems } = require("./commands");
 const { onVoiceStateUpdate, cleanupPrivateRooms } = require("./voiceRooms");
 const { getGuildSettings } = require("./settings");
 const { getLevelRoles } = require("./settings");

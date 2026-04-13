@@ -7,6 +7,7 @@ const { createCanvas, loadImage, registerFont } = require("canvas");
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
 const { getLevelRoles, getGuildSettings, upsertReactionRoleBinding, removeReactionRoleBinding, getReactionRoleBindings } = require("./settings");
 const { normalizeEmojiKey } = require("./reactionRoles");
+const { cmdFish, cmdDig, cmdRobBank, cmdPhone } = require("./economy");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
 const path = require("path");
@@ -288,7 +289,7 @@ async function cmdPublicCommands(message) {
   
   let economyCommands = "";
   if (economySettings?.enabled) {
-    economyCommands = `\n**Economy Commands:**\n\`${ecoPrefix}balance\` \`${ecoPrefix}daily\` \`${ecoPrefix}weekly\` \`${ecoPrefix}pay\` \`${ecoPrefix}baltop\`\n\`${ecoPrefix}deposit\` \`${ecoPrefix}withdraw\` \`${ecoPrefix}rob\`\n\`${ecoPrefix}slots\` \`${ecoPrefix}coinflip\` \`${ecoPrefix}dice\`\n\`${ecoPrefix}job\` \`${ecoPrefix}work\` \`${ecoPrefix}shop\` \`${ecoPrefix}buy\` \`${ecoPrefix}inventory\``;
+    economyCommands = `\n**Economy Commands:**\n\`${ecoPrefix}balance\` \`${ecoPrefix}daily\` \`${ecoPrefix}weekly\` \`${ecoPrefix}pay\` \`${ecoPrefix}baltop\`\n\`${ecoPrefix}deposit\` \`${ecoPrefix}withdraw\` \`${ecoPrefix}rob\` \`${ecoPrefix}bankrob\`\n\`${ecoPrefix}slots\` \`${ecoPrefix}coinflip\` \`${ecoPrefix}dice\`\n\`${ecoPrefix}shop\` \`${ecoPrefix}buy\` \`${ecoPrefix}inventory\`\n**Minigames:**\n\`${ecoPrefix}fish\` \`${ecoPrefix}dig\` \`${ecoPrefix}phone\``;
   }
   
   const embed = compactEmbed("Commands", [
@@ -3023,8 +3024,8 @@ async function cmdRob(message, args) {
 
   const now = Date.now();
   const cooldown = (economySettings.rob_cooldown || 3600) * 1000;
-  if (robber.last_rob && (now - robber.last_rob) < cooldown) {
-    const timeLeft = cooldown - (now - robber.last_rob);
+  if (robber.last_normal_rob && (now - robber.last_normal_rob) < cooldown) {
+    const timeLeft = cooldown - (now - robber.last_normal_rob);
     const minutes = Math.floor(timeLeft / 60000);
     await message.reply(`❌ You must wait ${minutes} minutes before robbing again!`).catch(() => {});
     return;
@@ -3037,7 +3038,7 @@ async function cmdRob(message, args) {
     await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id='padlock'`,
       [message.guild.id, target.member.id]);
     await message.reply(`❌ ${target.member} had a 🔒 **Padlock** protecting their wallet! It broke when you tried to rob them.`).catch(() => {});
-    await run(`UPDATE user_economy SET last_rob=? WHERE guild_id=? AND user_id=?`, [now, message.guild.id, message.author.id]);
+    await run(`UPDATE user_economy SET last_normal_rob=? WHERE guild_id=? AND user_id=?`, [now, message.guild.id, message.author.id]);
     return;
   }
 
@@ -3050,7 +3051,7 @@ async function cmdRob(message, args) {
   const success = Math.random() < 0.5;
   if (!success) {
     const fine = Math.min(robber.balance, Math.floor(victim.balance * 0.3));
-    await run(`UPDATE user_economy SET balance=?, last_rob=? WHERE guild_id=? AND user_id=?`,
+    await run(`UPDATE user_economy SET balance=?, last_normal_rob=? WHERE guild_id=? AND user_id=?`,
       [robber.balance - fine, now, message.guild.id, message.author.id]);
     await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
       [message.guild.id, message.author.id, "rob_failed", -fine, `Failed to rob ${target.member.user.tag}`]);
@@ -3059,7 +3060,7 @@ async function cmdRob(message, args) {
   }
 
   const stolen = Math.floor(victim.balance * (0.1 + Math.random() * 0.2)); // 10-30%
-  await run(`UPDATE user_economy SET balance=?, last_rob=? WHERE guild_id=? AND user_id=?`,
+  await run(`UPDATE user_economy SET balance=?, last_normal_rob=? WHERE guild_id=? AND user_id=?`,
     [robber.balance + stolen, now, message.guild.id, message.author.id]);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
     [victim.balance - stolen, message.guild.id, target.member.id]);
@@ -3821,9 +3822,9 @@ async function handleCommands(message) {
   
   // List of economy commands that can use the economy prefix
   const economyCommands = ["balance", "bal", "daily", "weekly", "pay", "baltop", "richest",
-    "deposit", "dep", "withdraw", "with", "rob", "slots", "slot", "coinflip", "cf", 
+    "deposit", "dep", "withdraw", "with", "rob", "bankrob", "bank-rob", "bankrobbery", "slots", "slot", "coinflip", "cf", 
     "dice", "roll", "job", "jobs", "work", "shift", "shop", "store", "buy", "purchase", 
-    "inventory", "inv"];
+    "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call"];
   
   // Try economy prefix first for economy commands
   const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
@@ -3855,6 +3856,15 @@ async function handleCommands(message) {
 
 async function executeCommand(message, cmd, args, prefix) {
   if (!message.guild) return false;
+
+  // Initialize default shop items for economy-enabled guilds
+  if ((cmd === "shop" || cmd === "store" || cmd === "buy" || cmd === "purchase" || cmd === "balance" || 
+       cmd === "fish" || cmd === "dig" || cmd === "bankrob" || cmd === "phone") && message.author.id !== client?.user?.id) {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    if (economySettings?.enabled) {
+      await ensureDefaultShopItems(message.guild.id).catch(() => {});
+    }
+  }
 
   if (cmd === "moist-lieutenant") {
     const publicUrl = process.env.BOT_PUBLIC_URL || process.env.DISCORD_CALLBACK_URL?.replace('/auth/discord/callback', '') || "http://localhost:8080";
@@ -4037,6 +4047,38 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "rob") {
     await cmdRob(message, args);
+    return true;
+  }
+
+  if (cmd === "bankrob" || cmd === "bank-rob" || cmd === "bankrobbery") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdRobBank(message, args, util);
+    return true;
+  }
+
+  if (cmd === "fish" || cmd === "fishing") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdFish(message, args, util);
+    return true;
+  }
+
+  if (cmd === "dig" || cmd === "digging") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdDig(message, args, util);
+    return true;
+  }
+
+  if (cmd === "phone" || cmd === "call") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdPhone(message, args, util);
     return true;
   }
 
@@ -4551,4 +4593,34 @@ async function registerSlashCommands(client) {
   console.log(`[slash] Registered ${defs.length} commands (guild-only sync across ${guildSynced} guilds)`);
 }
 
-module.exports = { handleCommands, handleSlashCommand, registerSlashCommands, endGiveaway };
+async function ensureDefaultShopItems(guildId) {
+  // Setup default economy shop items for minigames and features
+  const defaultItems = [
+    // Tools (durable, single equipment pieces)
+    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'Essential tool for fishing. Use /fish to catch treasure from the sea!', price: 200, type: 'tool' },
+    { id: 'shovel', name: '⛏️ Shovel', description: 'Dig for treasures underground. Use /dig to start digging!', price: 200, type: 'tool' },
+    { id: 'padlock', name: '🔒 Padlock', description: 'Protects your wallet from robberies (single use)', price: 100, type: 'single' },
+    { id: 'phone', name: '📱 Phone', description: 'Call services - police (protection), taxi (explore), takeout (food)', price: 150, type: 'single' },
+    
+    // Consumables
+    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next /dig or increases /fish success!', price: 80, type: 'consumable' },
+    { id: 'food', name: '🍔 Food Item', description: 'A basic food item. Collect different types from takeout!', price: 25, type: 'consumable' },
+    
+    // Special Items
+    { id: 'lucky_charm', name: '✨ Lucky Charm', description: 'Increases luck in minigames by 10%', price: 300, type: 'cosmetic' },
+    { id: 'vip_pass', name: '🎫 VIP Pass', description: 'Unlock exclusive minigames and higher rewards', price: 500, type: 'single' }
+  ];
+
+  for (const item of defaultItems) {
+    const exists = await get(`SELECT id FROM economy_shop_items WHERE guild_id=? AND item_id=?`, [guildId, item.id]);
+    if (!exists) {
+      await run(
+        `INSERT INTO economy_shop_items (id, guild_id, name, description, price, item_type)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [`${guildId}-${item.id}`, guildId, item.name, item.description, item.price, item.type]
+      );
+    }
+  }
+}
+
+module.exports = { handleCommands, handleSlashCommand, registerSlashCommands, endGiveaway, ensureDefaultShopItems };

@@ -948,6 +948,39 @@ async function initDb() {
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_cooldown INTEGER DEFAULT 3600`);
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS economy_prefix TEXT DEFAULT '$'`);
     await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS review_channel_id TEXT DEFAULT NULL`);
+
+    // Minigames system
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_normal_rob BIGINT DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_bank_rob BIGINT DEFAULT 0`);
+    await run(`ALTER TABLE user_inventory ADD COLUMN IF NOT EXISTS equipped INTEGER DEFAULT 0`);
+
+    // Minigames stats table
+    await run(`
+      CREATE TABLE IF NOT EXISTS minigames_stats (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        minigame TEXT NOT NULL,
+        stat_name TEXT NOT NULL,
+        stat_value BIGINT DEFAULT 0,
+        last_played BIGINT DEFAULT NULL,
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        PRIMARY KEY (guild_id, user_id, minigame, stat_name)
+      )
+    `);
+
+    // Robbery attempt logs
+    await run(`
+      CREATE TABLE IF NOT EXISTS robbery_attempts (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        robber_id TEXT NOT NULL,
+        victim_id TEXT,
+        robbery_type TEXT NOT NULL,
+        success INTEGER NOT NULL,
+        amount_stolen BIGINT DEFAULT 0,
+        attempted_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+      )
+    `);
     await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS require_review INTEGER DEFAULT 0`);
     await run(`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS review_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE suggestions ADD COLUMN IF NOT EXISTS published_message_id TEXT DEFAULT NULL`);

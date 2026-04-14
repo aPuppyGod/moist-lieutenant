@@ -1,6 +1,651 @@
 const { all, get, run } = require("./db");
 
-// ==================== FISHING ====================
+// ==================== SWAMP STORY SYSTEM ====================
+
+const SWAMP_STORIES = {
+  "frog_prince": {
+    title: "🐸 The Frog Prince's Curse",
+    chapters: {
+      1: {
+        text: "You find a frog sitting on a lily pad, wearing a tiny crown. It croaks: 'Help me, adventurer! I've been cursed by the Swamp Witch!'",
+        choices: [
+          { text: "Kiss the frog", consequence: "kiss_frog", reward: "frog_kiss", death_chance: 0.1 },
+          { text: "Ignore and walk away", consequence: "ignore_frog", reward: null },
+          { text: "Capture the frog", consequence: "capture_frog", reward: "frog_prisoner" }
+        ]
+      },
+      2: {
+        text: "The frog transforms into a handsome prince! But wait... he's actually a lizard in disguise!",
+        choices: [
+          { text: "Accept his thanks and leave", consequence: "accept_thanks", reward: "royal_blessing" },
+          { text: "Demand payment", consequence: "demand_payment", reward: "prince_gold" },
+          { text: "Challenge him to a duel", consequence: "duel_prince", reward: "prince_scales", death_chance: 0.3 }
+        ]
+      }
+    }
+  },
+  "swamp_witch": {
+    title: "🧙‍♀️ The Swamp Witch's Brew",
+    chapters: {
+      1: {
+        text: "Deep in the misty swamp, you find a bubbling cauldron. The Swamp Witch cackles: 'What do you seek, little tadpole?'",
+        choices: [
+          { text: "Ask for a potion of strength", consequence: "strength_potion", reward: "strength_elixir" },
+          { text: "Ask for eternal youth", consequence: "youth_potion", reward: "youth_serum", death_chance: 0.2 },
+          { text: "Try to steal her ingredients", consequence: "steal_ingredients", reward: "witch_herbs", death_chance: 0.5 }
+        ]
+      }
+    }
+  },
+  "dragon_lair": {
+    title: "🐉 The Dragon's Treasure",
+    chapters: {
+      1: {
+        text: "You discover a cave entrance guarded by a sleeping dragon. Treasure glitters inside!",
+        choices: [
+          { text: "Sneak past the dragon", consequence: "sneak_past", reward: "dragon_gold", death_chance: 0.4 },
+          { text: "Fight the dragon", consequence: "fight_dragon", reward: "dragon_scales", death_chance: 0.8 },
+          { text: "Befriend the dragon", consequence: "befriend_dragon", reward: "dragon_friendship" }
+        ]
+      }
+    }
+  }
+};
+
+const SWAMP_EVENTS = [
+  {
+    id: "mosquito_swarm",
+    title: "🦟 Mosquito Swarm Attack!",
+    description: "A massive swarm of bloodthirsty mosquitoes descends upon you!",
+    choices: [
+      { text: "Swat them away", success: 0.6, reward: "mosquito_wings", consequence: "You fight them off but get bitten!" },
+      { text: "Run away", success: 1.0, reward: null, consequence: "You escape but lose your dignity!" },
+      { text: "Use bug spray", requires: "bug_spray", reward: "mosquito_slaughter", consequence: "The swarm is annihilated!" }
+    ]
+  },
+  {
+    id: "crocodile_ambush",
+    title: "🐊 Crocodile Ambush!",
+    description: "A massive crocodile bursts from the water, jaws snapping!",
+    choices: [
+      { text: "Fight back with your bare hands", success: 0.2, reward: "croc_teeth", consequence: "Miraculously, you survive!", death_chance: 0.8 },
+      { text: "Use a fishing rod as a weapon", requires: "fishing_rod", success: 0.7, reward: "croc_skin", consequence: "You hook the croc and win!" },
+      { text: "Jump on its back", success: 0.4, reward: "croc_ride", consequence: "You tame the beast!" }
+    ]
+  },
+  {
+    id: "treasure_chest",
+    title: "💰 Mysterious Treasure Chest",
+    description: "You find a chest half-buried in the mud. It might be trapped!",
+    choices: [
+      { text: "Open it carefully", success: 0.8, reward: "random_treasure", consequence: "You find valuable items!" },
+      { text: "Smash it open", success: 0.6, reward: "broken_treasure", consequence: "Some items break, but you get others!" },
+      { text: "Leave it alone", success: 1.0, reward: null, consequence: "Better safe than sorry." }
+    ]
+  }
+];
+
+const DEATH_SCENARIOS = [
+  "🐊 You were eaten by a crocodile!",
+  "🦟 You were drained dry by mosquitoes!",
+  "🐍 You stepped on a venomous snake!",
+  "🕷️ You were bitten by a giant spider!",
+  "🌿 You ate poisonous swamp berries!",
+  "💧 You drowned in quicksand!",
+  "🐺 You were mauled by swamp wolves!",
+  "🧟 You were possessed by swamp spirits!"
+];
+
+const REVIVAL_METHODS = [
+  { item: "revival_potion", name: "🧪 Revival Potion", description: "Brings you back from the dead" },
+  { item: "frog_amulet", name: "🐸 Frog Amulet", description: "Protects against one death" },
+  { item: "lizard_totem", name: "🦎 Lizard Totem", description: "Revives you with lizard magic" },
+  { item: "swamp_blessing", name: "🌿 Swamp Blessing", description: "Nature's protection" }
+];
+
+// ==================== SWAMP ADVENTURE SYSTEM ====================
+
+async function cmdAdventure(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  const storyId = args[0]?.toLowerCase();
+  if (!storyId || !SWAMP_STORIES[storyId]) {
+    const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) => 
+      `**${id}**: ${story.title}`
+    ).join('\n');
+    
+    await message.reply(`🗺️ **Swamp Adventures**\n\nChoose your adventure:\n${availableStories}\n\nUsage: \`${ecoPrefix}adventure <story_id>\``).catch(() => {});
+    return;
+  }
+
+  const story = SWAMP_STORIES[storyId];
+  const progress = await getCmd(
+    `SELECT * FROM story_progress WHERE guild_id=? AND user_id=? AND story_id=?`,
+    [message.guild.id, message.author.id, storyId]
+  );
+
+  const currentChapter = progress?.chapter || 1;
+  const chapter = story.chapters[currentChapter];
+
+  if (!chapter) {
+    await message.reply(`✅ **${story.title}**\n\nYou have completed this adventure!`).catch(() => {});
+    return;
+  }
+
+  const choicesText = chapter.choices.map((choice, i) => 
+    `${i + 1}. ${choice.text}`
+  ).join('\n');
+
+  await message.reply(`📖 **${story.title} - Chapter ${currentChapter}**\n\n${chapter.text}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
+
+  // Set up choice collector
+  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
+  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+
+  collector.on('collect', async (choiceMsg) => {
+    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
+    const choice = chapter.choices[choiceIndex];
+
+    if (!choice) {
+      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
+      return;
+    }
+
+    // Check death chance
+    if (choice.death_chance && Math.random() < choice.death_chance) {
+      await handleDeath(message, util, `You died during **${story.title}**! ${DEATH_SCENARIOS[Math.floor(Math.random() * DEATH_SCENARIOS.length)]}`);
+      return;
+    }
+
+    // Apply consequence
+    let rewardText = "";
+    if (choice.reward) {
+      await giveReward(message, choice.reward, util);
+      rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
+    }
+
+    // Update progress
+    const nextChapter = currentChapter + 1;
+    const isCompleted = !story.chapters[nextChapter];
+
+    await runCmd(
+      `INSERT INTO story_progress (guild_id, user_id, story_id, chapter, completed, last_updated)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET
+       chapter=?, completed=?, last_updated=?`,
+      [message.guild.id, message.author.id, storyId, nextChapter, isCompleted ? 1 : 0, Date.now(), nextChapter, isCompleted ? 1 : 0, Date.now()]
+    );
+
+    const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter}...`;
+    await choiceMsg.reply(`✅ **Choice Made:** ${choice.text}${rewardText}${completionText}`).catch(() => {});
+  });
+
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      message.reply("⏰ Time's up! Adventure cancelled.").catch(() => {});
+    }
+  });
+}
+
+// ==================== RANDOM SWAMP EVENTS ====================
+
+async function cmdExplore(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  // Check for exploration cooldown (10 minutes)
+  const lastExplore = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='exploration' AND stat_name='last_explore'`,
+    [message.guild.id, message.author.id]
+  );
+
+  const now = Date.now();
+  const cooldown = 600000; // 10 minutes
+  if (lastExplore?.last_played && (now - lastExplore.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - lastExplore.last_played);
+    const minutes = Math.floor(timeLeft / 60000);
+    await message.reply(`🌿 You're still recovering from your last expedition! Come back in ${minutes} minutes.`).catch(() => {});
+    return;
+  }
+
+  // Random event
+  const event = SWAMP_EVENTS[Math.floor(Math.random() * SWAMP_EVENTS.length)];
+  const choicesText = event.choices.map((choice, i) => 
+    `${i + 1}. ${choice.text}`
+  ).join('\n');
+
+  await message.reply(`🗺️ **Swamp Exploration**\n\n${event.title}\n${event.description}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
+
+  // Set up choice collector
+  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
+  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+
+  collector.on('collect', async (choiceMsg) => {
+    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
+    const choice = event.choices[choiceIndex];
+
+    if (!choice) {
+      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
+      return;
+    }
+
+    // Check requirements
+    if (choice.requires) {
+      const hasItem = await getCmd(
+        `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
+        [message.guild.id, message.author.id, choice.requires]
+      );
+      if (!hasItem) {
+        await choiceMsg.reply(`❌ You need **${choice.requires.replace(/_/g, ' ').toUpperCase()}** for this action!`).catch(() => {});
+        return;
+      }
+    }
+
+    // Check success
+    const success = Math.random() < choice.success;
+    if (!success) {
+      await choiceMsg.reply(`❌ **Failed:** ${choice.consequence}`).catch(() => {});
+    } else {
+      let rewardText = "";
+      if (choice.reward) {
+        await giveReward(message, choice.reward, util);
+        rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
+      }
+
+      await choiceMsg.reply(`✅ **Success:** ${choice.consequence}${rewardText}`).catch(() => {});
+    }
+
+    // Update exploration stats
+    await runCmd(
+      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+       VALUES (?, ?, 'exploration', 'last_explore', 1, ?)
+       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET
+       stat_value=stat_value+1, last_played=?`,
+      [message.guild.id, message.author.id, now, now]
+    );
+  });
+
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      message.reply("⏰ Time's up! Exploration cancelled.").catch(() => {});
+    }
+  });
+}
+
+// ==================== DEATH AND REVIVAL SYSTEM ====================
+
+async function handleDeath(message, util, deathMessage) {
+  const { run: runCmd, get: getCmd } = util;
+
+  // Check for revival items
+  for (const revival of REVIVAL_METHODS) {
+    const item = await getCmd(
+      `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
+      [message.guild.id, message.author.id, revival.item]
+    );
+
+    if (item) {
+      // Consume the item and revive
+      await runCmd(
+        `UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`,
+        [message.guild.id, message.author.id, revival.item]
+      );
+
+      await message.reply(`💀 ${deathMessage}\n\nBut... **${revival.name}** saves you!\n\n${revival.description}`).catch(() => {});
+      return;
+    }
+  }
+
+  // No revival - actual death
+  await message.reply(`💀 ${deathMessage}\n\n**You have died!**\n\n💡 **Ways to revive:**\n${REVIVAL_METHODS.map(r => `• ${r.name} (${r.description})`).join('\n')}\n\nBuy revival items from the shop!`).catch(() => {});
+
+  // Reset some progress (but keep items)
+  await runCmd(
+    `UPDATE user_economy SET balance=balance*0.5 WHERE guild_id=? AND user_id=?`,
+    [message.guild.id, message.author.id]
+  );
+}
+
+// ==================== REWARD SYSTEM ====================
+
+async function giveReward(message, rewardType, util) {
+  const { economySettings, run: runCmd } = util;
+
+  const rewards = {
+    // Story rewards
+    "frog_kiss": { money: 100, item: "frog_blessing" },
+    "royal_blessing": { money: 500, item: "crown_jewel" },
+    "prince_gold": { money: 1000 },
+    "prince_scales": { item: "lizard_scales" },
+    "strength_elixir": { item: "strength_potion" },
+    "youth_serum": { item: "youth_potion" },
+    "witch_herbs": { item: "magical_herbs" },
+    "dragon_gold": { money: 2000 },
+    "dragon_scales": { item: "dragon_scales" },
+    "dragon_friendship": { item: "dragon_egg" },
+
+    // Event rewards
+    "mosquito_wings": { money: 50, item: "insect_wings" },
+    "mosquito_slaughter": { money: 150, item: "bug_spray" },
+    "croc_teeth": { item: "crocodile_teeth" },
+    "croc_skin": { item: "crocodile_hide" },
+    "croc_ride": { item: "crocodile_whistle" },
+    "random_treasure": { money: Math.floor(Math.random() * 500) + 100 },
+    "broken_treasure": { money: Math.floor(Math.random() * 300) + 50 }
+  };
+
+  const reward = rewards[rewardType];
+  if (!reward) return;
+
+  if (reward.money) {
+    await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+      [reward.money, message.guild.id, message.author.id]);
+  }
+
+  if (reward.item) {
+    await runCmd(
+      `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
+       VALUES (?, ?, ?, 1)
+       ON CONFLICT (guild_id, user_id, item_id)
+       DO UPDATE SET quantity = user_inventory.quantity + 1`,
+      [message.guild.id, message.author.id, reward.item]
+    );
+  }
+}
+
+// ==================== EXPORTS ====================
+
+module.exports = {
+  cmdFish,
+  cmdDig,
+  cmdRobBank,
+  cmdPhone,
+  cmdAdventure,
+  cmdExplore,
+  handleDeath,
+  giveReward
+};
+
+// ==================== SWAMP ADVENTURE SYSTEM ====================
+
+async function cmdAdventure(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  const storyId = args[0]?.toLowerCase();
+  if (!storyId || !SWAMP_STORIES[storyId]) {
+    const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) => 
+      `**${id}**: ${story.title}`
+    ).join('\n');
+    
+    await message.reply(`🗺️ **Swamp Adventures**\n\nChoose your adventure:\n${availableStories}\n\nUsage: \`${ecoPrefix}adventure <story_id>\``).catch(() => {});
+    return;
+  }
+
+  const story = SWAMP_STORIES[storyId];
+  const progress = await getCmd(
+    `SELECT * FROM story_progress WHERE guild_id=? AND user_id=? AND story_id=?`,
+    [message.guild.id, message.author.id, storyId]
+  );
+
+  const currentChapter = progress?.chapter || 1;
+  const chapter = story.chapters[currentChapter];
+
+  if (!chapter) {
+    await message.reply(`✅ **${story.title}**\n\nYou have completed this adventure!`).catch(() => {});
+    return;
+  }
+
+  const choicesText = chapter.choices.map((choice, i) => 
+    `${i + 1}. ${choice.text}`
+  ).join('\n');
+
+  await message.reply(`📖 **${story.title} - Chapter ${currentChapter}**\n\n${chapter.text}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
+
+  // Set up choice collector
+  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
+  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+
+  collector.on('collect', async (choiceMsg) => {
+    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
+    const choice = chapter.choices[choiceIndex];
+
+    if (!choice) {
+      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
+      return;
+    }
+
+    // Check death chance
+    if (choice.death_chance && Math.random() < choice.death_chance) {
+      await handleDeath(message, util, `You died during **${story.title}**! ${DEATH_SCENARIOS[Math.floor(Math.random() * DEATH_SCENARIOS.length)]}`);
+      return;
+    }
+
+    // Apply consequence
+    let rewardText = "";
+    if (choice.reward) {
+      await giveReward(message, choice.reward, util);
+      rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
+    }
+
+    // Update progress
+    const nextChapter = currentChapter + 1;
+    const isCompleted = !story.chapters[nextChapter];
+
+    await runCmd(
+      `INSERT INTO story_progress (guild_id, user_id, story_id, chapter, completed, last_updated)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET
+       chapter=?, completed=?, last_updated=?`,
+      [message.guild.id, message.author.id, storyId, nextChapter, isCompleted ? 1 : 0, Date.now(), nextChapter, isCompleted ? 1 : 0, Date.now()]
+    );
+
+    const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter}...`;
+    await choiceMsg.reply(`✅ **Choice Made:** ${choice.text}${rewardText}${completionText}`).catch(() => {});
+  });
+
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      message.reply("⏰ Time's up! Adventure cancelled.").catch(() => {});
+    }
+  });
+}
+
+// ==================== RANDOM SWAMP EVENTS ====================
+
+async function cmdExplore(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  // Check for exploration cooldown (10 minutes)
+  const lastExplore = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='exploration' AND stat_name='last_explore'`,
+    [message.guild.id, message.author.id]
+  );
+
+  const now = Date.now();
+  const cooldown = 600000; // 10 minutes
+  if (lastExplore?.last_played && (now - lastExplore.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - lastExplore.last_played);
+    const minutes = Math.floor(timeLeft / 60000);
+    await message.reply(`🌿 You're still recovering from your last expedition! Come back in ${minutes} minutes.`).catch(() => {});
+    return;
+  }
+
+  // Random event
+  const event = SWAMP_EVENTS[Math.floor(Math.random() * SWAMP_EVENTS.length)];
+  const choicesText = event.choices.map((choice, i) => 
+    `${i + 1}. ${choice.text}`
+  ).join('\n');
+
+  await message.reply(`🗺️ **Swamp Exploration**\n\n${event.title}\n${event.description}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
+
+  // Set up choice collector
+  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
+  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+
+  collector.on('collect', async (choiceMsg) => {
+    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
+    const choice = event.choices[choiceIndex];
+
+    if (!choice) {
+      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
+      return;
+    }
+
+    // Check requirements
+    if (choice.requires) {
+      const hasItem = await getCmd(
+        `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
+        [message.guild.id, message.author.id, choice.requires]
+      );
+      if (!hasItem) {
+        await choiceMsg.reply(`❌ You need **${choice.requires.replace(/_/g, ' ').toUpperCase()}** for this action!`).catch(() => {});
+        return;
+      }
+    }
+
+    // Check success
+    const success = Math.random() < choice.success;
+    if (!success) {
+      await choiceMsg.reply(`❌ **Failed:** ${choice.consequence}`).catch(() => {});
+    } else {
+      let rewardText = "";
+      if (choice.reward) {
+        await giveReward(message, choice.reward, util);
+        rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
+      }
+
+      await choiceMsg.reply(`✅ **Success:** ${choice.consequence}${rewardText}`).catch(() => {});
+    }
+
+    // Update exploration stats
+    await runCmd(
+      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+       VALUES (?, ?, 'exploration', 'last_explore', 1, ?)
+       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET
+       stat_value=stat_value+1, last_played=?`,
+      [message.guild.id, message.author.id, now, now]
+    );
+  });
+
+  collector.on('end', (collected, reason) => {
+    if (reason === 'time') {
+      message.reply("⏰ Time's up! Exploration cancelled.").catch(() => {});
+    }
+  });
+}
+
+// ==================== DEATH AND REVIVAL SYSTEM ====================
+
+async function handleDeath(message, util, deathMessage) {
+  const { run: runCmd, get: getCmd } = util;
+
+  // Check for revival items
+  for (const revival of REVIVAL_METHODS) {
+    const item = await getCmd(
+      `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
+      [message.guild.id, message.author.id, revival.item]
+    );
+
+    if (item) {
+      // Consume the item and revive
+      await runCmd(
+        `UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`,
+        [message.guild.id, message.author.id, revival.item]
+      );
+
+      await message.reply(`💀 ${deathMessage}\n\nBut... **${revival.name}** saves you!\n\n${revival.description}`).catch(() => {});
+      return;
+    }
+  }
+
+  // No revival - actual death
+  await message.reply(`💀 ${deathMessage}\n\n**You have died!**\n\n💡 **Ways to revive:**\n${REVIVAL_METHODS.map(r => `• ${r.name} (${r.description})`).join('\n')}\n\nBuy revival items from the shop!`).catch(() => {});
+
+  // Reset some progress (but keep items)
+  await runCmd(
+    `UPDATE user_economy SET balance=balance*0.5 WHERE guild_id=? AND user_id=?`,
+    [message.guild.id, message.author.id]
+  );
+}
+
+// ==================== REWARD SYSTEM ====================
+
+async function giveReward(message, rewardType, util) {
+  const { economySettings, run: runCmd } = util;
+
+  const rewards = {
+    // Story rewards
+    "frog_kiss": { money: 100, item: "frog_blessing" },
+    "royal_blessing": { money: 500, item: "crown_jewel" },
+    "prince_gold": { money: 1000 },
+    "prince_scales": { item: "lizard_scales" },
+    "strength_elixir": { item: "strength_potion" },
+    "youth_serum": { item: "youth_potion" },
+    "witch_herbs": { item: "magical_herbs" },
+    "dragon_gold": { money: 2000 },
+    "dragon_scales": { item: "dragon_scales" },
+    "dragon_friendship": { item: "dragon_egg" },
+
+    // Event rewards
+    "mosquito_wings": { money: 50, item: "insect_wings" },
+    "mosquito_slaughter": { money: 150, item: "bug_spray" },
+    "croc_teeth": { item: "crocodile_teeth" },
+    "croc_skin": { item: "crocodile_hide" },
+    "croc_ride": { item: "crocodile_whistle" },
+    "random_treasure": { money: Math.floor(Math.random() * 500) + 100 },
+    "broken_treasure": { money: Math.floor(Math.random() * 300) + 50 }
+  };
+
+  const reward = rewards[rewardType];
+  if (!reward) return;
+
+  if (reward.money) {
+    await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+      [reward.money, message.guild.id, message.author.id]);
+  }
+
+  if (reward.item) {
+    await runCmd(
+      `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
+       VALUES (?, ?, ?, 1)
+       ON CONFLICT (guild_id, user_id, item_id)
+       DO UPDATE SET quantity = user_inventory.quantity + 1`,
+      [message.guild.id, message.author.id, reward.item]
+    );
+  }
+}
+
+// ==================== EXPORTS ====================
+
+module.exports = {
+  cmdFish,
+  cmdDig,
+  cmdRobBank,
+  cmdPhone,
+  cmdAdventure,
+  cmdExplore,
+  handleDeath,
+  giveReward
+};
 
 const FISH_TYPES = [
   { name: "Goldfish", emoji: "🐠", value: 50, rarity: "common", weight: 0.2 },

@@ -797,6 +797,7 @@ async function initDb() {
       rob_enabled INTEGER DEFAULT 1,
       rob_cooldown INTEGER DEFAULT 3600,
       economy_prefix TEXT DEFAULT '$',
+      economy_guide TEXT DEFAULT '',
       enabled INTEGER DEFAULT 1
     )
   `);
@@ -947,6 +948,7 @@ async function initDb() {
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS rob_cooldown INTEGER DEFAULT 3600`);
     await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS economy_prefix TEXT DEFAULT '$'`);
+    await run(`ALTER TABLE economy_settings ADD COLUMN IF NOT EXISTS economy_guide TEXT DEFAULT ''`);
     await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS review_channel_id TEXT DEFAULT NULL`);
 
     // Minigames system
@@ -979,6 +981,72 @@ async function initDb() {
         success INTEGER NOT NULL,
         amount_stolen BIGINT DEFAULT 0,
         attempted_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+      )
+    `);
+
+    // Story/Adventure system
+    await run(`
+      CREATE TABLE IF NOT EXISTS story_progress (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        story_id TEXT NOT NULL,
+        chapter INTEGER DEFAULT 1,
+        choices TEXT DEFAULT '[]',
+        completed INTEGER DEFAULT 0,
+        last_updated BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        PRIMARY KEY (guild_id, user_id, story_id)
+      )
+    `);
+
+    // Character stats and abilities
+    await run(`
+      CREATE TABLE IF NOT EXISTS character_stats (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        stat_name TEXT NOT NULL,
+        stat_value INTEGER DEFAULT 0,
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        PRIMARY KEY (guild_id, user_id, stat_name)
+      )
+    `);
+
+    // Active effects and buffs
+    await run(`
+      CREATE TABLE IF NOT EXISTS active_effects (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        effect_id TEXT NOT NULL,
+        effect_type TEXT NOT NULL,
+        duration BIGINT DEFAULT NULL,
+        stacks INTEGER DEFAULT 1,
+        applied_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        PRIMARY KEY (guild_id, user_id, effect_id)
+      )
+    `);
+
+    // Swamp exploration zones
+    await run(`
+      CREATE TABLE IF NOT EXISTS swamp_zones (
+        zone_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        danger_level INTEGER DEFAULT 1,
+        required_level INTEGER DEFAULT 1,
+        rewards TEXT DEFAULT '[]',
+        encounters TEXT DEFAULT '[]'
+      )
+    `);
+
+    // User zone progress
+    await run(`
+      CREATE TABLE IF NOT EXISTS zone_progress (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        zone_id TEXT NOT NULL,
+        visits INTEGER DEFAULT 0,
+        discoveries TEXT DEFAULT '[]',
+        last_visited BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        PRIMARY KEY (guild_id, user_id, zone_id)
       )
     `);
     await run(`ALTER TABLE suggestion_settings ADD COLUMN IF NOT EXISTS require_review INTEGER DEFAULT 0`);

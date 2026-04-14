@@ -289,7 +289,7 @@ async function cmdPublicCommands(message) {
   
   let economyCommands = "";
   if (economySettings?.enabled) {
-    economyCommands = `\n**Economy Commands:**\n\`${ecoPrefix}balance\` \`${ecoPrefix}daily\` \`${ecoPrefix}weekly\` \`${ecoPrefix}pay\` \`${ecoPrefix}baltop\`\n\`${ecoPrefix}deposit\` \`${ecoPrefix}withdraw\` \`${ecoPrefix}rob\` \`${ecoPrefix}bankrob\`\n\`${ecoPrefix}slots\` \`${ecoPrefix}coinflip\` \`${ecoPrefix}dice\`\n\`${ecoPrefix}shop\` \`${ecoPrefix}buy\` \`${ecoPrefix}inventory\`\n**Minigames:**\n\`${ecoPrefix}fish\` \`${ecoPrefix}dig\` \`${ecoPrefix}phone\``;
+    economyCommands = `\n**Economy Commands:**\n\`${ecoPrefix}balance\` \`${ecoPrefix}daily\` \`${ecoPrefix}weekly\` \`${ecoPrefix}pay\` \`${ecoPrefix}baltop\`\n\`${ecoPrefix}deposit\` \`${ecoPrefix}withdraw\` \`${ecoPrefix}rob\` \`${ecoPrefix}bankrob\`\n\`${ecoPrefix}slots\` \`${ecoPrefix}coinflip\` \`${ecoPrefix}dice\`\n\`${ecoPrefix}shop\` \`${ecoPrefix}buy\` \`${ecoPrefix}inventory\`\n**Minigames:**\n\`${ecoPrefix}fish\` \`${ecoPrefix}dig\` \`${ecoPrefix}phone\` \`${ecoPrefix}adventure\` \`${ecoPrefix}explore\``;
   }
   
   const embed = compactEmbed("Commands", [
@@ -4082,6 +4082,22 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "adventure" || cmd === "story") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdAdventure(message, args, util);
+    return true;
+  }
+
+  if (cmd === "explore" || cmd === "swamp") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdExplore(message, args, util);
+    return true;
+  }
+
   if (cmd === "slots" || cmd === "slot") {
     await cmdSlots(message, args);
     return true;
@@ -4290,6 +4306,29 @@ function buildSlashCommands() {
     { name: "remindsnooze", description: "Delay one pending reminder", options: [{ type: 4, name: "id", description: "Reminder ID", required: true }, { type: 3, name: "duration", description: "e.g. 10m, 1h, 1d", required: true }] },
     { name: "remindclear", description: "Cancel all your pending reminders" },
     { name: "birthday", description: "Manage your birthday", options: [{ type: 3, name: "action", description: "set, list, or remove", required: true, choices: [{ name: "set", value: "set" }, { name: "list", value: "list" }, { name: "remove", value: "remove" }] }, { type: 3, name: "date", description: "MM/DD or MM/DD/YYYY (required for set)", required: false }] },
+    // Economy commands
+    { name: "balance", description: "Check your or another user's balance", options: [{ type: 6, name: "user", description: "User", required: false }] },
+    { name: "daily", description: "Claim your daily reward" },
+    { name: "weekly", description: "Claim your weekly reward" },
+    { name: "pay", description: "Send money to another user", options: [{ type: 6, name: "user", description: "User", required: true }, { type: 4, name: "amount", description: "Amount", required: true }] },
+    { name: "baltop", description: "View the richest members" },
+    { name: "deposit", description: "Deposit money to your bank", options: [{ type: 4, name: "amount", description: "Amount (or 'all')", required: true }] },
+    { name: "withdraw", description: "Withdraw money from your bank", options: [{ type: 4, name: "amount", description: "Amount (or 'all')", required: true }] },
+    { name: "rob", description: "Rob another user", options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "bankrob", description: "Rob the bank (high risk, high reward)" },
+    { name: "slots", description: "Play slots (bet currency)", options: [{ type: 4, name: "bet", description: "Bet amount", required: true }] },
+    { name: "coinflip", description: "Flip a coin and win 2x", options: [{ type: 4, name: "bet", description: "Bet amount", required: true }, { type: 3, name: "choice", description: "heads or tails", required: true, choices: [{ name: "heads", value: "heads" }, { name: "tails", value: "tails" }] }] },
+    { name: "dice", description: "Roll dice and guess the result", options: [{ type: 4, name: "bet", description: "Bet amount", required: true }, { type: 4, name: "guess", description: "Guess (1-6)", required: true }] },
+    { name: "fish", description: "Go fishing for treasure" },
+    { name: "dig", description: "Dig for treasure" },
+    { name: "phone", description: "Use phone services", options: [{ type: 3, name: "service", description: "Service (police, taxi, takeout)", required: false }] },
+    { name: "adventure", description: "Go on a swamp adventure", options: [{ type: 4, name: "story_id", description: "Story ID", required: false }] },
+    { name: "explore", description: "Explore and find treasure" },
+    { name: "shop", description: "View the economy shop" },
+    { name: "buy", description: "Buy an item from the shop", options: [{ type: 4, name: "item", description: "Item number", required: true }] },
+    { name: "inventory", description: "View your inventory" },
+    { name: "job", description: "Manage your job", options: [{ type: 3, name: "action", description: "list, apply, or quit", required: false }, { type: 3, name: "job_name", description: "Job name (for apply)", required: false }] },
+    { name: "work", description: "Work at your job to earn money" },
     // Moderation commands
     { name: "ban", description: "Ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "tempban", description: "Temporarily ban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "duration", description: "e.g. 10m, 1h, 1d", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
@@ -4562,6 +4601,44 @@ async function handleSlashCommand(interaction) {
     const date = optionValue(interaction, "date");
     if (action) args.push(String(action));
     if (date) args.push(String(date));
+  } else if (name === "balance") {
+    if (userOption) args.push(userOption.id);
+  } else if (name === "pay") {
+    if (userOption) args.push(userOption.id);
+    const amount = optionValue(interaction, "amount");
+    if (amount !== "") args.push(String(amount));
+  } else if (name === "deposit" || name === "withdraw") {
+    const amount = optionValue(interaction, "amount");
+    if (amount !== "") args.push(String(amount));
+  } else if (name === "rob") {
+    if (userOption) args.push(userOption.id);
+  } else if (name === "slots") {
+    const bet = optionValue(interaction, "bet");
+    if (bet !== "") args.push(String(bet));
+  } else if (name === "coinflip") {
+    const bet = optionValue(interaction, "bet");
+    const choice = optionValue(interaction, "choice");
+    if (bet !== "") args.push(String(bet));
+    if (choice) args.push(String(choice));
+  } else if (name === "dice") {
+    const bet = optionValue(interaction, "bet");
+    const guess = optionValue(interaction, "guess");
+    if (bet !== "") args.push(String(bet));
+    if (guess !== "") args.push(String(guess));
+  } else if (name === "phone") {
+    const service = optionValue(interaction, "service");
+    if (service) args.push(String(service));
+  } else if (name === "adventure") {
+    const storyId = optionValue(interaction, "story_id");
+    if (storyId !== "") args.push(String(storyId));
+  } else if (name === "buy") {
+    const item = optionValue(interaction, "item");
+    if (item !== "") args.push(String(item));
+  } else if (name === "job") {
+    const action = optionValue(interaction, "action");
+    const jobName = optionValue(interaction, "job_name");
+    if (action) args.push(String(action));
+    if (jobName) args.push(...String(jobName).split(/\s+/));
   } else {
     const keys = ["page", "limit", "name", "count", "seconds", "id"];
     for (const key of keys) {

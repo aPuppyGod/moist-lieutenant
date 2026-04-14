@@ -274,6 +274,17 @@ function htmlTemplate(content, opts = {}) {
     li {
       margin: 5px 0;
     }
+    .info-box {
+      margin-top: 20px;
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid rgba(123, 201, 111, 0.2);
+      background: rgba(248, 249, 250, 0.95);
+    }
+    body[data-theme="dark"] .info-box {
+      background: rgba(10, 30, 30, 0.85);
+      border-color: rgba(168, 213, 168, 0.2);
+    }
     a {
       color: #7bc96f;
       text-decoration: none;
@@ -1378,6 +1389,8 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
 }
+
+const DEFAULT_ECONOMY_GUIDE = "Use this guide to explain your server's economy system and how members can earn and spend currency.\n\nExample commands to highlight:\n- /balance [user]\n- /daily\n- /weekly\n- /pay <user> <amount>\n- /shop\n- /buy <item_number>\n- /fish\n- /dig\n- /phone <service>\n- /adventure\n- /explore";
 
 const {
   getGuildSettings,
@@ -5471,7 +5484,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </table>
       ` : `<p>No giveaways yet! Use <code>!giveaway start &lt;duration&gt; &lt;winners&gt; &lt;prize&gt;</code> to create one.</p>`}
       
-      <div style="margin-top:20px; padding:12px; background:#f8f9fa; border-radius:6px;">
+      <div class="info-box">
         <strong>Commands:</strong>
         <ul style="margin:8px 0;">
           <li><code>!giveaway start &lt;duration&gt; &lt;winners&gt; &lt;prize&gt;</code> - Start a giveaway (e.g., <code>!giveaway start 1d 1 Discord Nitro</code>)</li>
@@ -5530,6 +5543,11 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <label>
             <span>Rob Cooldown (seconds)</span>
             <input type="number" name="rob_cooldown" value="${economySettings?.rob_cooldown || 3600}" min="60" max="86400" style="max-width:150px;" />
+          </label>
+          <label>
+            <span>Economy Guide</span>
+            <textarea name="economy_guide" rows="10" style="width:100%;max-width:100%;font-family:inherit;">${escapeHtml(economySettings?.economy_guide || "")}</textarea>
+            <small style="display:block;margin-top:6px;color:rgba(0,0,0,0.6);">This text is saved to your server economy settings and can be used as an editable admin guide.</small>
           </label>
         </div>
         <button type="submit" style="margin-top:16px;">Save Economy Settings</button>
@@ -5622,7 +5640,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </table>
       ` : ""}
       
-      <div style="margin-top:20px; padding:12px; background:#f8f9fa; border-radius:6px;">
+      <div class="info-box">
         <strong>Commands:</strong>
         <ul style="margin:8px 0;">
           <li><code>!birthday set &lt;MM/DD&gt;</code> or <code>!birthday set &lt;MM/DD/YYYY&gt;</code> - Set your birthday</li>
@@ -6854,12 +6872,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const dailyStreakBonus = parseInt(req.body.daily_streak_bonus || "10", 10);
       const robEnabled = req.body.rob_enabled === "on" ? 1 : 0;
       const robCooldown = parseInt(req.body.rob_cooldown || "3600", 10);
+      const economyGuide = String(req.body.economy_guide || "").trim();
 
       const existing = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
 
       await run(`
-        INSERT INTO economy_settings (guild_id, enabled, currency_name, currency_symbol, daily_amount, weekly_amount, economy_prefix, daily_streak_bonus, rob_enabled, rob_cooldown)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO economy_settings (guild_id, enabled, currency_name, currency_symbol, daily_amount, weekly_amount, economy_prefix, daily_streak_bonus, rob_enabled, rob_cooldown, economy_guide)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id) DO UPDATE SET
           enabled=excluded.enabled,
           currency_name=excluded.currency_name,
@@ -6869,8 +6888,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           economy_prefix=excluded.economy_prefix,
           daily_streak_bonus=excluded.daily_streak_bonus,
           rob_enabled=excluded.rob_enabled,
-          rob_cooldown=excluded.rob_cooldown
-      `, [guildId, enabled, currencyName, currencySymbol, dailyAmount, weeklyAmount, economyPrefix, dailyStreakBonus, robEnabled, robCooldown]);
+          rob_cooldown=excluded.rob_cooldown,
+          economy_guide=excluded.economy_guide
+      `, [guildId, enabled, currencyName, currencySymbol, dailyAmount, weeklyAmount, economyPrefix, dailyStreakBonus, robEnabled, robCooldown, economyGuide]);
 
       // Add default jobs and shop items if this is the first time enabling economy
       if (!existing && enabled) {

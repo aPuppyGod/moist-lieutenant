@@ -284,6 +284,7 @@ function htmlTemplate(content, opts = {}) {
     body[data-theme="dark"] .info-box {
       background: rgba(10, 30, 30, 0.85);
       border-color: rgba(168, 213, 168, 0.2);
+      color: #c0d0c0;
     }
     a {
       color: #7bc96f;
@@ -4069,6 +4070,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const reactionRolesConfig = await all(`SELECT * FROM reaction_roles WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
     const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
+    const customCommands = await all(`SELECT * FROM custom_commands WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const socialLinks = await all(
       `SELECT id, platform, external_id, source_url, label, channel_id, enabled, created_at, last_checked_at
        FROM social_links
@@ -4104,6 +4106,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "giveaways", label: "Giveaways" },
       { key: "economy", label: "Economy" },
       { key: "birthdays", label: "Birthdays" },
+      { key: "customcommands", label: "Custom Commands" },
       { key: "customization", label: "Customization" }
     ];
     const moderatorModules = new Set(["moderation", "logging"]);
@@ -5574,7 +5577,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </table>
       ` : ""}
       
-      <div style="margin-top:20px; padding:12px; background:#f8f9fa; border-radius:6px;">
+      <div class="info-box">
         <strong>Commands:</strong>
         <ul style="margin:8px 0;">
           <li><code>!balance [@user]</code> or <code>!bal</code> - Check balance</li>
@@ -5649,6 +5652,58 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         </ul>
       </div>
       ` : ""}
+
+      ${activeModule === "customcommands" ? (() => {
+        return `
+      <h3>⚙️ Custom Commands</h3>
+      <p class="section-description">Create custom text commands that respond with embeds and optional GIFs</p>
+      
+      <form method="post" action="/guild/${guildId}/custom-commands/create">
+        <div style="display:grid; gap:12px;">
+          <label>
+            <span>Command Name (without prefix)</span>
+            <input type="text" name="command_name" placeholder="hello" required style="max-width:200px;" />
+          </label>
+          
+          <label>
+            <span>Response Text (for the embed)</span>
+            <textarea name="response_text" rows="4" placeholder="Hello! Welcome to our server!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+          </label>
+          
+          <label>
+            <span>GIF URLs (one per line, optional)</span>
+            <textarea name="gifs" rows="3" placeholder="https://media.giphy.com/...\nhttps://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+            <small style="display:block;margin-top:6px;color:rgba(0,0,0,0.6);">If GIFs are added, one will be randomly selected and attached to the embed response.</small>
+          </label>
+        </div>
+        <button type="submit" style="margin-top:16px;">Create Custom Command</button>
+      </form>
+
+      <h4 style="margin-top:24px;">Your Custom Commands</h4>
+      ${customCommands.length > 0 ? `
+        <table>
+          <tr>
+            <th>Command</th>
+            <th>Response Preview</th>
+            <th>GIFs</th>
+            <th>Actions</th>
+          </tr>
+          ${customCommands.map((cmd) => `
+            <tr>
+              <td><code>\`${escapeHtml(cmd.command_name)}\`</code></td>
+              <td>${escapeHtml(String(cmd.response_text || "").slice(0, 50))}...</td>
+              <td>${cmd.gifs ? JSON.parse(cmd.gifs).length : 0} GIF(s)</td>
+              <td>
+                <form method="post" action="/guild/${guildId}/custom-commands/delete/${cmd.id}" style="display:inline;">
+                  <button type="submit" onclick="return confirm('Delete this command?')" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;">Delete</button>
+                </form>
+              </td>
+            </tr>
+          `).join("")}
+        </table>
+      ` : `<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>`}
+      `;
+      })() : ""}
 
       ${activeModule === "customization" ? `
       <h3>Rank Card Customization Unlocks</h3>
@@ -6942,6 +6997,52 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'birthdays'));
     } catch (e) {
       console.error("birthday-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Custom Commands
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/custom-commands/create", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const commandName = String(req.body.command_name || "").trim().toLowerCase();
+      const responseText = String(req.body.response_text || "").trim();
+      const gifsRaw = String(req.body.gifs || "").trim();
+      const gifs = gifsRaw
+        ? JSON.stringify(gifsRaw.split("\n").map(url => url.trim()).filter(Boolean))
+        : JSON.stringify([]);
+
+      if (!commandName || !responseText) {
+        return res.status(400).send("Command name and response text are required.");
+      }
+
+      await run(`
+        INSERT INTO custom_commands (guild_id, command_name, response_text, gifs, created_by)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id, command_name) DO UPDATE SET
+          response_text=excluded.response_text,
+          gifs=excluded.gifs
+      `, [guildId, commandName, responseText, gifs, req.user?.id || "unknown"]);
+
+      return res.redirect(getModuleRedirect(guildId, 'customcommands'));
+    } catch (e) {
+      console.error("custom-commands create error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/custom-commands/delete/:id", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+
+      await run(`DELETE FROM custom_commands WHERE guild_id=? AND id=?`, [guildId, id]);
+
+      return res.redirect(getModuleRedirect(guildId, 'customcommands'));
+    } catch (e) {
+      console.error("custom-commands delete error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

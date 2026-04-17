@@ -830,6 +830,19 @@ async function initDb() {
   `);
 
   await run(`
+    CREATE TABLE IF NOT EXISTS custom_commands (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      command_name TEXT NOT NULL,
+      response_text TEXT NOT NULL,
+      gifs TEXT DEFAULT '[]',
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      created_by TEXT NOT NULL,
+      UNIQUE(guild_id, command_name)
+    )
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS user_inventory (
       guild_id TEXT NOT NULL,
       user_id TEXT NOT NULL,

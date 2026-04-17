@@ -284,6 +284,8 @@ function compactEmbed(title, lines) {
 }
 
 async function cmdPublicCommands(message) {
+  const settings = await getGuildSettings(message.guild.id);
+  const prefix = settings?.command_prefix || DEFAULT_PREFIX;
   const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
   const ecoPrefix = economySettings?.economy_prefix || "$";
   
@@ -293,32 +295,32 @@ async function cmdPublicCommands(message) {
   }
   
   const embed = compactEmbed("Commands", [
-    "`!commands` `/commands`",
-    "`!rank [user]` `/rank`",
-    "`!leaderboard [page]` `/leaderboard`",
-    "`!moist-lieutenant` - Get website URL",
-    "`!8ball <question>`",
-    "`!flip` - Flip a coin",
-    "`!poll create <question> | <option1> | <option2> ...`",
-    "`!poll end <message_id>`",
-    "`!poll list` - View active polls",
-    "`!poll status <message_id>`",
-    "`!choose <option1> <option2> ...`",
-    "`!suggest <suggestion>` - Submit a suggestion",
-    "`!suggestions [mine|all] [limit]` - View suggestion queue",
-    "`!suggestion-status <id>` - View one suggestion status",
-    "`!suggestion-withdraw <id>` - Remove your suggestion",
-    "`!giveaway start <duration> <winners> <prize>` - Start a giveaway",
-    "`!giveaway list` - View active giveaways",
-    "`!giveaway status <message_id>` - View giveaway details",
-    "`!giveaway cancel <message_id> [reason]` - Cancel without winners",
-    "`!remindme <duration> <message>` - Set a reminder",
-    "`!reminders [limit]` - List your pending reminders",
-    "`!remindcancel <id>` - Cancel one reminder",
-    "`!remindsnooze <id> <duration>` - Delay a reminder",
-    "`!remindclear` - Cancel all your pending reminders",
-    "`!birthday set <MM/DD>` - Register your birthday",
-    "`!birthday list` / `!birthday remove`",
+    `\`${prefix}commands\` \`/commands\``,
+    `\`${prefix}rank [user]\` \`/rank\``,
+    `\`${prefix}leaderboard [page]\` \`/leaderboard\``,
+    `\`${prefix}moist-lieutenant\` - Get website URL`,
+    `\`${prefix}8ball <question>\``,
+    `\`${prefix}flip\` - Flip a coin`,
+    `\`${prefix}poll create <question> | <option1> | <option2> ...\``,
+    `\`${prefix}poll end <message_id>\``,
+    `\`${prefix}poll list\` - View active polls`,
+    `\`${prefix}poll status <message_id>\``,
+    `\`${prefix}choose <option1> <option2> ...\``,
+    `\`${prefix}suggest <suggestion>\` - Submit a suggestion`,
+    `\`${prefix}suggestions [mine|all] [limit]\` - View suggestion queue`,
+    `\`${prefix}suggestion-status <id>\` - View one suggestion status`,
+    `\`${prefix}suggestion-withdraw <id>\` - Remove your suggestion`,
+    `\`${prefix}giveaway start <duration> <winners> <prize>\` - Start a giveaway`,
+    `\`${prefix}giveaway list\` - View active giveaways`,
+    `\`${prefix}giveaway status <message_id>\` - View giveaway details`,
+    `\`${prefix}giveaway cancel <message_id> [reason]\` - Cancel without winners`,
+    `\`${prefix}remindme <duration> <message>\` - Set a reminder`,
+    `\`${prefix}reminders [limit]\` - List your pending reminders`,
+    `\`${prefix}remindcancel <id>\` - Cancel one reminder`,
+    `\`${prefix}remindsnooze <id> <duration>\` - Delay a reminder`,
+    `\`${prefix}remindclear\` - Cancel all your pending reminders`,
+    `\`${prefix}birthday set <MM/DD>\` - Register your birthday`,
+    `\`${prefix}birthday list\` / \`${prefix}birthday remove\``,
     economyCommands
   ].filter(Boolean));
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -353,14 +355,16 @@ async function cmdModCommands(message) {
 
 async function cmdAdminCommands(message) {
   if (!isAdminOrManager(message.member)) return;
+  const settings = await getGuildSettings(message.guild.id);
+  const prefix = settings?.command_prefix || DEFAULT_PREFIX;
   const embed = compactEmbed("Admin Commands", [
-    "`!admin-commands` `/admin-commands`",
-    "`!xp add/set <user> <amount>` `/xp`",
-    "`!recalc-levels` `/recalc-levels`",
-    "`!sync-roles` `/sync-roles`",
-    "`!reactionrole add <msgId> <emoji> <roleId>`",
-    "`!reactionrole remove <msgId> <emoji>`",
-    "`!reactionrole list`"
+    `\`${prefix}admin-commands\` \`/admin-commands\``,
+    `\`${prefix}xp add/set <user> <amount>\` \`/xp\``,
+    `\`${prefix}recalc-levels\` \`/recalc-levels\``,
+    `\`${prefix}sync-roles\` \`/sync-roles\``,
+    `\`${prefix}reactionrole add <msgId> <emoji> <roleId>\``,
+    `\`${prefix}reactionrole remove <msgId> <emoji>\``,
+    `\`${prefix}reactionrole list\``
   ]);
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -4260,6 +4264,32 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "softban") {
     await cmdSoftban(message, args);
+    return true;
+  }
+
+  // Check for custom commands
+  const customCmd = await get(
+    `SELECT * FROM custom_commands WHERE guild_id=? AND command_name=?`,
+    [message.guild.id, cmd]
+  );
+  
+  if (customCmd) {
+    const embed = new EmbedBuilder()
+      .setColor(0x7bc96f)
+      .setDescription(customCmd.response_text)
+      .setTimestamp();
+    
+    try {
+      const gifs = JSON.parse(customCmd.gifs || '[]');
+      if (gifs.length > 0) {
+        const randomGif = gifs[Math.floor(Math.random() * gifs.length)];
+        embed.setImage(randomGif);
+      }
+    } catch (e) {
+      // Ignore JSON parse errors
+    }
+    
+    await message.reply({ embeds: [embed] }).catch(() => {});
     return true;
   }
 

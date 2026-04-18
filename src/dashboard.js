@@ -5770,7 +5770,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           }).join("")}
         </table>
       \` : \`<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>\`}
-      \`;
+      `;
       })() : ""}
 
       ${activeModule === "autoreplies" ? (() => {
@@ -5912,7 +5912,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           }).join("")}
         </table>
       \` : \`<p style="opacity:0.7;">No auto replies yet. Create one to get started!</p>\`}
-      \`;
+      `;
       })() : ""}
 
       ${activeModule === "customization" ? `

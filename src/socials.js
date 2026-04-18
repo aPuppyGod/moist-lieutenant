@@ -220,9 +220,43 @@ async function fetchText(url) {
     }
   });
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} for ${url}`);
+    const err = new Error(`HTTP ${response.status} for ${url}`);
+    err.status = response.status;
+    err.url = url;
+    throw err;
   }
   return await response.text();
+}
+
+function buildRssCandidateUrls(link) {
+  const sourceUrl = String(link.source_url || "").trim();
+  const platform = normalizePlatform(link.platform);
+  const external = stripAt(String(link.external_id || ""));
+  const candidates = [];
+
+  if (sourceUrl) {
+    candidates.push(sourceUrl);
+  }
+
+  // RSSHub public instances can block traffic intermittently, so try mirrors.
+  if (platform === "tiktok") {
+    if (sourceUrl) {
+      try {
+        const parsed = new URL(sourceUrl);
+        const path = `${parsed.pathname || ""}${parsed.search || ""}`;
+        candidates.push(`https://rsshub.net${path}`);
+      } catch {
+        // Ignore malformed configured source URL and fall back to generated URLs.
+      }
+    }
+
+    if (external) {
+      candidates.push(`https://rsshub.net/tiktok/user/${external}`);
+      candidates.push(`https://rsshub.app/tiktok/user/${external}`);
+    }
+  }
+
+  return [...new Set(candidates.filter(Boolean))];
 }
 
 async function resolveYouTubeChannelId(link) {
@@ -416,32 +450,53 @@ async function pollKick(link) {
 }
 
 async function pollRssLike(link) {
-  const sourceUrl = String(link.source_url || "").trim();
-  if (!sourceUrl) return [];
-  const xml = await fetchText(sourceUrl);
-  const items = parseRssItems(xml).concat(parseAtomEntries(xml)).slice(0, 10);
-
   const platform = normalizePlatform(link.platform);
-  return items.map((item) => {
-    let eventType = "post";
+  const urls = buildRssCandidateUrls(link);
+  if (urls.length === 0) return [];
 
-    // Detect live streams based on title/content
-    if (platform === "tiktok") {
-      const titleLower = String(item.title || "").toLowerCase();
-      const isLikelyLive = /\blive\b|\blivestream\b|\bgoing live\b|\bstreaming\b/i.test(titleLower);
-      if (isLikelyLive) {
-        eventType = "live";
-      }
+  let lastError = null;
+  for (const url of urls) {
+    try {
+      const xml = await fetchText(url);
+      const items = parseRssItems(xml).concat(parseAtomEntries(xml)).slice(0, 10);
+
+      return items.map((item) => {
+        let eventType = "post";
+
+        // Detect live streams based on title/content
+        if (platform === "tiktok") {
+          const titleLower = String(item.title || "").toLowerCase();
+          const isLikelyLive = /\blive\b|\blivestream\b|\bgoing live\b|\bstreaming\b/i.test(titleLower);
+          if (isLikelyLive) {
+            eventType = "live";
+          }
+        }
+
+        return {
+          eventType,
+          uid: String(item.uid || item.url),
+          title: item.title,
+          url: item.url,
+          publishedAt: item.publishedAt
+        };
+      });
+    } catch (err) {
+      lastError = err;
+      continue;
     }
+  }
 
-    return {
-      eventType,
-      uid: String(item.uid || item.url),
-      title: item.title,
-      url: item.url,
-      publishedAt: item.publishedAt
-    };
-  });
+  // If all candidate RSS endpoints are blocked/unavailable, skip this tick gracefully.
+  if (lastError && [401, 403, 404, 429].includes(Number(lastError.status || 0))) {
+    console.warn(`[socials] RSS source unavailable for link ${link.id} (${platform}): ${lastError.message}`);
+    return [];
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+
+  return [];
 }
 
 async function pollSocialLink(link) {

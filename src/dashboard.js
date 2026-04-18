@@ -5745,7 +5745,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </script>
 
       <h4 style="margin-top:24px;">Your Custom Commands</h4>
-      \${customCommands.length > 0 ? \`
+      \${customCommands.length > 0 ? `
         <table>
           <tr>
             <th>Command</th>
@@ -5769,7 +5769,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             \`;
           }).join("")}
         </table>
-      \` : \`<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>\`}
+      ` : `<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>`}
       \`;
       })() : ""}
 
@@ -5873,7 +5873,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </script>
 
       <h4 style="margin-top:24px;">Your Auto Replies</h4>
-      \${autoReplies.length > 0 ? \`
+      \${autoReplies.length > 0 ? `
         <table>
           <tr>
             <th>Trigger</th>
@@ -5911,7 +5911,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             </tr>\`;
           }).join("")}
         </table>
-      \` : \`<p style="opacity:0.7;">No auto replies yet. Create one to get started!</p>\`}
+      ` : `<p style="opacity:0.7;">No auto replies yet. Create one to get started!</p>`}
       \`;
       })() : ""}
 

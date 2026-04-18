@@ -7093,51 +7093,6 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         VALUES (?, ?, ?, ?)
         ON CONFLICT(guild_id, command_name) DO UPDATE SET
           responses=excluded.responses
-      `, [guildId, commandName, JSON.stringify(commandPayload)
-
-      // Build response objects
-      for (const idx of Object.keys(responseIndex).sort((a, b) => Number(a) - Number(b))) {
-        const responseText = String(req.body[`response_text_${idx}`] || "").trim();
-        if (!responseText) continue;
-
-        const gifs = [];
-        
-        // Add URL-based GIFs
-        const gifsRaw = String(req.body[`gifs_${idx}`] || "").trim();
-        if (gifsRaw) {
-          gifs.push(...gifsRaw.split("\n").map(url => url.trim()).filter(Boolean));
-        }
-
-        // Add uploaded GIF files
-        if (req.files) {
-          for (const file of req.files) {
-            if (file.fieldname === `gif_files_${idx}` && file.mimetype === "image/gif") {
-              const gifUrl = `/uploads/${file.filename}`;
-              gifs.push(gifUrl);
-            }
-          }
-        }
-
-        responses.push({
-          text: responseText,
-          gifs: gifs
-        });
-      }
-
-      if (responses.length === 0) {
-        return res.status(400).send("At least one response is required.");
-      }
-
-      const commandPayload = {
-        target_mode: targetMode,
-        responses: responses
-      };
-
-      await run(`
-        INSERT INTO custom_commands (guild_id, command_name, responses, created_by)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(guild_id, command_name) DO UPDATE SET
-          responses=excluded.responses
       `, [guildId, commandName, JSON.stringify(commandPayload), req.user?.id || "unknown"]);
 
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));

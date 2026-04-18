@@ -5770,7 +5770,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           }).join("")}
         </table>
       \` : \`<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>\`}
-      `;
+      \`;
       })() : ""}
 
       ${activeModule === "autoreplies" ? (() => {
@@ -5912,7 +5912,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           }).join("")}
         </table>
       \` : \`<p style="opacity:0.7;">No auto replies yet. Create one to get started!</p>\`}
-      `;
+      \`;
       })() : ""}
 
       ${activeModule === "customization" ? `
@@ -5920,12 +5920,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <form method="post" action="/guild/${guildId}/customization-unlocks">
         <table style="border-collapse:collapse;">
           <tr><th style="text-align:left;">Feature</th><th style="text-align:left;">Required Level</th></tr>
-          ${customizationOptions.map(opt => `
+          ${customizationOptions.map(opt => \`
             <tr>
               <td>${escapeHtml(opt.label)}</td>
               <td><input type="number" min="1" max="1000" name="${opt.key}" value="${unlocks[opt.key] ?? 1}" style="width:60px" /></td>
             </tr>
-          `).join("")}
+          \`).join("")}
         </table>
         <button type="submit">Save Customization Unlocks</button>
       </form>

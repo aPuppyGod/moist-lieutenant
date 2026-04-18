@@ -1385,7 +1385,10 @@ function mustBeLoggedIn(req, res, next) {
 
 function escapeHtml(s) {
   return String(s ?? "")
-    .replaceAll("&", "&amp;")
+     .replaceAll("&", "&amp;")
+     .replaceAll("<", "&lt;")
+     .replaceAll(">", "&gt;")
+     .replaceAll('"', "&quot;");
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
@@ -4191,6 +4194,21 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         
         <div class="form-row">
           <label>
+                <label style="margin-top:8px;">
+                  <span>Upload GIF file(s)</span>
+                  <input type="file" name="gif_files_0" accept="image/gif" multiple />
+                  <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Upload GIFs locally instead of using external links.</small>
+                </label>
+              <label style="margin-top:8px;">
+                <span>Upload GIF file(s)</span>
+                <input type="file" name="gif_files_0" accept="image/gif" multiple />
+                <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Upload GIFs locally instead of using external links.</small>
+              </label>
+              <label style="margin-top:8px;">
+                <span>Upload GIF file(s)</span>
+                <input type="file" name="gif_files_${responseCount}" accept="image/gif" multiple />
+                <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Upload GIFs locally instead of using external links.</small>
+              </label>
             <span>Starboard Channel</span>
             <select name="channel_id">
               <option value="">None</option>
@@ -5658,11 +5676,20 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <h3>⚙️ Custom Commands</h3>
       <p class="section-description">Create custom text commands that respond with embeds and optional GIFs</p>
       
-      <form method="post" action="/guild/${guildId}/custom-commands/create">
+      <form method="post" action="/guild/${guildId}/custom-commands/create" enctype="multipart/form-data">
         <div style="display:grid; gap:12px;">
           <label>
             <span>Command Name (without prefix)</span>
             <input type="text" name="command_name" placeholder="hello" required style="max-width:200px;" />
+          </label>
+          <label>
+            <span>Command Behavior</span>
+            <select name="target_mode" required style="max-width:260px;">
+              <option value="none">No target required (e.g. !dance)</option>
+              <option value="optional">Optional target (e.g. !hug or !hug @user)</option>
+              <option value="required">Target required (e.g. !hug @user)</option>
+            </select>
+            <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Choose whether this command should act on a mentioned user, be generic, or allow both.</small>
           </label>
           
           <label>
@@ -7004,27 +7031,117 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   // ─────────────────────────────────────────────
   // Custom Commands
   // ─────────────────────────────────────────────
-  app.post("/guild/:guildId/custom-commands/create", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/custom-commands/create", upload.any(), requireGuildAdmin, async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const commandName = String(req.body.command_name || "").trim().toLowerCase();
-      const responseText = String(req.body.response_text || "").trim();
-      const gifsRaw = String(req.body.gifs || "").trim();
-      const gifs = gifsRaw
-        ? JSON.stringify(gifsRaw.split("\n").map(url => url.trim()).filter(Boolean))
-        : JSON.stringify([]);
+      const targetMode = String(req.body.target_mode || "none").trim();
 
-      if (!commandName || !responseText) {
-        return res.status(400).send("Command name and response text are required.");
+      if (!commandName) {
+        return res.status(400).send("Command name is required.");
       }
 
+      const responses = [];
+      const responseIndex = {};
+      
+      // Collect all response indices
+      for (const key of Object.keys(req.body)) {
+        const match = key.match(/^response_text_(\d+)$/);
+        if (match) {
+          const idx = match[1];
+          responseIndex[idx] = true;
+        }
+      }
+
+      // Build response objects
+      for (const idx of Object.keys(responseIndex).sort((a, b) => Number(a) - Number(b))) {
+        const responseText = String(req.body[`response_text_${idx}`] || "").trim();
+        if (!responseText) continue;
+
+        const gifs = [];
+        
+        // Add URL-based GIFs
+        const gifsRaw = String(req.body[`gifs_${idx}`] || "").trim();
+        if (gifsRaw) {
+          gifs.push(...gifsRaw.split("\n").map(url => url.trim()).filter(Boolean));
+        }
+
+        // Add uploaded GIF files
+        if (req.files) {
+          for (const file of req.files) {
+            if (file.fieldname === `gif_files_${idx}` && file.mimetype === "image/gif") {
+              const gifUrl = `/uploads/${file.filename}`;
+              gifs.push(gifUrl);
+            }
+          }
+        }
+
+        responses.push({
+          text: responseText,
+          gifs: gifs
+        });
+      }
+
+      if (responses.length === 0) {
+        return res.status(400).send("At least one response is required.");
+      }
+
+      const commandPayload = {
+        target_mode: targetMode,
+        responses: responses
+      };
+
       await run(`
-        INSERT INTO custom_commands (guild_id, command_name, response_text, gifs, created_by)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO custom_commands (guild_id, command_name, responses, created_by)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(guild_id, command_name) DO UPDATE SET
-          response_text=excluded.response_text,
-          gifs=excluded.gifs
-      `, [guildId, commandName, responseText, gifs, req.user?.id || "unknown"]);
+          responses=excluded.responses
+      `, [guildId, commandName, JSON.stringify(commandPayload)
+
+      // Build response objects
+      for (const idx of Object.keys(responseIndex).sort((a, b) => Number(a) - Number(b))) {
+        const responseText = String(req.body[`response_text_${idx}`] || "").trim();
+        if (!responseText) continue;
+
+        const gifs = [];
+        
+        // Add URL-based GIFs
+        const gifsRaw = String(req.body[`gifs_${idx}`] || "").trim();
+        if (gifsRaw) {
+          gifs.push(...gifsRaw.split("\n").map(url => url.trim()).filter(Boolean));
+        }
+
+        // Add uploaded GIF files
+        if (req.files) {
+          for (const file of req.files) {
+            if (file.fieldname === `gif_files_${idx}` && file.mimetype === "image/gif") {
+              const gifUrl = `/uploads/${file.filename}`;
+              gifs.push(gifUrl);
+            }
+          }
+        }
+
+        responses.push({
+          text: responseText,
+          gifs: gifs
+        });
+      }
+
+      if (responses.length === 0) {
+        return res.status(400).send("At least one response is required.");
+      }
+
+      const commandPayload = {
+        target_mode: targetMode,
+        responses: responses
+      };
+
+      await run(`
+        INSERT INTO custom_commands (guild_id, command_name, responses, created_by)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(guild_id, command_name) DO UPDATE SET
+          responses=excluded.responses
+      `, [guildId, commandName, JSON.stringify(commandPayload), req.user?.id || "unknown"]);
 
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));
     } catch (e) {
@@ -7043,6 +7160,104 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));
     } catch (e) {
       console.error("custom-commands delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-replies/create", upload.any(), requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const triggerMessage = String(req.body.trigger_message || "").trim();
+      const responseType = String(req.body.response_type || "reply").trim();
+
+      if (!triggerMessage) {
+        return res.status(400).send("Trigger message is required.");
+      }
+
+      let storedValue = "";
+      if (responseType === "reply") {
+        const responses = [];
+        const responseIndex = {};
+        
+        for (const key of Object.keys(req.body)) {
+          const match = key.match(/^response_text_(\\d+)$/):/;
+          if (match) {
+            const idx = match[1];
+            responseIndex[idx] = true;
+          }
+        }
+
+        for (const idx of Object.keys(responseIndex).sort((a, b) => Number(a) - Number(b))) {
+          const responseText = String(req.body[`response_text_${idx}`] || "").trim();
+          if (!responseText) continue;
+
+          const gifs = [];
+          const gifsRaw = String(req.body[`gifs_${idx}`] || "").trim();
+          if (gifsRaw) {
+            gifs.push(...gifsRaw.split("\\n").map(url => url.trim()).filter(Boolean));
+          }
+
+          if (req.files) {
+            for (const file of req.files) {
+              if (file.fieldname === `gif_files_${idx}` && file.mimetype === "image/gif") {
+                const gifUrl = `/uploads/${file.filename}`;
+                gifs.push(gifUrl);
+              }
+            }
+          }
+
+          responses.push({
+            text: responseText,
+            gifs: gifs
+          });
+        }
+
+        if (responses.length === 0) {
+          return res.status(400).send("At least one response is required.");
+        }
+        storedValue = JSON.stringify(responses);
+      } else if (responseType === "react") {
+        storedValue = String(req.body.reaction_emoji || "").trim();
+        if (!storedValue) {
+          return res.status(400).send("Reaction emoji is required.");
+        }
+      }
+
+      await run(`
+        INSERT INTO auto_replies (guild_id, trigger_message, response_type, responses, enabled, created_by)
+        VALUES (?, ?, ?, ?, true, ?)
+      `, [guildId, triggerMessage, responseType, storedValue, req.user?.id || "unknown"]);
+
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies create error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-replies/toggle/:id", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+      const reply = await get(`SELECT enabled FROM auto_replies WHERE guild_id=? AND id=?`, [guildId, id]);
+      if (reply) {
+        await run(`UPDATE auto_replies SET enabled=? WHERE guild_id=? AND id=?`, [!reply.enabled, guildId, id]);
+      }
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies toggle error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-replies/delete/:id", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+      await run(`DELETE FROM auto_replies WHERE guild_id=? AND id=?`, [guildId, id]);
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies delete error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

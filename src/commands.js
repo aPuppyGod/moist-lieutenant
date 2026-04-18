@@ -382,31 +382,37 @@ async function cmdSetModRole(message, args) {
   }
 
   const role = await message.guild.roles.fetch(raw).catch(() => null);
-  if (!role) {
-    await message.reply("Role not found.").catch(() => {});
-    return;
+  if (customCmd) {
+    try {
+      const targetMember = getCustomCommandTarget(message);
+      let responses = JSON.parse(customCmd.responses || '[]');
+      let targetMode = customCmd.target_mode || 'none';
+      if (!Array.isArray(responses)) {
+        targetMode = responses.target_mode || targetMode;
+        responses = responses.responses || [];
+      }
+      if (responses.length > 0) {
+        if (targetMode === 'required' && !targetMember) {
+          await message.reply({ content: 'This command requires a target. Please mention someone to use it, like `!command @user`.', allowedMentions: { parse: [] } }).catch(() => {});
+          return true;
+        }
+        const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+        const responseText = replaceCustomCommandPlaceholders(selectedResponse.text, message, targetMode === 'none' ? null : targetMember);
+        const embed = new EmbedBuilder()
+          .setColor(0x7bc96f)
+          .setDescription(responseText)
+          .setTimestamp();
+        if (selectedResponse.gifs && selectedResponse.gifs.length > 0) {
+          const randomGif = selectedResponse.gifs[Math.floor(Math.random() * selectedResponse.gifs.length)];
+          embed.setImage(randomGif);
+        }
+        await message.reply({ embeds: [embed] }).catch(() => {});
+        return true;
+      }
+    } catch (e) {
+      console.error('Error parsing custom command responses:', e);
+    }
   }
-
-  await run(`INSERT INTO guild_settings (guild_id) VALUES (?) ON CONFLICT (guild_id) DO NOTHING`, [message.guild.id]);
-  await run(`UPDATE guild_settings SET mod_role_id=? WHERE guild_id=?`, [role.id, message.guild.id]);
-  await message.reply(`✅ Mod role set to ${role}.`).catch(() => {});
-}
-
-async function cmdPrefix(message, args) {
-  if (!isAdminOrManager(message.member)) {
-    await message.reply("Only admins/managers can change the prefix.").catch(() => {});
-    return;
-  }
-
-  const raw = (args[0] || "").trim();
-  if (!raw || raw.length > 3 || /\s/.test(raw)) {
-    await message.reply("Usage: `prefix <new-prefix>` (1-3 chars, no spaces)").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO guild_settings (guild_id) VALUES (?) ON CONFLICT (guild_id) DO NOTHING`, [message.guild.id]);
-  await run(`UPDATE guild_settings SET command_prefix=? WHERE guild_id=?`, [raw, message.guild.id]);
-  await message.reply(`✅ Prefix updated to \`${raw}\``).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -4272,6 +4278,45 @@ async function executeCommand(message, cmd, args, prefix) {
     `SELECT * FROM custom_commands WHERE guild_id=? AND command_name=?`,
     [message.guild.id, cmd]
   );
+
+  function replaceCustomCommandPlaceholders(text, message, targetMember = null) {
+    if (!text || typeof text !== 'string') return text;
+    const author = message.author;
+    const member = message.member;
+    let result = text
+      .replace(/{user}/gi, `<@${author.id}>`)
+      .replace(/{username}/gi, author.username)
+      .replace(/{userid}/gi, author.id)
+      .replace(/{usertag}/gi, author.tag)
+      .replace(/{userdisplayname}/gi, member?.displayName || author.username)
+      .replace(/{servername}/gi, message.guild?.name || 'Unknown')
+      .replace(/{serverid}/gi, message.guild?.id || 'Unknown')
+      .replace(/{channelname}/gi, message.channel?.name || 'Unknown')
+      .replace(/{channelid}/gi, message.channel?.id || 'Unknown');
+    if (targetMember) {
+      result = result
+        .replace(/{target}/gi, `<@${targetMember.id}>`)
+        .replace(/{targetname}/gi, targetMember.user?.username || 'Unknown')
+        .replace(/{targetid}/gi, targetMember.id)
+        .replace(/{targettag}/gi, targetMember.user?.tag || 'Unknown')
+        .replace(/{targetdisplayname}/gi, targetMember.displayName || targetMember.user?.username || 'Unknown');
+    } else {
+      result = result
+        .replace(/{target}/gi, '')
+        .replace(/{targetname}/gi, '')
+        .replace(/{targetid}/gi, '')
+        .replace(/{targettag}/gi, '')
+        .replace(/{targetdisplayname}/gi, '');
+    }
+    return result;
+  }
+
+  function getCustomCommandTarget(message) {
+    if (message.mentions?.members?.size > 0) {
+      return message.mentions.members.first();
+    }
+    return null;
+  }
   
   if (customCmd) {
     const embed = new EmbedBuilder()

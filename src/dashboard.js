@@ -1389,9 +1389,6 @@ function escapeHtml(s) {
      .replaceAll("<", "&lt;")
      .replaceAll(">", "&gt;")
      .replaceAll('"', "&quot;");
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
 }
 
 const DEFAULT_ECONOMY_GUIDE = "Use this guide to explain your server's economy system and how members can earn and spend currency.\n\nExample commands to highlight:\n- /balance [user]\n- /daily\n- /weekly\n- /pay <user> <amount>\n- /shop\n- /buy <item_number>\n- /fish\n- /dig\n- /phone <service>\n- /adventure\n- /explore";
@@ -7180,7 +7177,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         const responseIndex = {};
         
         for (const key of Object.keys(req.body)) {
-          const match = key.match(/^response_text_(\\d+)$/):/;
+          const match = key.match(/^response_text_(\d+)$/);
           if (match) {
             const idx = match[1];
             responseIndex[idx] = true;

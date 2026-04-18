@@ -4071,6 +4071,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
     const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
     const customCommands = await all(`SELECT * FROM custom_commands WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
+    const autoReplies = await all(`SELECT * FROM auto_replies WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const socialLinks = await all(
       `SELECT id, platform, external_id, source_url, label, channel_id, enabled, created_at, last_checked_at
        FROM social_links
@@ -4107,6 +4108,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "economy", label: "Economy" },
       { key: "birthdays", label: "Birthdays" },
       { key: "customcommands", label: "Custom Commands" },
+      { key: "autoreplies", label: "Auto Replies" },
       { key: "customization", label: "Customization" }
     ];
     const moderatorModules = new Set(["moderation", "logging"]);
@@ -5656,53 +5658,261 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${activeModule === "customcommands" ? (() => {
         return `
       <h3>⚙️ Custom Commands</h3>
-      <p class="section-description">Create custom text commands that respond with embeds and optional GIFs</p>
+      <p class="section-description">Create custom text commands that respond with embeds and optional GIFs. You can add multiple possible responses and the bot will randomly pick one.</p>
       
-      <form method="post" action="/guild/${guildId}/custom-commands/create">
+      <form method="post" action="/guild/${guildId}/custom-commands/create" enctype="multipart/form-data">
         <div style="display:grid; gap:12px;">
           <label>
             <span>Command Name (without prefix)</span>
             <input type="text" name="command_name" placeholder="hello" required style="max-width:200px;" />
           </label>
           
-          <label>
-            <span>Response Text (for the embed)</span>
-            <textarea name="response_text" rows="4" placeholder="Hello! Welcome to our server!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
-          </label>
+          <div style="display:flex; gap:16px; align-items:center;">
+            <label style="display:flex; align-items:center; gap:8px;">
+              <input type="checkbox" name="allow_target" value="true" />
+              <span>Allow targeting users (!cmd @user)</span>
+            </label>
+            
+            <label>
+              <span>Usage Limit (optional, per user per day)</span>
+              <input type="number" name="usage_limit" placeholder="10" min="1" style="max-width:100px;" />
+            </label>
+          </div>
           
-          <label>
-            <span>GIF URLs (one per line, optional)</span>
-            <textarea name="gifs" rows="3" placeholder="https://media.giphy.com/...\nhttps://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
-            <small style="display:block;margin-top:6px;color:rgba(0,0,0,0.6);">If GIFs are added, one will be randomly selected and attached to the embed response.</small>
-          </label>
+          <div id="responses-container">
+            <div class="response-item" style="border:1px solid #ddd; padding:12px; margin-bottom:12px; border-radius:6px;">
+              <label>
+                <span>Response Text (for the embed)</span>
+                <textarea name="response_text_0" rows="3" placeholder="Hello! Welcome to our server!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+              </label>
+              
+              <label style="margin-top:8px;">
+                <span>GIF URLs (one per line, optional)</span>
+                <textarea name="gifs_0" rows="2" placeholder="https://media.giphy.com/...\nhttps://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+              </label>
+              
+              <label style="margin-top:8px;">
+                <span>Upload GIF Files (optional, multiple allowed)</span>
+                <input type="file" name="uploaded_gifs_0" accept=".gif" multiple style="width:100%;" />
+              </label>
+              
+              <button type="button" onclick="removeResponse(this)" style="margin-top:8px; background:#ff6b6b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Remove Response</button>
+            </div>
+          </div>
+          
+          <button type="button" onclick="addResponse()" style="background:#4CAF50; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">+ Add Another Response</button>
         </div>
         <button type="submit" style="margin-top:16px;">Create Custom Command</button>
       </form>
 
+      <script>
+        let responseCount = 1;
+        
+        function addResponse() {
+          const container = document.getElementById('responses-container');
+          const div = document.createElement('div');
+          div.className = 'response-item';
+          div.style.cssText = 'border:1px solid #ddd; padding:12px; margin-bottom:12px; border-radius:6px;';
+          div.innerHTML = \`
+            <label>
+              <span>Response Text (for the embed)</span>
+              <textarea name="response_text_\${responseCount}" rows="3" placeholder="Another response option..." required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+            </label>
+            
+            <label style="margin-top:8px;">
+              <span>GIF URLs (one per line, optional)</span>
+              <textarea name="gifs_\${responseCount}" rows="2" placeholder="https://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+            </label>
+            
+            <label style="margin-top:8px;">
+              <span>Upload GIF Files (optional, multiple allowed)</span>
+              <input type="file" name="uploaded_gifs_\${responseCount}" accept=".gif" multiple style="width:100%;" />
+            </label>
+            
+            <button type="button" onclick="removeResponse(this)" style="margin-top:8px; background:#ff6b6b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Remove Response</button>
+          \`;
+          container.appendChild(div);
+          responseCount++;
+        }
+        
+        function removeResponse(button) {
+          if (document.querySelectorAll('.response-item').length > 1) {
+            button.parentElement.remove();
+          } else {
+            alert('You must have at least one response!');
+          }
+        }
+      </script>
+
       <h4 style="margin-top:24px;">Your Custom Commands</h4>
-      ${customCommands.length > 0 ? `
+      \${customCommands.length > 0 ? \`
         <table>
           <tr>
             <th>Command</th>
-            <th>Response Preview</th>
-            <th>GIFs</th>
+            <th>Responses</th>
             <th>Actions</th>
           </tr>
-          ${customCommands.map((cmd) => `
+          \${customCommands.map((cmd) => {
+            const responses = JSON.parse(cmd.responses || '[]');
+            const totalResponses = responses.length;
+            const preview = responses.length > 0 ? responses[0].text?.slice(0, 50) + (responses[0].text?.length > 50 ? '...' : '') : 'No responses';
+            return \`
+              <tr>
+                <td><code>\\\`\${escapeHtml(cmd.command_name)}\\\`</code></td>
+                <td>\${totalResponses} response\${totalResponses !== 1 ? 's' : ''}<br><small>\${escapeHtml(preview)}</small></td>
+                <td>
+                  <form method="post" action="/guild/\${guildId}/custom-commands/delete/\${cmd.id}" style="display:inline;">
+                    <button type="submit" onclick="return confirm('Delete this command?')" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;">Delete</button>
+                  </form>
+                </td>
+              </tr>
+            \`;
+          }).join("")}
+        </table>
+      \` : \`<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>\`}
+      \`;
+      })() : ""}
+
+      ${activeModule === "autoreplies" ? (() => {
+        return `
+      <h3>🤖 Auto Replies</h3>
+      <p class="section-description">Set up automatic replies or reactions when users send specific trigger messages. The bot will randomly pick one response.</p>
+      
+      <form method="post" action="/guild/${guildId}/auto-replies/create" enctype="multipart/form-data">
+        <div style="display:grid; gap:12px;">
+          <label>
+            <span>Trigger Message (what users say to trigger this)</span>
+            <input type="text" name="trigger_message" placeholder="hello" required style="max-width:300px;" />
+          </label>
+          
+          <label>
+            <span>Response Type</span>
+            <select name="response_type" onchange="toggleResponseFields(this.value)" required>
+              <option value="reply">Reply with embed</option>
+              <option value="react">React with emoji</option>
+            </select>
+          </label>
+          
+          <div id="reply-fields" style="display:block;">
+            <div id="auto-responses-container">
+              <div class="auto-response-item" style="border:1px solid #ddd; padding:12px; margin-bottom:12px; border-radius:6px;">
+                <label>
+                  <span>Response Text (for the embed)</span>
+                  <textarea name="response_text_0" rows="3" placeholder="Hello! Welcome to our server!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+                </label>
+                
+                <label style="margin-top:8px;">
+                  <span>GIF URLs (one per line, optional)</span>
+                  <textarea name="gifs_0" rows="2" placeholder="https://media.giphy.com/...\nhttps://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+                </label>
+                
+                <label style="margin-top:8px;">
+                  <span>Upload GIF Files (optional, multiple allowed)</span>
+                  <input type="file" name="uploaded_gifs_0" accept=".gif" multiple style="width:100%;" />
+                </label>
+                
+                <button type="button" onclick="removeAutoResponse(this)" style="margin-top:8px; background:#ff6b6b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Remove Response</button>
+              </div>
+            </div>
+            
+            <button type="button" onclick="addAutoResponse()" style="background:#4CAF50; color:white; border:none; padding:8px 16px; border-radius:4px; cursor:pointer;">+ Add Another Response</button>
+          </div>
+          
+          <div id="react-fields" style="display:none;">
+            <label>
+              <span>Reaction Emoji</span>
+              <input type="text" name="reaction_emoji" placeholder="😊" style="max-width:100px;" />
+            </label>
+          </div>
+        </div>
+        <button type="submit" style="margin-top:16px;">Create Auto Reply</button>
+      </form>
+
+      <script>
+        let autoResponseCount = 1;
+        
+        function toggleResponseFields(type) {
+          document.getElementById('reply-fields').style.display = type === 'reply' ? 'block' : 'none';
+          document.getElementById('react-fields').style.display = type === 'react' ? 'block' : 'none';
+        }
+        
+        function addAutoResponse() {
+          const container = document.getElementById('auto-responses-container');
+          const div = document.createElement('div');
+          div.className = 'auto-response-item';
+          div.style.cssText = 'border:1px solid #ddd; padding:12px; margin-bottom:12px; border-radius:6px;';
+          div.innerHTML = \`
+            <label>
+              <span>Response Text (for the embed)</span>
+              <textarea name="response_text_\${autoResponseCount}" rows="3" placeholder="Hello! Welcome to our server!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+            </label>
+            
+            <label style="margin-top:8px;">
+              <span>GIF URLs (one per line, optional)</span>
+              <textarea name="gifs_\${autoResponseCount}" rows="2" placeholder="https://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+            </label>
+            
+            <label style="margin-top:8px;">
+              <span>Upload GIF Files (optional, multiple allowed)</span>
+              <input type="file" name="uploaded_gifs_\${autoResponseCount}" accept=".gif" multiple style="width:100%;" />
+            </label>
+            
+            <button type="button" onclick="removeAutoResponse(this)" style="margin-top:8px; background:#ff6b6b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Remove Response</button>
+          \`;
+          container.appendChild(div);
+          autoResponseCount++;
+        }
+        
+        function removeAutoResponse(button) {
+          if (document.querySelectorAll('.auto-response-item').length > 1) {
+            button.parentElement.remove();
+          } else {
+            alert('You must have at least one response!');
+          }
+        }
+      </script>
+
+      <h4 style="margin-top:24px;">Your Auto Replies</h4>
+      \${autoReplies.length > 0 ? \`
+        <table>
+          <tr>
+            <th>Trigger</th>
+            <th>Type</th>
+            <th>Responses</th>
+            <th>Actions</th>
+          </tr>
+          \${autoReplies.map((reply) => {
+            let responsesDisplay = '';
+            if (reply.response_type === 'react') {
+              responsesDisplay = reply.responses;
+            } else {
+              try {
+                const parsed = JSON.parse(reply.responses);
+                responsesDisplay = parsed.map(r => r.text).join(' | ');
+              } catch (e) {
+                responsesDisplay = 'Error parsing responses';
+              }
+            }
+            return \`
             <tr>
-              <td><code>\`${escapeHtml(cmd.command_name)}\`</code></td>
-              <td>${escapeHtml(String(cmd.response_text || "").slice(0, 50))}...</td>
-              <td>${cmd.gifs ? JSON.parse(cmd.gifs).length : 0} GIF(s)</td>
+              <td>\${escapeHtml(reply.trigger_message)}</td>
+              <td>\${reply.response_type}</td>
+              <td>\${escapeHtml(responsesDisplay)}</td>
               <td>
-                <form method="post" action="/guild/${guildId}/custom-commands/delete/${cmd.id}" style="display:inline;">
-                  <button type="submit" onclick="return confirm('Delete this command?')" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;">Delete</button>
+                <form method="post" action="/guild/\${guildId}/auto-replies/toggle/\${reply.id}" style="display:inline;">
+                  <button type="submit" style="background:\${reply.enabled ? '#ff6b6b' : '#4CAF50'}; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">
+                    \${reply.enabled ? 'Disable' : 'Enable'}
+                  </button>
+                </form>
+                <form method="post" action="/guild/\${guildId}/auto-replies/delete/\${reply.id}" style="display:inline;">
+                  <button type="submit" style="background:#ff6b6b; color:white; border:none; padding:4px 8px; border-radius:4px; cursor:pointer;">Delete</button>
                 </form>
               </td>
-            </tr>
-          `).join("")}
+            </tr>\`;
+          }).join("")}
         </table>
-      ` : `<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>`}
-      `;
+      \` : \`<p style="opacity:0.7;">No auto replies yet. Create one to get started!</p>\`}
+      \`;
       })() : ""}
 
       ${activeModule === "customization" ? `
@@ -5710,21 +5920,17 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       <form method="post" action="/guild/${guildId}/customization-unlocks">
         <table style="border-collapse:collapse;">
           <tr><th style="text-align:left;">Feature</th><th style="text-align:left;">Required Level</th></tr>
-          ${customizationOptions.map(opt => `
+          ${customizationOptions.map(opt => \`
             <tr>
               <td>${escapeHtml(opt.label)}</td>
               <td><input type="number" min="1" max="1000" name="${opt.key}" value="${unlocks[opt.key] ?? 1}" style="width:60px" /></td>
             </tr>
-          `).join("")}
+          \`).join("")}
         </table>
         <button type="submit">Save Customization Unlocks</button>
       </form>
       ` : ""}
     `));
-  });
-
-  // ─────────────────────────────────────────────
-  // Save customization unlocks
   // ─────────────────────────────────────────────
   app.post("/guild/:guildId/customization-unlocks", requireGuildAdmin, async (req, res) => {
     try {
@@ -7004,27 +7210,60 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   // ─────────────────────────────────────────────
   // Custom Commands
   // ─────────────────────────────────────────────
-  app.post("/guild/:guildId/custom-commands/create", requireGuildAdmin, async (req, res) => {
+  app.post("/guild/:guildId/custom-commands/create", requireGuildAdmin, upload.fields([{ name: 'uploaded_gifs_0', maxCount: 10 }, { name: 'uploaded_gifs_1', maxCount: 10 }, { name: 'uploaded_gifs_2', maxCount: 10 }, { name: 'uploaded_gifs_3', maxCount: 10 }, { name: 'uploaded_gifs_4', maxCount: 10 }]), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const commandName = String(req.body.command_name || "").trim().toLowerCase();
-      const responseText = String(req.body.response_text || "").trim();
-      const gifsRaw = String(req.body.gifs || "").trim();
-      const gifs = gifsRaw
-        ? JSON.stringify(gifsRaw.split("\n").map(url => url.trim()).filter(Boolean))
-        : JSON.stringify([]);
+      const allowTarget = req.body.allow_target === 'true';
+      const usageLimit = req.body.usage_limit ? parseInt(req.body.usage_limit, 10) : null;
+      
+      if (!commandName) {
+        return res.status(400).send("Command name is required.");
+      }
 
-      if (!commandName || !responseText) {
-        return res.status(400).send("Command name and response text are required.");
+      // Collect all responses
+      const responses = [];
+      let index = 0;
+      while (req.body[`response_text_${index}`] !== undefined) {
+        const text = String(req.body[`response_text_${index}`] || "").trim();
+        const gifsRaw = String(req.body[`gifs_${index}`] || "").trim();
+        const gifs = gifsRaw ? gifsRaw.split("\n").map(url => url.trim()).filter(Boolean) : [];
+        
+        // Handle uploaded GIFs
+        const uploadedGifs = [];
+        const files = req.files && req.files[`uploaded_gifs_${index}`];
+        if (files && Array.isArray(files)) {
+          for (const file of files) {
+            if (file.mimetype === 'image/gif') {
+              // Convert to base64 for storage
+              const fs = require('fs');
+              const base64 = fs.readFileSync(file.path).toString('base64');
+              uploadedGifs.push(`data:image/gif;base64,${base64}`);
+              // Clean up temp file
+              fs.unlinkSync(file.path);
+            }
+          }
+        }
+        
+        if (text) {
+          responses.push({ text, gifs, uploaded_gifs: uploadedGifs });
+        }
+        index++;
+      }
+
+      if (responses.length === 0) {
+        return res.status(400).send("At least one response is required.");
       }
 
       await run(`
-        INSERT INTO custom_commands (guild_id, command_name, response_text, gifs, created_by)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO custom_commands (guild_id, command_name, responses, allow_target, usage_limit, uploaded_gifs, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id, command_name) DO UPDATE SET
-          response_text=excluded.response_text,
-          gifs=excluded.gifs
-      `, [guildId, commandName, responseText, gifs, req.user?.id || "unknown"]);
+          responses=excluded.responses,
+          allow_target=excluded.allow_target,
+          usage_limit=excluded.usage_limit,
+          uploaded_gifs=excluded.uploaded_gifs
+      `, [guildId, commandName, JSON.stringify(responses), allowTarget, usageLimit, JSON.stringify(responses.map(r => r.uploaded_gifs || [])), req.user?.id || "unknown"]);
 
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));
     } catch (e) {
@@ -7043,6 +7282,112 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));
     } catch (e) {
       console.error("custom-commands delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Auto Replies
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/auto-replies/create", requireGuildAdmin, upload.fields([{ name: 'uploaded_gifs_0', maxCount: 10 }, { name: 'uploaded_gifs_1', maxCount: 10 }, { name: 'uploaded_gifs_2', maxCount: 10 }, { name: 'uploaded_gifs_3', maxCount: 10 }, { name: 'uploaded_gifs_4', maxCount: 10 }]), async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const triggerMessage = String(req.body.trigger_message || "").trim().toLowerCase();
+      const responseType = String(req.body.response_type || "").trim();
+      
+      if (!triggerMessage || !['reply', 'react'].includes(responseType)) {
+        return res.status(400).send("Trigger message and valid response type are required.");
+      }
+
+      let responses;
+      let uploadedGifs = [];
+      if (responseType === 'reply') {
+        // Collect all responses for replies
+        const replyResponses = [];
+        let index = 0;
+        while (req.body[`response_text_${index}`] !== undefined) {
+          const text = String(req.body[`response_text_${index}`] || "").trim();
+          const gifsRaw = String(req.body[`gifs_${index}`] || "").trim();
+          const gifs = gifsRaw ? gifsRaw.split("\n").map(url => url.trim()).filter(Boolean) : [];
+          
+          // Handle uploaded GIFs
+          const responseUploadedGifs = [];
+          const files = req.files && req.files[`uploaded_gifs_${index}`];
+          if (files && Array.isArray(files)) {
+            for (const file of files) {
+              if (file.mimetype === 'image/gif') {
+                // Convert to base64 for storage
+                const fs = require('fs');
+                const base64 = fs.readFileSync(file.path).toString('base64');
+                responseUploadedGifs.push(`data:image/gif;base64,${base64}`);
+                // Clean up temp file
+                fs.unlinkSync(file.path);
+              }
+            }
+          }
+          
+          if (text) {
+            replyResponses.push({ text, gifs, uploaded_gifs: responseUploadedGifs });
+            uploadedGifs.push(...responseUploadedGifs);
+          }
+          index++;
+        }
+
+        if (replyResponses.length === 0) {
+          return res.status(400).send("At least one response is required for reply type.");
+        }
+        responses = JSON.stringify(replyResponses);
+      } else if (responseType === 'react') {
+        const emoji = String(req.body.reaction_emoji || "").trim();
+        if (!emoji) {
+          return res.status(400).send("Reaction emoji is required for react type.");
+        }
+        responses = emoji;
+      }
+
+      await run(`
+        INSERT INTO auto_replies (guild_id, trigger_message, response_type, responses, uploaded_gifs, created_by)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `, [guildId, triggerMessage, responseType, responses, JSON.stringify(uploadedGifs), req.user?.id || "unknown"]);
+
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies create error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-replies/toggle/:id", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+
+      // Get current status and toggle it
+      const current = await get(`SELECT enabled FROM auto_replies WHERE guild_id=? AND id=?`, [guildId, id]);
+      if (!current) {
+        return res.status(404).send("Auto reply not found.");
+      }
+
+      const newStatus = current.enabled ? 0 : 1;
+      await run(`UPDATE auto_replies SET enabled=? WHERE guild_id=? AND id=?`, [newStatus, guildId, id]);
+
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies toggle error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-replies/delete/:id", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+
+      await run(`DELETE FROM auto_replies WHERE guild_id=? AND id=?`, [guildId, id]);
+
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies delete error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

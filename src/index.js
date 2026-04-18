@@ -97,6 +97,40 @@ function normalizeText(text) {
 }
 
 // ─────────────────────────────────────────────────────
+// Placeholder replacement for custom commands and auto-replies
+// ─────────────────────────────────────────────────────
+
+function replacePlaceholders(text, message, targetMember = null) {
+  if (!text || typeof text !== 'string') return text;
+  
+  const author = message.author;
+  const member = message.member;
+  
+  let result = text
+    .replace(/{user}/gi, `<@${author.id}>`)
+    .replace(/{username}/gi, author.username)
+    .replace(/{userid}/gi, author.id)
+    .replace(/{usertag}/gi, author.tag)
+    .replace(/{userdisplayname}/gi, member?.displayName || author.username)
+    .replace(/{servername}/gi, message.guild?.name || 'Unknown')
+    .replace(/{serverid}/gi, message.guild?.id || 'Unknown')
+    .replace(/{channelname}/gi, message.channel?.name || 'Unknown')
+    .replace(/{channelid}/gi, message.channel?.id || 'Unknown');
+  
+  // Target-specific placeholders (for mentions or replies)
+  if (targetMember) {
+    result = result
+      .replace(/{target}/gi, `<@${targetMember.id}>`)
+      .replace(/{targetname}/gi, targetMember.user?.username || 'Unknown')
+      .replace(/{targetid}/gi, targetMember.id)
+      .replace(/{targettag}/gi, targetMember.user?.tag || 'Unknown')
+      .replace(/{targetdisplayname}/gi, targetMember.displayName || targetMember.user?.username || 'Unknown');
+  }
+  
+  return result;
+}
+
+// ─────────────────────────────────────────────────────
 
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -1319,6 +1353,57 @@ client.on(Events.MessageCreate, async (message) => {
   const ignoredChannels = await getIgnoredChannels(message.guild.id);
   const isIgnored = ignoredChannels.some(c => c.channel_id === message.channel.id && c.channel_type === "text");
   if (isIgnored) return;
+
+  // ─── Auto Replies ───
+  try {
+    const autoReplies = await all(`SELECT * FROM auto_replies WHERE guild_id=? AND enabled=true`, [message.guild.id]);
+    for (const reply of autoReplies) {
+      if (message.content.toLowerCase().includes(reply.trigger_message.toLowerCase())) {
+        if (reply.response_type === 'reply') {
+          try {
+            const responses = JSON.parse(reply.responses || '[]');
+            if (responses.length > 0) {
+              const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+              
+              // Replace placeholders in the response text
+              const responseText = replacePlaceholders(selectedResponse.text, message);
+              
+              const embed = new EmbedBuilder()
+                .setColor(0x7bc96f)
+                .setDescription(responseText)
+                .setTimestamp();
+              
+              // Add random GIF if available (prefer uploaded over URLs)
+              let gifUrl = null;
+              if (selectedResponse.uploaded_gifs && selectedResponse.uploaded_gifs.length > 0) {
+                gifUrl = selectedResponse.uploaded_gifs[Math.floor(Math.random() * selectedResponse.uploaded_gifs.length)];
+              } else if (selectedResponse.gifs && selectedResponse.gifs.length > 0) {
+                gifUrl = selectedResponse.gifs[Math.floor(Math.random() * selectedResponse.gifs.length)];
+              }
+              
+              if (gifUrl) {
+                embed.setImage(gifUrl);
+              }
+              
+              await message.reply({ embeds: [embed] }).catch(() => {});
+            }
+          } catch (e) {
+            console.error('Error parsing auto-reply responses:', e);
+          }
+        } else if (reply.response_type === 'react') {
+          try {
+            await message.react(reply.responses).catch(() => {});
+          } catch (e) {
+            console.error('Error reacting to message:', e);
+          }
+        }
+        // Only trigger one auto-reply per message
+        break;
+      }
+    }
+  } catch (e) {
+    console.error('Error checking auto-replies:', e);
+  }
 
   // ─── Auto-Moderation ───
   const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [message.guild.id]);

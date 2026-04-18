@@ -221,6 +221,40 @@ async function setUserXp(guildId, userId, xp) {
 }
 
 // ─────────────────────────────────────────────────────
+// Placeholder replacement for custom commands and auto-replies
+// ─────────────────────────────────────────────────────
+
+function replacePlaceholders(text, message, targetMember = null) {
+  if (!text || typeof text !== 'string') return text;
+  
+  const author = message.author;
+  const member = message.member;
+  
+  let result = text
+    .replace(/{user}/gi, `<@${author.id}>`)
+    .replace(/{username}/gi, author.username)
+    .replace(/{userid}/gi, author.id)
+    .replace(/{usertag}/gi, author.tag)
+    .replace(/{userdisplayname}/gi, member?.displayName || author.username)
+    .replace(/{servername}/gi, message.guild?.name || 'Unknown')
+    .replace(/{serverid}/gi, message.guild?.id || 'Unknown')
+    .replace(/{channelname}/gi, message.channel?.name || 'Unknown')
+    .replace(/{channelid}/gi, message.channel?.id || 'Unknown');
+  
+  // Target-specific placeholders (for mentions or replies)
+  if (targetMember) {
+    result = result
+      .replace(/{target}/gi, `<@${targetMember.id}>`)
+      .replace(/{targetname}/gi, targetMember.user?.username || 'Unknown')
+      .replace(/{targetid}/gi, targetMember.id)
+      .replace(/{targettag}/gi, targetMember.user?.tag || 'Unknown')
+      .replace(/{targetdisplayname}/gi, targetMember.displayName || targetMember.user?.username || 'Unknown');
+  }
+  
+  return result;
+}
+
+// ─────────────────────────────────────────────────────
 // Command implementations
 // ─────────────────────────────────────────────────────
 
@@ -4274,23 +4308,72 @@ async function executeCommand(message, cmd, args, prefix) {
   );
   
   if (customCmd) {
-    const embed = new EmbedBuilder()
-      .setColor(0x7bc96f)
-      .setDescription(customCmd.response_text)
-      .setTimestamp();
-    
     try {
-      const gifs = JSON.parse(customCmd.gifs || '[]');
-      if (gifs.length > 0) {
-        const randomGif = gifs[Math.floor(Math.random() * gifs.length)];
-        embed.setImage(randomGif);
+      // Check usage limit if set
+      if (customCmd.usage_limit) {
+        const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+        const usageKey = `${message.author.id}_${today}`;
+        const currentUsage = await get(
+          `SELECT usage_count FROM command_usage WHERE guild_id=? AND command_name=? AND usage_key=?`,
+          [message.guild.id, customCmd.command_name, usageKey]
+        );
+        
+        if (currentUsage && currentUsage.usage_count >= customCmd.usage_limit) {
+          await message.reply(`You've reached the daily limit of ${customCmd.usage_limit} uses for this command.`).catch(() => {});
+          return true;
+        }
+        
+        // Increment usage
+        await run(
+          `INSERT INTO command_usage (guild_id, command_name, usage_key, usage_count, last_used)
+           VALUES (?, ?, ?, 1, ?)
+           ON CONFLICT(guild_id, command_name, usage_key) DO UPDATE SET
+             usage_count = usage_count + 1,
+             last_used = excluded.last_used`,
+          [message.guild.id, customCmd.command_name, usageKey, Date.now()]
+        );
+      }
+      
+      const responses = JSON.parse(customCmd.responses || '[]');
+      if (responses.length > 0) {
+        // Handle targeting if enabled
+        let targetMember = null;
+        if (customCmd.allow_target && args.length > 0) {
+          const pick = await pickUserSmart(message, args[0]);
+          if (pick && !pick.ambiguous) {
+            targetMember = pick.member;
+          }
+        }
+        
+        // Randomly select one response
+        const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
+        
+        // Replace placeholders in the response text
+        const responseText = replacePlaceholders(selectedResponse.text, message, targetMember);
+        
+        const embed = new EmbedBuilder()
+          .setColor(0x7bc96f)
+          .setDescription(responseText)
+          .setTimestamp();
+        
+        // Add random GIF if available (prefer uploaded over URLs)
+        let gifUrl = null;
+        if (selectedResponse.uploaded_gifs && selectedResponse.uploaded_gifs.length > 0) {
+          gifUrl = selectedResponse.uploaded_gifs[Math.floor(Math.random() * selectedResponse.uploaded_gifs.length)];
+        } else if (selectedResponse.gifs && selectedResponse.gifs.length > 0) {
+          gifUrl = selectedResponse.gifs[Math.floor(Math.random() * selectedResponse.gifs.length)];
+        }
+        
+        if (gifUrl) {
+          embed.setImage(gifUrl);
+        }
+        
+        await message.reply({ embeds: [embed] }).catch(() => {});
+        return true;
       }
     } catch (e) {
-      // Ignore JSON parse errors
+      console.error('Error parsing custom command responses:', e);
     }
-    
-    await message.reply({ embeds: [embed] }).catch(() => {});
-    return true;
   }
 
   return false;

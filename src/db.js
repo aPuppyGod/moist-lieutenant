@@ -836,9 +836,24 @@ async function initDb() {
       command_name TEXT NOT NULL,
       response_text TEXT NOT NULL,
       gifs TEXT DEFAULT '[]',
+      responses TEXT DEFAULT NULL,
+      target_mode TEXT DEFAULT 'none',
       created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
       created_by TEXT NOT NULL,
       UNIQUE(guild_id, command_name)
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS auto_replies (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      trigger_message TEXT NOT NULL,
+      response_type TEXT NOT NULL DEFAULT 'text',
+      responses TEXT NOT NULL,
+      enabled INTEGER DEFAULT 1,
+      created_by TEXT NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
     )
   `);
 
@@ -930,6 +945,25 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_lock_manage_webhooks INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_alert_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS anti_nuke_alert_role_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE custom_commands ADD COLUMN IF NOT EXISTS responses TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE custom_commands ADD COLUMN IF NOT EXISTS target_mode TEXT DEFAULT 'none'`);
+
+    await run(`
+      UPDATE custom_commands
+      SET responses = json_build_object(
+        'target_mode', COALESCE(target_mode, 'none'),
+        'responses', json_build_array(
+          json_build_object(
+            'text', COALESCE(response_text, ''),
+            'gifs', CASE
+              WHEN gifs IS NULL OR btrim(gifs) = '' THEN '[]'::json
+              ELSE gifs::json
+            END
+          )
+        )
+      )::text
+      WHERE (responses IS NULL OR btrim(responses) = '')
+    `);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_quick_mod_actions_enabled INTEGER DEFAULT 1`);

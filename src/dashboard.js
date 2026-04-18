@@ -4071,6 +4071,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
     const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
     const customCommands = await all(`SELECT * FROM custom_commands WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
+    const autoReplies = await all(`SELECT * FROM auto_replies WHERE guild_id=? ORDER BY id DESC`, [guildId]);
     const socialLinks = await all(
       `SELECT id, platform, external_id, source_url, label, channel_id, enabled, created_at, last_checked_at
        FROM social_links
@@ -4107,6 +4108,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "economy", label: "Economy" },
       { key: "birthdays", label: "Birthdays" },
       { key: "customcommands", label: "Custom Commands" },
+      { key: "autoreplies", label: "Auto Replies" },
       { key: "customization", label: "Customization" }
     ];
     const moderatorModules = new Set(["moderation", "logging"]);
@@ -5656,33 +5658,34 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ${activeModule === "customcommands" ? (() => {
         return `
       <h3>⚙️ Custom Commands</h3>
-      <p class="section-description">Create custom text commands that respond with embeds and optional GIFs</p>
-      
+      <p class="section-description">Create command replies with text plus optional GIF URL or uploaded GIF file.</p>
+
       <form method="post" action="/guild/${guildId}/custom-commands/create" enctype="multipart/form-data">
         <div style="display:grid; gap:12px;">
           <label>
             <span>Command Name (without prefix)</span>
-            <input type="text" name="command_name" placeholder="hello" required style="max-width:200px;" />
+            <input type="text" name="command_name" placeholder="hug" required style="max-width:220px;" />
           </label>
           <label>
             <span>Command Behavior</span>
-            <select name="target_mode" required style="max-width:260px;">
-              <option value="none">No target required (e.g. !dance)</option>
-              <option value="optional">Optional target (e.g. !hug or !hug @user)</option>
-              <option value="required">Target required (e.g. !hug @user)</option>
+            <select name="target_mode" required style="max-width:320px;">
+              <option value="none">No target required (example: !dance)</option>
+              <option value="optional">Optional target (example: !hug or !hug @user)</option>
+              <option value="required">Target required (example: !hug @user)</option>
             </select>
-            <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Choose whether this command should act on a mentioned user, be generic, or allow both.</small>
           </label>
-          
           <label>
-            <span>Response Text (for the embed)</span>
-            <textarea name="response_text" rows="4" placeholder="Hello! Welcome to our server!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+            <span>Response Text</span>
+            <textarea name="response_text_0" rows="3" placeholder="{user} gives {target} a huge hug!" required style="width:100%;max-width:100%;font-family:inherit;"></textarea>
           </label>
-          
           <label>
-            <span>GIF URLs (one per line, optional)</span>
-            <textarea name="gifs" rows="3" placeholder="https://media.giphy.com/...\nhttps://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
-            <small style="display:block;margin-top:6px;color:rgba(0,0,0,0.6);">If GIFs are added, one will be randomly selected and attached to the embed response.</small>
+            <span>GIF URL(s), one per line (optional)</span>
+            <textarea name="gifs_0" rows="3" placeholder="https://media.giphy.com/..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+          </label>
+          <label>
+            <span>Upload GIF file(s) (optional)</span>
+            <input type="file" name="gif_files_0" accept="image/gif" multiple />
+            <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Uploaded GIFs can be used instead of external links.</small>
           </label>
         </div>
         <button type="submit" style="margin-top:16px;">Create Custom Command</button>
@@ -5693,24 +5696,124 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <table>
           <tr>
             <th>Command</th>
+            <th>Mode</th>
             <th>Response Preview</th>
             <th>GIFs</th>
             <th>Actions</th>
           </tr>
-          ${customCommands.map((cmd) => `
+          ${customCommands.map((cmd) => {
+            let targetMode = String(cmd.target_mode || "none");
+            let previewText = String(cmd.response_text || "");
+            let gifCount = 0;
+            try {
+              const payload = JSON.parse(cmd.responses || "[]");
+              let responses = payload;
+              if (!Array.isArray(payload)) {
+                targetMode = String(payload.target_mode || targetMode);
+                responses = Array.isArray(payload.responses) ? payload.responses : [];
+              }
+              if (responses[0]) {
+                previewText = String(responses[0].text || previewText);
+                gifCount = Array.isArray(responses[0].gifs) ? responses[0].gifs.length : gifCount;
+              }
+            } catch {
+              try {
+                const legacyGifs = JSON.parse(cmd.gifs || "[]");
+                gifCount = Array.isArray(legacyGifs) ? legacyGifs.length : 0;
+              } catch {
+                gifCount = 0;
+              }
+            }
+            return `
             <tr>
-              <td><code>\`${escapeHtml(cmd.command_name)}\`</code></td>
-              <td>${escapeHtml(String(cmd.response_text || "").slice(0, 50))}...</td>
-              <td>${cmd.gifs ? JSON.parse(cmd.gifs).length : 0} GIF(s)</td>
+              <td><code>${escapeHtml(cmd.command_name)}</code></td>
+              <td>${escapeHtml(targetMode)}</td>
+              <td>${escapeHtml(String(previewText).slice(0, 60))}${String(previewText).length > 60 ? "..." : ""}</td>
+              <td>${gifCount}</td>
               <td>
                 <form method="post" action="/guild/${guildId}/custom-commands/delete/${cmd.id}" style="display:inline;">
                   <button type="submit" onclick="return confirm('Delete this command?')" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;">Delete</button>
                 </form>
               </td>
             </tr>
+          `;
+          }).join("")}
+        </table>
+      ` : `<p style="opacity:0.7;">No custom commands yet. Create one to get started.</p>`}
+      `;
+      })() : ""}
+
+      ${activeModule === "autoreplies" ? (() => {
+        return `
+      <h3>💬 Auto Replies</h3>
+      <p class="section-description">When a message contains your trigger text, the bot can reply with text, image, text+image, or emoji reaction.</p>
+
+      <form method="post" action="/guild/${guildId}/auto-replies/create" enctype="multipart/form-data">
+        <div style="display:grid; gap:12px;">
+          <label>
+            <span>Trigger Text</span>
+            <input type="text" name="trigger_message" placeholder="good morning" required style="max-width:320px;" />
+          </label>
+
+          <label>
+            <span>Response Mode</span>
+            <select name="response_type" required style="max-width:320px;">
+              <option value="text">Reply with message only</option>
+              <option value="text_image">Reply with message + picture</option>
+              <option value="image">Reply with picture only</option>
+              <option value="emoji">React with emoji only</option>
+            </select>
+          </label>
+
+          <label>
+            <span>Reply Message (used for text and text+picture)</span>
+            <textarea name="response_text_0" rows="3" placeholder="Good morning, {user}!" style="width:100%;max-width:100%;font-family:inherit;"></textarea>
+          </label>
+
+          <label>
+            <span>Picture URL(s), one per line (used for picture modes)</span>
+            <textarea name="gifs_0" rows="3" placeholder="https://..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+          </label>
+
+          <label>
+            <span>Upload picture file(s) (used for picture modes)</span>
+            <input type="file" name="gif_files_0" accept="image/gif,image/png,image/jpeg,image/webp" multiple />
+          </label>
+
+          <label>
+            <span>Emoji (used for emoji mode)</span>
+            <input type="text" name="reaction_emoji" placeholder="🔥" style="max-width:180px;" />
+          </label>
+        </div>
+        <button type="submit" style="margin-top:16px;">Create Auto Reply</button>
+      </form>
+
+      <h4 style="margin-top:24px;">Configured Auto Replies</h4>
+      ${autoReplies.length > 0 ? `
+        <table>
+          <tr>
+            <th>Trigger</th>
+            <th>Mode</th>
+            <th>Enabled</th>
+            <th>Actions</th>
+          </tr>
+          ${autoReplies.map((item) => `
+            <tr>
+              <td>${escapeHtml(item.trigger_message || "")}</td>
+              <td>${escapeHtml(item.response_type || "text")}</td>
+              <td>${item.enabled ? "Yes" : "No"}</td>
+              <td>
+                <form method="post" action="/guild/${guildId}/auto-replies/toggle/${item.id}" style="display:inline; margin-right:8px;">
+                  <button type="submit">${item.enabled ? "Disable" : "Enable"}</button>
+                </form>
+                <form method="post" action="/guild/${guildId}/auto-replies/delete/${item.id}" style="display:inline;">
+                  <button type="submit" onclick="return confirm('Delete this auto reply?')" style="color:red;">Delete</button>
+                </form>
+              </td>
+            </tr>
           `).join("")}
         </table>
-      ` : `<p style="opacity:0.7;">No custom commands yet. Create one to get started!</p>`}
+      ` : `<p style="opacity:0.7;">No auto replies yet.</p>`}
       `;
       })() : ""}
 
@@ -7025,14 +7128,20 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       const responses = [];
       const responseIndex = {};
-      
-      // Collect all response indices
+
+      // Collect all response indices (indexed dynamic form)
       for (const key of Object.keys(req.body)) {
         const match = key.match(/^response_text_(\d+)$/);
         if (match) {
-          const idx = match[1];
-          responseIndex[idx] = true;
+          responseIndex[match[1]] = true;
         }
+      }
+
+      // Backward compatibility: single non-indexed response form
+      if (Object.keys(responseIndex).length === 0 && String(req.body.response_text || "").trim()) {
+        responseIndex["0"] = true;
+        req.body.response_text_0 = req.body.response_text;
+        req.body.gifs_0 = req.body.gifs || "";
       }
 
       // Build response objects
@@ -7048,10 +7157,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           gifs.push(...gifsRaw.split("\n").map(url => url.trim()).filter(Boolean));
         }
 
-        // Add uploaded GIF files
+        // Add uploaded image files
         if (req.files) {
           for (const file of req.files) {
-            if (file.fieldname === `gif_files_${idx}` && file.mimetype === "image/gif") {
+            if ((file.fieldname === `gif_files_${idx}` || file.fieldname === "gif_files") && String(file.mimetype || "").startsWith("image/")) {
               const gifUrl = `/uploads/${file.filename}`;
               gifs.push(gifUrl);
             }
@@ -7074,11 +7183,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       };
 
       await run(`
-        INSERT INTO custom_commands (guild_id, command_name, responses, created_by)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO custom_commands (guild_id, command_name, responses, target_mode, created_by)
+        VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(guild_id, command_name) DO UPDATE SET
-          responses=excluded.responses
-      `, [guildId, commandName, JSON.stringify(commandPayload), req.user?.id || "unknown"]);
+          responses=excluded.responses,
+          target_mode=excluded.target_mode
+      `, [guildId, commandName, JSON.stringify(commandPayload), targetMode, req.user?.id || "unknown"]);
 
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));
     } catch (e) {
@@ -7105,64 +7215,56 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     try {
       const guildId = req.params.guildId;
       const triggerMessage = String(req.body.trigger_message || "").trim();
-      const responseType = String(req.body.response_type || "reply").trim();
+      const responseType = String(req.body.response_type || "text").trim();
 
       if (!triggerMessage) {
         return res.status(400).send("Trigger message is required.");
       }
 
+      const responseText = String(req.body.response_text_0 || req.body.response_text || "").trim();
+      const gifs = [];
+      const gifsRaw = String(req.body.gifs_0 || req.body.gifs || "").trim();
+      if (gifsRaw) {
+        gifs.push(...gifsRaw.split("\n").map(url => url.trim()).filter(Boolean));
+      }
+
+      if (req.files) {
+        for (const file of req.files) {
+          if ((file.fieldname === "gif_files_0" || file.fieldname === "gif_files") && String(file.mimetype || "").startsWith("image/")) {
+            gifs.push(`/uploads/${file.filename}`);
+          }
+        }
+      }
+
       let storedValue = "";
-      if (responseType === "reply") {
-        const responses = [];
-        const responseIndex = {};
-        
-        for (const key of Object.keys(req.body)) {
-          const match = key.match(/^response_text_(\d+)$/);
-          if (match) {
-            const idx = match[1];
-            responseIndex[idx] = true;
-          }
-        }
-
-        for (const idx of Object.keys(responseIndex).sort((a, b) => Number(a) - Number(b))) {
-          const responseText = String(req.body[`response_text_${idx}`] || "").trim();
-          if (!responseText) continue;
-
-          const gifs = [];
-          const gifsRaw = String(req.body[`gifs_${idx}`] || "").trim();
-          if (gifsRaw) {
-            gifs.push(...gifsRaw.split("\\n").map(url => url.trim()).filter(Boolean));
-          }
-
-          if (req.files) {
-            for (const file of req.files) {
-              if (file.fieldname === `gif_files_${idx}` && file.mimetype === "image/gif") {
-                const gifUrl = `/uploads/${file.filename}`;
-                gifs.push(gifUrl);
-              }
-            }
-          }
-
-          responses.push({
-            text: responseText,
-            gifs: gifs
-          });
-        }
-
-        if (responses.length === 0) {
-          return res.status(400).send("At least one response is required.");
-        }
-        storedValue = JSON.stringify(responses);
-      } else if (responseType === "react") {
+      if (responseType === "emoji") {
         storedValue = String(req.body.reaction_emoji || "").trim();
         if (!storedValue) {
-          return res.status(400).send("Reaction emoji is required.");
+          return res.status(400).send("Reaction emoji is required for emoji mode.");
         }
+      } else if (responseType === "image") {
+        if (gifs.length === 0) {
+          return res.status(400).send("Picture is required for picture-only mode.");
+        }
+        storedValue = JSON.stringify({ text: "", gifs });
+      } else if (responseType === "text_image") {
+        if (!responseText) {
+          return res.status(400).send("Message text is required for message + picture mode.");
+        }
+        if (gifs.length === 0) {
+          return res.status(400).send("Picture is required for message + picture mode.");
+        }
+        storedValue = JSON.stringify({ text: responseText, gifs });
+      } else {
+        if (!responseText) {
+          return res.status(400).send("Message text is required for message-only mode.");
+        }
+        storedValue = JSON.stringify({ text: responseText, gifs: [] });
       }
 
       await run(`
         INSERT INTO auto_replies (guild_id, trigger_message, response_type, responses, enabled, created_by)
-        VALUES (?, ?, ?, ?, true, ?)
+        VALUES (?, ?, ?, ?, 1, ?)
       `, [guildId, triggerMessage, responseType, storedValue, req.user?.id || "unknown"]);
 
       return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
@@ -7178,7 +7280,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const id = parseInt(req.params.id, 10);
       const reply = await get(`SELECT enabled FROM auto_replies WHERE guild_id=? AND id=?`, [guildId, id]);
       if (reply) {
-        await run(`UPDATE auto_replies SET enabled=? WHERE guild_id=? AND id=?`, [!reply.enabled, guildId, id]);
+        const nextEnabled = Number(reply.enabled) ? 0 : 1;
+        await run(`UPDATE auto_replies SET enabled=? WHERE guild_id=? AND id=?`, [nextEnabled, guildId, id]);
       }
       return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
     } catch (e) {

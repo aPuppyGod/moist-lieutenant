@@ -38,6 +38,8 @@ const { startSocialFeedNotifier } = require("./socials");
 const { applyReactionRoleOnAdd, applyReactionRoleOnRemove } = require("./reactionRoles");
 const { handleTicketInteraction } = require("./tickets");
 const unidecode = require('unidecode');
+const fs = require("fs");
+const path = require("path");
 
 process.on("unhandledRejection", (reason) => {
   console.error("[process] Unhandled promise rejection:", reason);
@@ -94,6 +96,134 @@ function normalizeText(text) {
   // First apply custom map, then unidecode for remaining
   let normalized = text.replace(/./g, char => customMap[char] || char);
   return unidecode(normalized);
+}
+
+function replaceAutoReplyPlaceholders(text, message) {
+  return String(text || "")
+    .replace(/{user}/gi, `<@${message.author.id}>`)
+    .replace(/{username}/gi, message.author.username || "")
+    .replace(/{userid}/gi, message.author.id || "")
+    .replace(/{usertag}/gi, message.author.tag || "")
+    .replace(/{servername}/gi, message.guild?.name || "")
+    .replace(/{serverid}/gi, message.guild?.id || "")
+    .replace(/{channelname}/gi, message.channel?.name || "")
+    .replace(/{channelid}/gi, message.channel?.id || "");
+}
+
+function pickRandomItem(items) {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return items[Math.floor(Math.random() * items.length)] || null;
+}
+
+async function sendAutoReplyWithImage(message, textValue, imageValue) {
+  const text = String(textValue || "").trim();
+  const image = String(imageValue || "").trim();
+
+  if (!image) {
+    if (text) {
+      await message.reply({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+    }
+    return;
+  }
+
+  const isUploaded = image.startsWith("/uploads/") || image.startsWith("uploads/");
+  if (!isUploaded) {
+    const content = text ? `${text}\n${image}` : image;
+    await message.reply({ content, allowedMentions: { parse: [] } }).catch(() => {});
+    return;
+  }
+
+  const relativePath = image.replace(/^\/+/, "");
+  const absolutePath = path.join(process.cwd(), relativePath);
+  if (!fs.existsSync(absolutePath)) {
+    if (text) {
+      await message.reply({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+    }
+    return;
+  }
+
+  const fileName = `${path.basename(absolutePath)}.gif`;
+  const attachment = new AttachmentBuilder(absolutePath, { name: fileName });
+  if (text) {
+    await message.reply({ content: text, files: [attachment], allowedMentions: { parse: [] } }).catch(() => {});
+  } else {
+    await message.reply({ files: [attachment], allowedMentions: { parse: [] } }).catch(() => {});
+  }
+}
+
+async function processAutoReplies(message) {
+  const content = String(message.content || "").trim().toLowerCase();
+  if (!content) return;
+
+  const replies = await all(
+    `SELECT id, trigger_message, response_type, responses, enabled
+     FROM auto_replies
+     WHERE guild_id=? AND enabled=1
+     ORDER BY id DESC`,
+    [message.guild.id]
+  );
+
+  const matched = replies
+    .filter((row) => {
+      const trigger = String(row.trigger_message || "").trim().toLowerCase();
+      return trigger && content.includes(trigger);
+    })
+    .sort((a, b) => String(b.trigger_message || "").length - String(a.trigger_message || "").length);
+
+  const selected = matched[0];
+  if (!selected) return;
+
+  const type = String(selected.response_type || "text").toLowerCase();
+  if (type === "emoji") {
+    const emoji = String(selected.responses || "").trim();
+    if (emoji) {
+      await message.react(emoji).catch(() => {});
+    }
+    return;
+  }
+
+  let payload = { text: "", gifs: [] };
+  try {
+    const parsed = JSON.parse(selected.responses || "{}");
+    if (Array.isArray(parsed)) {
+      const first = parsed[0] || {};
+      payload = {
+        text: String(first.text || ""),
+        gifs: Array.isArray(first.gifs) ? first.gifs : []
+      };
+    } else {
+      payload = {
+        text: String(parsed.text || ""),
+        gifs: Array.isArray(parsed.gifs) ? parsed.gifs : []
+      };
+    }
+  } catch {
+    payload = { text: String(selected.responses || ""), gifs: [] };
+  }
+
+  const text = replaceAutoReplyPlaceholders(payload.text, message).trim();
+  const chosenImage = pickRandomItem(payload.gifs) || "";
+
+  if (type === "text") {
+    if (text) {
+      await message.reply({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+    }
+    return;
+  }
+
+  if (type === "text_image") {
+    await sendAutoReplyWithImage(message, text, chosenImage);
+    return;
+  }
+
+  if (type === "image") {
+    await sendAutoReplyWithImage(message, "", chosenImage);
+    return;
+  }
+
+  if (text) {
+    await message.reply({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -1310,6 +1440,10 @@ client.on(Events.MessageCreate, async (message) => {
   await handleCommands(message);
 
   if (!message.guild || message.author.bot) return;
+
+  await processAutoReplies(message).catch((err) => {
+    console.error("Auto-reply handler failed:", err?.message || err);
+  });
 
   await touchTicketActivity(message.guild.id, message.channel.id).catch(() => {});
 

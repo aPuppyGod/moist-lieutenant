@@ -382,37 +382,20 @@ async function cmdSetModRole(message, args) {
   }
 
   const role = await message.guild.roles.fetch(raw).catch(() => null);
-  if (customCmd) {
-    try {
-      const targetMember = getCustomCommandTarget(message);
-      let responses = JSON.parse(customCmd.responses || '[]');
-      let targetMode = customCmd.target_mode || 'none';
-      if (!Array.isArray(responses)) {
-        targetMode = responses.target_mode || targetMode;
-        responses = responses.responses || [];
-      }
-      if (responses.length > 0) {
-        if (targetMode === 'required' && !targetMember) {
-          await message.reply({ content: 'This command requires a target. Please mention someone to use it, like `!command @user`.', allowedMentions: { parse: [] } }).catch(() => {});
-          return true;
-        }
-        const selectedResponse = responses[Math.floor(Math.random() * responses.length)];
-        const responseText = replaceCustomCommandPlaceholders(selectedResponse.text, message, targetMode === 'none' ? null : targetMember);
-        const embed = new EmbedBuilder()
-          .setColor(0x7bc96f)
-          .setDescription(responseText)
-          .setTimestamp();
-        if (selectedResponse.gifs && selectedResponse.gifs.length > 0) {
-          const randomGif = selectedResponse.gifs[Math.floor(Math.random() * selectedResponse.gifs.length)];
-          embed.setImage(randomGif);
-        }
-        await message.reply({ embeds: [embed] }).catch(() => {});
-        return true;
-      }
-    } catch (e) {
-      console.error('Error parsing custom command responses:', e);
-    }
+  if (!role) {
+    await message.reply("I couldn't find that role. Double-check the role ID.").catch(() => {});
+    return;
   }
+
+  await run(
+    `INSERT INTO guild_settings (guild_id, mod_role_id)
+     VALUES (?, ?)
+     ON CONFLICT (guild_id)
+     DO UPDATE SET mod_role_id=excluded.mod_role_id`,
+    [message.guild.id, role.id]
+  );
+
+  await message.reply(`✅ Mod role set to <@&${role.id}>.`).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -4319,23 +4302,68 @@ async function executeCommand(message, cmd, args, prefix) {
   }
   
   if (customCmd) {
-    const embed = new EmbedBuilder()
-      .setColor(0x7bc96f)
-      .setDescription(customCmd.response_text)
-      .setTimestamp();
-    
     try {
-      const gifs = JSON.parse(customCmd.gifs || '[]');
-      if (gifs.length > 0) {
-        const randomGif = gifs[Math.floor(Math.random() * gifs.length)];
-        embed.setImage(randomGif);
+      const targetMember = getCustomCommandTarget(message);
+      let responses = JSON.parse(customCmd.responses || "[]");
+      let targetMode = customCmd.target_mode || "none";
+
+      if (!Array.isArray(responses)) {
+        targetMode = responses.target_mode || targetMode;
+        responses = responses.responses || [];
+      }
+
+      // Backward compatibility for old schema rows.
+      if (!responses.length && customCmd.response_text) {
+        let legacyGifs = [];
+        try {
+          legacyGifs = JSON.parse(customCmd.gifs || "[]");
+          if (!Array.isArray(legacyGifs)) legacyGifs = [];
+        } catch {
+          legacyGifs = [];
+        }
+        responses = [{ text: customCmd.response_text, gifs: legacyGifs }];
+      }
+
+      if (responses.length > 0) {
+        if (targetMode === "required" && !targetMember) {
+          await message.reply({ content: "This command requires a target. Mention someone, for example !hug @user.", allowedMentions: { parse: [] } }).catch(() => {});
+          return true;
+        }
+
+        const selectedResponse = responses[Math.floor(Math.random() * responses.length)] || {};
+        const responseText = replaceCustomCommandPlaceholders(selectedResponse.text || "", message, targetMode === "none" ? null : targetMember);
+
+        const embed = new EmbedBuilder()
+          .setColor(0x7bc96f)
+          .setDescription(responseText || " ")
+          .setTimestamp();
+
+        const replyPayload = { embeds: [embed] };
+        if (Array.isArray(selectedResponse.gifs) && selectedResponse.gifs.length > 0) {
+          const randomGif = selectedResponse.gifs[Math.floor(Math.random() * selectedResponse.gifs.length)];
+          const gifPathValue = String(randomGif || "").trim();
+          const isUploaded = gifPathValue.startsWith("/uploads/") || gifPathValue.startsWith("uploads/");
+
+          if (isUploaded) {
+            const relativePath = gifPathValue.replace(/^\/+/, "");
+            const absolutePath = path.join(process.cwd(), relativePath);
+            if (fs.existsSync(absolutePath)) {
+              const fileName = `${path.basename(absolutePath)}.gif`;
+              const attachment = new AttachmentBuilder(absolutePath, { name: fileName });
+              embed.setImage(`attachment://${fileName}`);
+              replyPayload.files = [attachment];
+            }
+          } else {
+            embed.setImage(gifPathValue);
+          }
+        }
+
+        await message.reply(replyPayload).catch(() => {});
+        return true;
       }
     } catch (e) {
-      // Ignore JSON parse errors
+      console.error("Error parsing custom command responses:", e);
     }
-    
-    await message.reply({ embeds: [embed] }).catch(() => {});
-    return true;
   }
 
   return false;

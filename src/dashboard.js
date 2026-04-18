@@ -4191,21 +4191,6 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         
         <div class="form-row">
           <label>
-                <label style="margin-top:8px;">
-                  <span>Upload GIF file(s)</span>
-                  <input type="file" name="gif_files_0" accept="image/gif" multiple />
-                  <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Upload GIFs locally instead of using external links.</small>
-                </label>
-              <label style="margin-top:8px;">
-                <span>Upload GIF file(s)</span>
-                <input type="file" name="gif_files_0" accept="image/gif" multiple />
-                <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Upload GIFs locally instead of using external links.</small>
-              </label>
-              <label style="margin-top:8px;">
-                <span>Upload GIF file(s)</span>
-                <input type="file" name="gif_files_${responseCount}" accept="image/gif" multiple />
-                <small style="display:block;margin-top:4px;color:rgba(0,0,0,0.6);">Upload GIFs locally instead of using external links.</small>
-              </label>
             <span>Starboard Channel</span>
             <select name="channel_id">
               <option value="">None</option>

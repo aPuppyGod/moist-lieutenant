@@ -834,10 +834,8 @@ async function initDb() {
       id BIGSERIAL PRIMARY KEY,
       guild_id TEXT NOT NULL,
       command_name TEXT NOT NULL,
-      responses TEXT NOT NULL, -- JSON array of {text: string, gifs: string[] or uploaded_gifs: string[]}
-      allow_target BOOLEAN DEFAULT false, -- Whether command can target users (!cmd @user)
-      usage_limit INTEGER DEFAULT NULL, -- Optional limit on command uses per user per day/week
-      uploaded_gifs TEXT, -- JSON array of base64 encoded GIFs or file paths
+      response_text TEXT NOT NULL,
+      gifs TEXT DEFAULT '[]',
       created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
       created_by TEXT NOT NULL,
       UNIQUE(guild_id, command_name)
@@ -845,32 +843,15 @@ async function initDb() {
   `);
 
   await run(`
-    CREATE TABLE IF NOT EXISTS auto_replies (
-      id BIGSERIAL PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS user_inventory (
       guild_id TEXT NOT NULL,
-      trigger_message TEXT NOT NULL,
-      response_type TEXT NOT NULL, -- 'reply' or 'react'
-      responses TEXT NOT NULL, -- JSON array for replies: [{text: string, gifs: string[], uploaded_gifs: string[]}], or emoji string for reacts
-      uploaded_gifs TEXT, -- JSON array of base64 encoded GIFs for replies
-      enabled BOOLEAN DEFAULT true,
-      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
-      created_by TEXT NOT NULL
+      user_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      quantity INTEGER DEFAULT 1,
+      acquired_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+      PRIMARY KEY (guild_id, user_id, item_id)
     )
   `);
-
-  await run(`
-    CREATE TABLE IF NOT EXISTS command_usage (
-      guild_id TEXT NOT NULL,
-      command_name TEXT NOT NULL,
-      usage_key TEXT NOT NULL, -- user_id_date format for daily limits
-      usage_count INTEGER DEFAULT 0,
-      last_used BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
-      PRIMARY KEY (guild_id, command_name, usage_key)
-    )
-  `);
-
-  // Migration: Add new columns to auto_replies if they don't exist
-  await run(`ALTER TABLE auto_replies ADD COLUMN IF NOT EXISTS uploaded_gifs TEXT`).catch(() => {});
 
   // Reminders
   await run(`
@@ -1096,21 +1077,6 @@ async function initDb() {
       completed_at BIGINT DEFAULT NULL,
       UNIQUE (guild_id, user_id, unban_at)
     )`);
-    
-    // Migrate custom_commands from old format to new format
-    try {
-      const oldCommands = await all(`SELECT id, guild_id, command_name, response_text, gifs, created_at, created_by FROM custom_commands WHERE responses IS NULL OR responses = '[]'`);
-      for (const cmd of oldCommands) {
-        if (cmd.response_text) {
-          const gifs = cmd.gifs ? JSON.parse(cmd.gifs) : [];
-          const responses = JSON.stringify([{ text: cmd.response_text, gifs }]);
-          await run(`UPDATE custom_commands SET responses=? WHERE id=?`, [responses, cmd.id]);
-        }
-      }
-    } catch (e) {
-      // Migration might fail if columns don't exist or data is already migrated
-      console.log("[db] Custom commands migration completed (or already done)");
-    }
   } catch (e) {
     // Columns might already exist, ignore error
   }

@@ -444,6 +444,26 @@ async function pollRssLike(link) {
   });
 }
 
+async function pollSocialLink(link) {
+  const platform = normalizePlatform(link.platform);
+  
+  try {
+    if (platform === "youtube") {
+      return await pollYoutube(link);
+    } else if (platform === "twitch") {
+      return await pollTwitch(link);
+    } else if (platform === "kick") {
+      return await pollKick(link);
+    } else {
+      // custom_rss, twitter, tiktok, instagram, facebook, and others
+      return await pollRssLike(link);
+    }
+  } catch (err) {
+    console.error(`[socials] pollSocialLink failed for link ${link.id} (${platform}):`, err.message);
+    return [];
+  }
+}
+
 function defaultTemplateForEvent(eventType) {
   if (eventType === "live") {
     return "{role} 🔴 {handle} is now live on {platform}!\n{title}\n{url}";

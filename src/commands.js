@@ -911,6 +911,53 @@ async function cmdCoinFlip(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
+async function resolvePetPetTargetUser(message, args) {
+  let targetUser = message.mentions?.users?.first?.() || null;
+
+  if (!targetUser && args.length > 0 && message.guild) {
+    const raw = String(args[0] || "").replace(/[<@!>]/g, "").trim();
+
+    if (/^\d{15,21}$/.test(raw)) {
+      const member = await message.guild.members.fetch(raw).catch(() => null);
+      if (member?.user) {
+        targetUser = member.user;
+      }
+    } else {
+      const picked = await pickUserSmart(message, String(args[0] || ""));
+      if (picked && !picked.ambiguous && picked.member?.user) {
+        targetUser = picked.member.user;
+      }
+    }
+  }
+
+  return targetUser || message.author;
+}
+
+async function cmdPetPet(message, args) {
+  try {
+    const targetUser = await resolvePetPetTargetUser(message, args);
+    const avatarUrl = targetUser.displayAvatarURL({ extension: "png", size: 256, forceStatic: true });
+    const endpoint = `https://api.popcat.xyz/pet?image=${encodeURIComponent(avatarUrl)}`;
+
+    const response = await fetch(endpoint);
+    if (!response.ok) {
+      throw new Error(`PetPet API returned HTTP ${response.status}`);
+    }
+
+    const petGif = Buffer.from(await response.arrayBuffer());
+    const attachment = new AttachmentBuilder(petGif, { name: "petpet.gif" });
+
+    await message.reply({
+      content: `<@${message.author.id}> pets <@${targetUser.id}>`,
+      files: [attachment],
+      allowedMentions: { users: [message.author.id, targetUser.id] }
+    }).catch(() => {});
+  } catch (err) {
+    console.error("petpet command failed:", err?.message || err);
+    await message.reply("I couldn't generate the petpet GIF right now. Try again in a moment.").catch(() => {});
+  }
+}
+
 async function cmdRoll(message, args) {
   let sides = 6;
   let count = 1;
@@ -3963,6 +4010,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "petpet") {
+    await cmdPetPet(message, args);
+    return true;
+  }
+
   if (cmd === "poll") {
     await cmdAdvancedPoll(message, args);
     return true;
@@ -4394,6 +4446,7 @@ function buildSlashCommands() {
     // Fun commands
     { name: "8ball", description: "Ask the magic 8-ball", options: [{ type: 3, name: "question", description: "Your question", required: true }] },
     { name: "flip", description: "Flip a coin" },
+    { name: "petpet", description: "Generate a petpet GIF from a user's avatar", options: [{ type: 6, name: "user", description: "User to pet", required: false }] },
     { name: "roll", description: "Roll dice", options: [{ type: 4, name: "sides", description: "Number of sides (default: 6)", required: false }, { type: 4, name: "count", description: "Number of dice (default: 1)", required: false }] },
     { name: "poll", description: "Create, end, list, or inspect polls", options: [{ type: 3, name: "action", description: "create, end, list, or status", required: true, choices: [{ name: "create", value: "create" }, { name: "end", value: "end" }, { name: "list", value: "list" }, { name: "status", value: "status" }] }, { type: 3, name: "question", description: "Poll question (for create)", required: false }, { type: 3, name: "options", description: "Options separated by | (for create)", required: false }, { type: 3, name: "message_id", description: "Poll message ID (for end/status)", required: false }] },
     { name: "choose", description: "Choose from options", options: [{ type: 3, name: "options", description: "Options separated by spaces", required: true }] },
@@ -4622,6 +4675,8 @@ async function handleSlashCommand(interaction) {
   } else if (name === "8ball") {
     const question = optionValue(interaction, "question");
     if (question) args.push(...String(question).split(/\s+/));
+  } else if (name === "petpet") {
+    if (userOption) args.push(userOption.id);
   } else if (name === "roll") {
     const sides = optionValue(interaction, "sides");
     const count = optionValue(interaction, "count");

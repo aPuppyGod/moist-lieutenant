@@ -4424,7 +4424,16 @@ async function executeCommand(message, cmd, args, prefix) {
 
         const replyPayload = { embeds: [embed] };
         if (Array.isArray(selectedResponse.gifs) && selectedResponse.gifs.length > 0) {
-          const gifPathValue = pickRandomUsableImage(selectedResponse.gifs);
+          const disabledGifSet = new Set(
+            (Array.isArray(selectedResponse.disabled_gifs) ? selectedResponse.disabled_gifs : [])
+              .map((item) => String(item || "").trim())
+              .filter(Boolean)
+          );
+          const selectableGifs = selectedResponse.gifs
+            .map((item) => String(item || "").trim())
+            .filter((item) => item && !disabledGifSet.has(item));
+
+          const gifPathValue = pickRandomUsableImage(selectableGifs);
           const isDbMedia = gifPathValue.startsWith("dbmedia:");
           const isUploaded = gifPathValue.startsWith("/uploads/") || gifPathValue.startsWith("uploads/");
 

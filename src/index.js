@@ -237,27 +237,37 @@ async function processAutoReplies(message) {
     return;
   }
 
-  let payload = { text: "", gifs: [] };
+  let payload = { text: "", gifs: [], disabled_gifs: [] };
   try {
     const parsed = JSON.parse(selected.responses || "{}");
     if (Array.isArray(parsed)) {
       const first = parsed[0] || {};
       payload = {
         text: String(first.text || ""),
-        gifs: Array.isArray(first.gifs) ? first.gifs : []
+        gifs: Array.isArray(first.gifs) ? first.gifs : [],
+        disabled_gifs: Array.isArray(first.disabled_gifs) ? first.disabled_gifs : []
       };
     } else {
       payload = {
         text: String(parsed.text || ""),
-        gifs: Array.isArray(parsed.gifs) ? parsed.gifs : []
+        gifs: Array.isArray(parsed.gifs) ? parsed.gifs : [],
+        disabled_gifs: Array.isArray(parsed.disabled_gifs) ? parsed.disabled_gifs : []
       };
     }
   } catch {
-    payload = { text: String(selected.responses || ""), gifs: [] };
+    payload = { text: String(selected.responses || ""), gifs: [], disabled_gifs: [] };
   }
 
   const text = replaceAutoReplyPlaceholders(payload.text, message).trim();
-  const chosenImage = pickRandomUsableImage(payload.gifs);
+  const disabledGifSet = new Set(
+    (Array.isArray(payload.disabled_gifs) ? payload.disabled_gifs : [])
+      .map((item) => String(item || "").trim())
+      .filter(Boolean)
+  );
+  const selectableGifs = (Array.isArray(payload.gifs) ? payload.gifs : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => item && !disabledGifSet.has(item));
+  const chosenImage = pickRandomUsableImage(selectableGifs);
 
   if (type === "text") {
     if (text) {

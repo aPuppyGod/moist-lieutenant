@@ -1509,6 +1509,17 @@ function asArrayValue(value) {
   return [value];
 }
 
+function mediaPreviewUrl(guildId, value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("dbmedia:")) {
+    const storageKey = raw.slice("dbmedia:".length).trim();
+    if (!storageKey) return "";
+    return `/guild/${encodeURIComponent(guildId)}/media/${encodeURIComponent(storageKey)}`;
+  }
+  return raw;
+}
+
 async function buildGuildConfigBackup(guildId) {
   const singleRowTables = [
     "guild_settings",
@@ -5806,6 +5817,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             let previewText = String(cmd.response_text || "");
             let gifCount = 0;
             let editableGifs = [];
+            let editableDisabledGifs = [];
             try {
               const payload = JSON.parse(cmd.responses || "[]");
               let responses = payload;
@@ -5817,6 +5829,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                 previewText = String(responses[0].text || previewText);
                 gifCount = Array.isArray(responses[0].gifs) ? responses[0].gifs.length : gifCount;
                 editableGifs = Array.isArray(responses[0].gifs) ? responses[0].gifs : [];
+                editableDisabledGifs = Array.isArray(responses[0].disabled_gifs) ? responses[0].disabled_gifs : [];
               }
             } catch {
               try {
@@ -5827,6 +5840,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                 gifCount = 0;
                 editableGifs = [];
               }
+              editableDisabledGifs = [];
             }
             return `
             <tr>
@@ -5851,14 +5865,34 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                     </label>
                     <div>
                       <strong>Current GIFs (${editableGifs.length})</strong>
-                      <div style="display:grid;gap:6px;margin-top:6px;">
+                      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:8px;">
                         ${editableGifs.length > 0
-                          ? editableGifs.map((gif) => `
-                              <label style="display:flex;align-items:center;gap:8px;">
-                                <input type="checkbox" name="remove_gifs" value="${escapeHtml(gif)}" />
-                                <span style="font-family:monospace;font-size:0.9em;word-break:break-all;">${escapeHtml(gif)}</span>
-                              </label>
-                            `).join("")
+                          ? editableGifs.map((gif) => {
+                              const gifValue = String(gif || "").trim();
+                              const previewUrl = mediaPreviewUrl(guildId, gifValue);
+                              const isDisabled = editableDisabledGifs.includes(gifValue);
+                              return `
+                              <div style="border:1px solid rgba(123,201,111,0.35);border-radius:8px;padding:6px;background:${isDisabled ? "rgba(139,115,85,0.12)" : "rgba(123,201,111,0.08)"};">
+                                <div style="aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px;background:rgba(0,0,0,0.15);">
+                                  ${previewUrl
+                                    ? `<img src="${escapeHtml(previewUrl)}" alt="gif" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />`
+                                    : `<span style="font-size:0.8em;opacity:0.7;">No preview</span>`}
+                                </div>
+                                <div style="margin-top:6px;font-size:0.75em;word-break:break-all;opacity:0.8;max-height:34px;overflow:hidden;">${escapeHtml(gifValue)}</div>
+                                <div style="display:flex;gap:6px;margin-top:6px;">
+                                  <form method="post" action="/guild/${guildId}/custom-commands/update/${cmd.id}" style="margin:0;flex:1;">
+                                    <input type="hidden" name="gif_action" value="toggle_disable" />
+                                    <input type="hidden" name="gif_value" value="${escapeHtml(gifValue)}" />
+                                    <button type="submit" style="width:100%;padding:4px 6px;font-size:0.75em;">${isDisabled ? "Enable" : "Disable"}</button>
+                                  </form>
+                                  <form method="post" action="/guild/${guildId}/custom-commands/update/${cmd.id}" style="margin:0;flex:1;">
+                                    <input type="hidden" name="gif_action" value="remove" />
+                                    <input type="hidden" name="gif_value" value="${escapeHtml(gifValue)}" />
+                                    <button type="submit" style="width:100%;padding:4px 6px;font-size:0.75em;color:#8b2f2f;">Remove</button>
+                                  </form>
+                                </div>
+                              </div>
+                            `}).join("")
                           : `<span style="opacity:0.7;">No GIFs currently attached.</span>`}
                       </div>
                     </div>
@@ -5941,6 +5975,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           ${autoReplies.map((item) => {
             let replyText = "";
             let replyGifs = [];
+            let replyDisabledGifs = [];
             let replyEmoji = "";
             const replyType = String(item.response_type || "text").toLowerCase();
 
@@ -5953,13 +5988,16 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                   const first = parsed[0] || {};
                   replyText = String(first.text || "");
                   replyGifs = Array.isArray(first.gifs) ? first.gifs : [];
+                  replyDisabledGifs = Array.isArray(first.disabled_gifs) ? first.disabled_gifs : [];
                 } else {
                   replyText = String(parsed.text || "");
                   replyGifs = Array.isArray(parsed.gifs) ? parsed.gifs : [];
+                  replyDisabledGifs = Array.isArray(parsed.disabled_gifs) ? parsed.disabled_gifs : [];
                 }
               } catch {
                 replyText = String(item.responses || "");
                 replyGifs = [];
+                replyDisabledGifs = [];
               }
             }
 
@@ -6005,14 +6043,34 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                     </label>
                     <div>
                       <strong>Current GIFs (${replyGifs.length})</strong>
-                      <div style="display:grid;gap:6px;margin-top:6px;">
+                      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:8px;">
                         ${replyGifs.length > 0
-                          ? replyGifs.map((gif) => `
-                              <label style="display:flex;align-items:center;gap:8px;">
-                                <input type="checkbox" name="remove_gifs" value="${escapeHtml(gif)}" />
-                                <span style="font-family:monospace;font-size:0.9em;word-break:break-all;">${escapeHtml(gif)}</span>
-                              </label>
-                            `).join("")
+                          ? replyGifs.map((gif) => {
+                              const gifValue = String(gif || "").trim();
+                              const previewUrl = mediaPreviewUrl(guildId, gifValue);
+                              const isDisabled = replyDisabledGifs.includes(gifValue);
+                              return `
+                              <div style="border:1px solid rgba(123,201,111,0.35);border-radius:8px;padding:6px;background:${isDisabled ? "rgba(139,115,85,0.12)" : "rgba(123,201,111,0.08)"};">
+                                <div style="aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:6px;background:rgba(0,0,0,0.15);">
+                                  ${previewUrl
+                                    ? `<img src="${escapeHtml(previewUrl)}" alt="gif" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />`
+                                    : `<span style="font-size:0.8em;opacity:0.7;">No preview</span>`}
+                                </div>
+                                <div style="margin-top:6px;font-size:0.75em;word-break:break-all;opacity:0.8;max-height:34px;overflow:hidden;">${escapeHtml(gifValue)}</div>
+                                <div style="display:flex;gap:6px;margin-top:6px;">
+                                  <form method="post" action="/guild/${guildId}/auto-replies/update/${item.id}" style="margin:0;flex:1;">
+                                    <input type="hidden" name="gif_action" value="toggle_disable" />
+                                    <input type="hidden" name="gif_value" value="${escapeHtml(gifValue)}" />
+                                    <button type="submit" style="width:100%;padding:4px 6px;font-size:0.75em;">${isDisabled ? "Enable" : "Disable"}</button>
+                                  </form>
+                                  <form method="post" action="/guild/${guildId}/auto-replies/update/${item.id}" style="margin:0;flex:1;">
+                                    <input type="hidden" name="gif_action" value="remove" />
+                                    <input type="hidden" name="gif_value" value="${escapeHtml(gifValue)}" />
+                                    <button type="submit" style="width:100%;padding:4px 6px;font-size:0.75em;color:#8b2f2f;">Remove</button>
+                                  </form>
+                                </div>
+                              </div>
+                            `}).join("")
                           : `<span style="opacity:0.7;">No GIFs currently attached.</span>`}
                       </div>
                     </div>
@@ -7337,6 +7395,31 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
   // ─────────────────────────────────────────────
   // Custom Commands
   // ─────────────────────────────────────────────
+  app.get("/guild/:guildId/media/:storageKey", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const storageKey = String(req.params.storageKey || "").trim();
+      if (!storageKey) {
+        return res.status(400).send("Missing media key.");
+      }
+
+      const media = await get(
+        `SELECT mime_type, data_base64 FROM uploaded_media WHERE guild_id=? AND storage_key=?`,
+        [guildId, storageKey]
+      );
+      if (!media?.data_base64) {
+        return res.status(404).send("Media not found.");
+      }
+
+      res.setHeader("Content-Type", String(media.mime_type || "application/octet-stream"));
+      res.setHeader("Cache-Control", "private, max-age=300");
+      return res.send(Buffer.from(String(media.data_base64), "base64"));
+    } catch (e) {
+      console.error("media fetch error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
   app.post("/guild/:guildId/custom-commands/create", upload.any(), requireGuildAdmin, async (req, res) => {
     try {
       const guildId = req.params.guildId;
@@ -7390,7 +7473,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
         responses.push({
           text: responseText,
-          gifs: gifs
+          gifs: gifs,
+          disabled_gifs: []
         });
       }
 
@@ -7473,10 +7557,31 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         responses = [{ text: String(row.response_text || ""), gifs: legacyGifs }];
       }
 
-      const first = responses[0] || { text: "", gifs: [] };
+      const first = responses[0] || { text: "", gifs: [], disabled_gifs: [] };
+      const gifAction = String(req.body.gif_action || "").trim().toLowerCase();
+      const gifValue = String(req.body.gif_value || "").trim();
       const removeSet = new Set(asArrayValue(req.body.remove_gifs).map((v) => String(v || "").trim()).filter(Boolean));
       let nextGifs = Array.isArray(first.gifs) ? first.gifs.map((v) => String(v || "").trim()).filter(Boolean) : [];
+      let disabledGifs = Array.isArray(first.disabled_gifs)
+        ? first.disabled_gifs.map((v) => String(v || "").trim()).filter(Boolean)
+        : [];
+
+      if (gifValue) {
+        if (gifAction === "remove") {
+          removeSet.add(gifValue);
+        } else if (gifAction === "toggle_disable") {
+          const disabledSet = new Set(disabledGifs);
+          if (disabledSet.has(gifValue)) {
+            disabledSet.delete(gifValue);
+          } else {
+            disabledSet.add(gifValue);
+          }
+          disabledGifs = [...disabledSet];
+        }
+      }
+
       nextGifs = nextGifs.filter((gif) => !removeSet.has(gif));
+      disabledGifs = disabledGifs.filter((gif) => !removeSet.has(gif));
 
       const addGifsRaw = String(req.body.add_gifs || "").trim();
       if (addGifsRaw) {
@@ -7493,10 +7598,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       }
 
       const nextText = String(req.body.response_text ?? first.text ?? "").trim();
+      nextGifs = [...new Set(nextGifs)];
+      disabledGifs = [...new Set(disabledGifs)].filter((gif) => nextGifs.includes(gif));
       responses[0] = {
         ...first,
         text: nextText,
-        gifs: [...new Set(nextGifs)]
+        gifs: nextGifs,
+        disabled_gifs: disabledGifs
       };
 
       const payload = {
@@ -7562,7 +7670,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         if (gifs.length === 0) {
           return res.status(400).send("Picture is required for picture-only mode.");
         }
-        storedValue = JSON.stringify({ text: "", gifs });
+        storedValue = JSON.stringify({ text: "", gifs, disabled_gifs: [] });
       } else if (responseType === "text_image") {
         if (!responseText) {
           return res.status(400).send("Message text is required for message + picture mode.");
@@ -7570,12 +7678,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         if (gifs.length === 0) {
           return res.status(400).send("Picture is required for message + picture mode.");
         }
-        storedValue = JSON.stringify({ text: responseText, gifs });
+        storedValue = JSON.stringify({ text: responseText, gifs, disabled_gifs: [] });
       } else {
         if (!responseText) {
           return res.status(400).send("Message text is required for message-only mode.");
         }
-        storedValue = JSON.stringify({ text: responseText, gifs: [] });
+        storedValue = JSON.stringify({ text: responseText, gifs: [], disabled_gifs: [] });
       }
 
       await run(`
@@ -7607,6 +7715,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
 
       let currentText = "";
       let currentGifs = [];
+      let currentDisabledGifs = [];
       let currentEmoji = "";
       if (String(row.response_type || "").toLowerCase() === "emoji") {
         currentEmoji = String(row.responses || "").trim();
@@ -7617,18 +7726,42 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             const first = parsed[0] || {};
             currentText = String(first.text || "");
             currentGifs = Array.isArray(first.gifs) ? first.gifs : [];
+            currentDisabledGifs = Array.isArray(first.disabled_gifs) ? first.disabled_gifs : [];
           } else {
             currentText = String(parsed.text || "");
             currentGifs = Array.isArray(parsed.gifs) ? parsed.gifs : [];
+            currentDisabledGifs = Array.isArray(parsed.disabled_gifs) ? parsed.disabled_gifs : [];
           }
         } catch {
           currentText = String(row.responses || "");
           currentGifs = [];
+          currentDisabledGifs = [];
         }
       }
 
+      const gifAction = String(req.body.gif_action || "").trim().toLowerCase();
+      const gifValue = String(req.body.gif_value || "").trim();
       const removeSet = new Set(asArrayValue(req.body.remove_gifs).map((v) => String(v || "").trim()).filter(Boolean));
       let nextGifs = currentGifs.map((v) => String(v || "").trim()).filter(Boolean).filter((gif) => !removeSet.has(gif));
+      let nextDisabledGifs = currentDisabledGifs
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+        .filter((gif) => !removeSet.has(gif));
+
+      if (gifValue) {
+        if (gifAction === "remove") {
+          nextGifs = nextGifs.filter((gif) => gif !== gifValue);
+          nextDisabledGifs = nextDisabledGifs.filter((gif) => gif !== gifValue);
+        } else if (gifAction === "toggle_disable") {
+          const disabledSet = new Set(nextDisabledGifs);
+          if (disabledSet.has(gifValue)) {
+            disabledSet.delete(gifValue);
+          } else if (nextGifs.includes(gifValue)) {
+            disabledSet.add(gifValue);
+          }
+          nextDisabledGifs = [...disabledSet];
+        }
+      }
 
       const addGifsRaw = String(req.body.add_gifs || "").trim();
       if (addGifsRaw) {
@@ -7644,6 +7777,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         }
       }
       nextGifs = [...new Set(nextGifs)];
+      nextDisabledGifs = [...new Set(nextDisabledGifs)].filter((gif) => nextGifs.includes(gif));
 
       let storedValue = "";
       if (responseType === "emoji") {
@@ -7656,7 +7790,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         if (nextGifs.length === 0) {
           return res.status(400).send("Picture is required for picture-only mode.");
         }
-        storedValue = JSON.stringify({ text: "", gifs: nextGifs });
+        storedValue = JSON.stringify({ text: "", gifs: nextGifs, disabled_gifs: nextDisabledGifs });
       } else if (responseType === "text_image") {
         const text = String(req.body.response_text || currentText || "").trim();
         if (!text) {
@@ -7665,13 +7799,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         if (nextGifs.length === 0) {
           return res.status(400).send("Picture is required for message + picture mode.");
         }
-        storedValue = JSON.stringify({ text, gifs: nextGifs });
+        storedValue = JSON.stringify({ text, gifs: nextGifs, disabled_gifs: nextDisabledGifs });
       } else {
         const text = String(req.body.response_text || currentText || "").trim();
         if (!text) {
           return res.status(400).send("Message text is required for message-only mode.");
         }
-        storedValue = JSON.stringify({ text, gifs: [] });
+        storedValue = JSON.stringify({ text, gifs: [], disabled_gifs: [] });
       }
 
       await run(

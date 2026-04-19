@@ -1627,6 +1627,31 @@ async function importGuildConfigBackup(guildId, payload) {
 function startDashboard(client) {
     const app = express();
     app.locals.client = client;
+    const ADMINISTRATOR_PERMISSION = 0x8n;
+
+    function hasAdministratorPermission(rawPermissions) {
+      try {
+        const perm = BigInt(rawPermissions || 0);
+        return (perm & ADMINISTRATOR_PERMISSION) === ADMINISTRATOR_PERMISSION;
+      } catch {
+        return false;
+      }
+    }
+
+    function isAdminViaOAuthGuilds(user, discordClient) {
+      if (!user || !Array.isArray(user.guilds) || !discordClient) return false;
+      const botGuildIds = new Set(discordClient.guilds.cache.map((g) => g.id));
+      for (const guild of user.guilds) {
+        const guildId = String(guild?.id || "");
+        if (!guildId || !botGuildIds.has(guildId)) continue;
+        const perms = guild.permissions_new || guild.permissions;
+        if (hasAdministratorPermission(perms)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
     // Helper: get user and admin info for templates
     function getTemplateOpts(req) {
       const user = req.user || null;
@@ -1644,6 +1669,13 @@ function startDashboard(client) {
     function isAdminOrManagerDiscord(user, client) {
       if (!user || !user.id) return false;
       if (process.env.BOT_MANAGER_ID && user.id === process.env.BOT_MANAGER_ID) return true;
+
+      // First pass: use OAuth guild permissions for immediate detection after login.
+      if (isAdminViaOAuthGuilds(user, client)) {
+        return true;
+      }
+
+      // Fallback: check cached/fetched guild member permissions.
       for (const guild of client.guilds.cache.values()) {
         const member = guild.members.cache.get(user.id);
         if (member && member.permissions.has("Administrator")) {
@@ -2608,6 +2640,9 @@ function startDashboard(client) {
   // Public home page (optional: show info or redirect to /lop)
   app.get("/", (req, res) => {
     const opts = getTemplateOpts(req);
+    if (opts.user && opts.isAdmin) {
+      return res.redirect("/dashboard");
+    }
     res.send(htmlTemplate(`
       <h2>🐸 Welcome to Moist Lieutenant!</h2>
       <p>Track your XP, level up, and customize your rank card. Compete on the leaderboard and unlock new features as you level up!</p>

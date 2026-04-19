@@ -494,7 +494,6 @@ async function pollRssLike(link) {
 
   // Network or fetch-level failures (no HTTP status) are non-fatal for polling.
   if (lastError && !lastError.status && /fetch failed|network|econn|etimedout/i.test(String(lastError.message || ""))) {
-    console.warn(`[socials] RSS fetch failed for link ${link.id} (${platform}): ${lastError.message}`);
     return [];
   }
 

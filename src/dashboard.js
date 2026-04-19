@@ -1003,7 +1003,8 @@ function htmlTemplate(content, opts = {}) {
       padding: 0 20px;
     }
     .collapsible-section.expanded .collapsible-content {
-      max-height: 5000px;
+      max-height: none;
+      overflow: visible;
       padding: 20px;
     }
     
@@ -1170,6 +1171,27 @@ function htmlTemplate(content, opts = {}) {
       
       // Load saved collapsed states from localStorage
       const savedStates = JSON.parse(localStorage.getItem('collapsedSections') || '{}');
+
+      function expandContent(content) {
+        if (!content) return;
+        content.style.maxHeight = content.scrollHeight + 'px';
+        window.setTimeout(() => {
+          const section = content.closest('.collapsible-section');
+          if (section && section.classList.contains('expanded')) {
+            content.style.maxHeight = 'none';
+          }
+        }, 420);
+      }
+
+      function collapseContent(content) {
+        if (!content) return;
+        if (content.style.maxHeight === 'none') {
+          content.style.maxHeight = content.scrollHeight + 'px';
+          // Force reflow so transition to 0 runs when collapsing from 'none'.
+          void content.offsetHeight;
+        }
+        content.style.maxHeight = '0';
+      }
       
       sections.forEach((section, index) => {
         const sectionId = section.dataset.sectionId || 'section-' + index;
@@ -1180,7 +1202,7 @@ function htmlTemplate(content, opts = {}) {
         if (isExpanded) {
           section.classList.add('expanded');
           const content = section.querySelector('.collapsible-content');
-          if (content) content.style.maxHeight = content.scrollHeight + 'px';
+          expandContent(content);
         }
         
         const header = section.querySelector('.collapsible-header');
@@ -1192,12 +1214,12 @@ function htmlTemplate(content, opts = {}) {
             if (isCurrentlyExpanded) {
               // Collapse
               section.classList.remove('expanded');
-              content.style.maxHeight = '0';
+              collapseContent(content);
               savedStates[sectionId] = false;
             } else {
               // Expand
               section.classList.add('expanded');
-              content.style.maxHeight = content.scrollHeight + 'px';
+              expandContent(content);
               savedStates[sectionId] = true;
             }
             
@@ -1287,7 +1309,14 @@ function htmlTemplate(content, opts = {}) {
       sections.forEach(section => {
         section.classList.add('expanded');
         const content = section.querySelector('.collapsible-content');
-        if (content) content.style.maxHeight = content.scrollHeight + 'px';
+        if (content) {
+          content.style.maxHeight = content.scrollHeight + 'px';
+          window.setTimeout(() => {
+            if (section.classList.contains('expanded')) {
+              content.style.maxHeight = 'none';
+            }
+          }, 420);
+        }
         const sectionId = section.dataset.sectionId;
         if (sectionId) savedStates[sectionId] = true;
       });
@@ -1300,7 +1329,13 @@ function htmlTemplate(content, opts = {}) {
       sections.forEach(section => {
         section.classList.remove('expanded');
         const content = section.querySelector('.collapsible-content');
-        if (content) content.style.maxHeight = '0';
+        if (content) {
+          if (content.style.maxHeight === 'none') {
+            content.style.maxHeight = content.scrollHeight + 'px';
+            void content.offsetHeight;
+          }
+          content.style.maxHeight = '0';
+        }
         const sectionId = section.dataset.sectionId;
         if (sectionId) savedStates[sectionId] = false;
       });

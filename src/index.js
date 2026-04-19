@@ -115,6 +115,26 @@ function pickRandomItem(items) {
   return items[Math.floor(Math.random() * items.length)] || null;
 }
 
+function isUsableImageValue(value) {
+  const image = String(value || "").trim();
+  if (!image) return false;
+
+  const isUploaded = image.startsWith("/uploads/") || image.startsWith("uploads/");
+  if (!isUploaded) return true;
+
+  const relativePath = image.replace(/^\/+/, "");
+  const absolutePath = path.join(process.cwd(), relativePath);
+  return fs.existsSync(absolutePath);
+}
+
+function pickRandomUsableImage(items) {
+  const usable = (Array.isArray(items) ? items : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => isUsableImageValue(item));
+
+  return pickRandomItem(usable) || "";
+}
+
 async function sendAutoReplyWithImage(message, textValue, imageValue) {
   const text = String(textValue || "").trim();
   const image = String(imageValue || "").trim();
@@ -202,7 +222,7 @@ async function processAutoReplies(message) {
   }
 
   const text = replaceAutoReplyPlaceholders(payload.text, message).trim();
-  const chosenImage = pickRandomItem(payload.gifs) || "";
+  const chosenImage = pickRandomUsableImage(payload.gifs);
 
   if (type === "text") {
     if (text) {

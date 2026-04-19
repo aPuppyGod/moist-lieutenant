@@ -206,6 +206,27 @@ function normalizeName(s) {
   return String(s || "").trim().toLowerCase();
 }
 
+function isUsableImageValue(value) {
+  const image = String(value || "").trim();
+  if (!image) return false;
+
+  const isUploaded = image.startsWith("/uploads/") || image.startsWith("uploads/");
+  if (!isUploaded) return true;
+
+  const relativePath = image.replace(/^\/+/, "");
+  const absolutePath = path.join(process.cwd(), relativePath);
+  return fs.existsSync(absolutePath);
+}
+
+function pickRandomUsableImage(items) {
+  const usable = (Array.isArray(items) ? items : [])
+    .map((item) => String(item || "").trim())
+    .filter((item) => isUsableImageValue(item));
+
+  if (!usable.length) return "";
+  return usable[Math.floor(Math.random() * usable.length)] || "";
+}
+
 async function setUserXp(guildId, userId, xp) {
   await run(
     `INSERT OR IGNORE INTO user_xp 
@@ -4392,11 +4413,10 @@ async function executeCommand(message, cmd, args, prefix) {
 
         const replyPayload = { embeds: [embed] };
         if (Array.isArray(selectedResponse.gifs) && selectedResponse.gifs.length > 0) {
-          const randomGif = selectedResponse.gifs[Math.floor(Math.random() * selectedResponse.gifs.length)];
-          const gifPathValue = String(randomGif || "").trim();
+          const gifPathValue = pickRandomUsableImage(selectedResponse.gifs);
           const isUploaded = gifPathValue.startsWith("/uploads/") || gifPathValue.startsWith("uploads/");
 
-          if (isUploaded) {
+          if (gifPathValue && isUploaded) {
             const relativePath = gifPathValue.replace(/^\/+/, "");
             const absolutePath = path.join(process.cwd(), relativePath);
             if (fs.existsSync(absolutePath)) {
@@ -4405,7 +4425,7 @@ async function executeCommand(message, cmd, args, prefix) {
               embed.setImage(`attachment://${fileName}`);
               replyPayload.files = [attachment];
             }
-          } else {
+          } else if (gifPathValue) {
             embed.setImage(gifPathValue);
           }
         }

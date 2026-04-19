@@ -2,6 +2,8 @@ const express = require("express");
 const session = require("express-session");
 const passport = require("passport");
 const multer = require("multer");
+const fs = require("fs");
+const crypto = require("crypto");
 const upload = multer({ dest: "uploads/" });
 
 const { get, run, all } = require("./db");
@@ -1443,6 +1445,28 @@ const {
   inferSourceUrl,
   inferDefaultLabel
 } = require("./socials");
+
+async function persistUploadedMedia(file, guildId) {
+  if (!file?.path || !guildId) return null;
+  if (!String(file.mimetype || "").startsWith("image/")) return null;
+
+  try {
+    const binary = fs.readFileSync(file.path);
+    const storageKey = crypto.randomUUID();
+    const dataBase64 = binary.toString("base64");
+    await run(
+      `INSERT INTO uploaded_media (guild_id, storage_key, mime_type, data_base64)
+       VALUES (?, ?, ?, ?)`,
+      [guildId, storageKey, String(file.mimetype || "application/octet-stream"), dataBase64]
+    );
+    return `dbmedia:${storageKey}`;
+  } catch (err) {
+    console.error("Failed to persist uploaded media:", err);
+    return null;
+  } finally {
+    fs.unlink(file.path, () => {});
+  }
+}
 
 async function buildGuildConfigBackup(guildId) {
   const singleRowTables = [
@@ -7196,8 +7220,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         if (req.files) {
           for (const file of req.files) {
             if ((file.fieldname === `gif_files_${idx}` || file.fieldname === "gif_files") && String(file.mimetype || "").startsWith("image/")) {
-              const gifUrl = `/uploads/${file.filename}`;
-              gifs.push(gifUrl);
+              const persistedRef = await persistUploadedMedia(file, guildId);
+              if (persistedRef) gifs.push(persistedRef);
             }
           }
         }
@@ -7273,7 +7297,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       if (req.files) {
         for (const file of req.files) {
           if ((file.fieldname === "gif_files_0" || file.fieldname === "gif_files") && String(file.mimetype || "").startsWith("image/")) {
-            gifs.push(`/uploads/${file.filename}`);
+            const persistedRef = await persistUploadedMedia(file, guildId);
+            if (persistedRef) gifs.push(persistedRef);
           }
         }
       }

@@ -858,6 +858,17 @@ async function initDb() {
   `);
 
   await run(`
+    CREATE TABLE IF NOT EXISTS uploaded_media (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      storage_key TEXT NOT NULL UNIQUE,
+      mime_type TEXT NOT NULL,
+      data_base64 TEXT NOT NULL,
+      created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+    )
+  `);
+
+  await run(`
     CREATE TABLE IF NOT EXISTS user_inventory (
       guild_id TEXT NOT NULL,
       user_id TEXT NOT NULL,

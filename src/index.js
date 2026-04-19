@@ -119,6 +119,8 @@ function isUsableImageValue(value) {
   const image = String(value || "").trim();
   if (!image) return false;
 
+  if (image.startsWith("dbmedia:")) return true;
+
   const isUploaded = image.startsWith("/uploads/") || image.startsWith("uploads/");
   if (!isUploaded) return true;
 
@@ -135,6 +137,15 @@ function pickRandomUsableImage(items) {
   return pickRandomItem(usable) || "";
 }
 
+function extensionFromMime(mimeType) {
+  const mime = String(mimeType || "").toLowerCase();
+  if (mime.includes("gif")) return "gif";
+  if (mime.includes("png")) return "png";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+  if (mime.includes("webp")) return "webp";
+  return "bin";
+}
+
 async function sendAutoReplyWithImage(message, textValue, imageValue) {
   const text = String(textValue || "").trim();
   const image = String(imageValue || "").trim();
@@ -142,6 +153,30 @@ async function sendAutoReplyWithImage(message, textValue, imageValue) {
   if (!image) {
     if (text) {
       await message.reply({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+    }
+    return;
+  }
+
+  if (image.startsWith("dbmedia:")) {
+    const storageKey = image.slice("dbmedia:".length).trim();
+    const media = storageKey
+      ? await get(`SELECT mime_type, data_base64 FROM uploaded_media WHERE storage_key=?`, [storageKey])
+      : null;
+
+    if (!media?.data_base64) {
+      if (text) {
+        await message.reply({ content: text, allowedMentions: { parse: [] } }).catch(() => {});
+      }
+      return;
+    }
+
+    const ext = extensionFromMime(media.mime_type);
+    const fileName = `${storageKey}.${ext}`;
+    const attachment = new AttachmentBuilder(Buffer.from(String(media.data_base64), "base64"), { name: fileName });
+    if (text) {
+      await message.reply({ content: text, files: [attachment], allowedMentions: { parse: [] } }).catch(() => {});
+    } else {
+      await message.reply({ files: [attachment], allowedMentions: { parse: [] } }).catch(() => {});
     }
     return;
   }

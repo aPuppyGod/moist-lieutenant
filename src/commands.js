@@ -210,6 +210,8 @@ function isUsableImageValue(value) {
   const image = String(value || "").trim();
   if (!image) return false;
 
+  if (image.startsWith("dbmedia:")) return true;
+
   const isUploaded = image.startsWith("/uploads/") || image.startsWith("uploads/");
   if (!isUploaded) return true;
 
@@ -225,6 +227,15 @@ function pickRandomUsableImage(items) {
 
   if (!usable.length) return "";
   return usable[Math.floor(Math.random() * usable.length)] || "";
+}
+
+function extensionFromMime(mimeType) {
+  const mime = String(mimeType || "").toLowerCase();
+  if (mime.includes("gif")) return "gif";
+  if (mime.includes("png")) return "png";
+  if (mime.includes("jpeg") || mime.includes("jpg")) return "jpg";
+  if (mime.includes("webp")) return "webp";
+  return "bin";
 }
 
 async function setUserXp(guildId, userId, xp) {
@@ -4414,9 +4425,22 @@ async function executeCommand(message, cmd, args, prefix) {
         const replyPayload = { embeds: [embed] };
         if (Array.isArray(selectedResponse.gifs) && selectedResponse.gifs.length > 0) {
           const gifPathValue = pickRandomUsableImage(selectedResponse.gifs);
+          const isDbMedia = gifPathValue.startsWith("dbmedia:");
           const isUploaded = gifPathValue.startsWith("/uploads/") || gifPathValue.startsWith("uploads/");
 
-          if (gifPathValue && isUploaded) {
+          if (gifPathValue && isDbMedia) {
+            const storageKey = gifPathValue.slice("dbmedia:".length).trim();
+            const media = storageKey
+              ? await get(`SELECT mime_type, data_base64 FROM uploaded_media WHERE storage_key=?`, [storageKey])
+              : null;
+            if (media?.data_base64) {
+              const ext = extensionFromMime(media.mime_type);
+              const fileName = `${storageKey}.${ext}`;
+              const attachment = new AttachmentBuilder(Buffer.from(String(media.data_base64), "base64"), { name: fileName });
+              embed.setImage(`attachment://${fileName}`);
+              replyPayload.files = [attachment];
+            }
+          } else if (gifPathValue && isUploaded) {
             const relativePath = gifPathValue.replace(/^\/+/, "");
             const absolutePath = path.join(process.cwd(), relativePath);
             if (fs.existsSync(absolutePath)) {

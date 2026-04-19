@@ -7217,13 +7217,19 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         responses: responses
       };
 
+      // Keep legacy columns populated for older schemas where response_text is NOT NULL.
+      const primaryResponseText = String(responses[0]?.text || "").trim();
+      const primaryGifs = Array.isArray(responses[0]?.gifs) ? responses[0].gifs : [];
+
       await run(`
-        INSERT INTO custom_commands (guild_id, command_name, responses, target_mode, created_by)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO custom_commands (guild_id, command_name, response_text, gifs, responses, target_mode, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(guild_id, command_name) DO UPDATE SET
+          response_text=excluded.response_text,
+          gifs=excluded.gifs,
           responses=excluded.responses,
           target_mode=excluded.target_mode
-      `, [guildId, commandName, JSON.stringify(commandPayload), targetMode, req.user?.id || "unknown"]);
+      `, [guildId, commandName, primaryResponseText, JSON.stringify(primaryGifs), JSON.stringify(commandPayload), targetMode, req.user?.id || "unknown"]);
 
       return res.redirect(getModuleRedirect(guildId, 'customcommands'));
     } catch (e) {

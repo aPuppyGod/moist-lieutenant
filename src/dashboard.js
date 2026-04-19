@@ -1468,6 +1468,12 @@ async function persistUploadedMedia(file, guildId) {
   }
 }
 
+function asArrayValue(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null || value === "") return [];
+  return [value];
+}
+
 async function buildGuildConfigBackup(guildId) {
   const singleRowTables = [
     "guild_settings",
@@ -5764,6 +5770,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             let targetMode = String(cmd.target_mode || "none");
             let previewText = String(cmd.response_text || "");
             let gifCount = 0;
+            let editableGifs = [];
             try {
               const payload = JSON.parse(cmd.responses || "[]");
               let responses = payload;
@@ -5774,13 +5781,16 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
               if (responses[0]) {
                 previewText = String(responses[0].text || previewText);
                 gifCount = Array.isArray(responses[0].gifs) ? responses[0].gifs.length : gifCount;
+                editableGifs = Array.isArray(responses[0].gifs) ? responses[0].gifs : [];
               }
             } catch {
               try {
                 const legacyGifs = JSON.parse(cmd.gifs || "[]");
                 gifCount = Array.isArray(legacyGifs) ? legacyGifs.length : 0;
+                editableGifs = Array.isArray(legacyGifs) ? legacyGifs : [];
               } catch {
                 gifCount = 0;
+                editableGifs = [];
               }
             }
             return `
@@ -5793,6 +5803,43 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                 <form method="post" action="/guild/${guildId}/custom-commands/delete/${cmd.id}" style="display:inline;">
                   <button type="submit" onclick="return confirm('Delete this command?')" style="color:red;background:none;border:none;cursor:pointer;text-decoration:underline;">Delete</button>
                 </form>
+              </td>
+            </tr>
+            <tr>
+              <td colspan="5" style="background:rgba(0,0,0,0.03);">
+                <details>
+                  <summary style="cursor:pointer;font-weight:600;">Manage GIFs for <code>${escapeHtml(cmd.command_name)}</code></summary>
+                  <form method="post" action="/guild/${guildId}/custom-commands/update/${cmd.id}" enctype="multipart/form-data" style="margin-top:10px;display:grid;gap:10px;">
+                    <label>
+                      <span>Response Text</span>
+                      <textarea name="response_text" rows="2" style="width:100%;max-width:100%;font-family:inherit;">${escapeHtml(previewText)}</textarea>
+                    </label>
+                    <div>
+                      <strong>Current GIFs (${editableGifs.length})</strong>
+                      <div style="display:grid;gap:6px;margin-top:6px;">
+                        ${editableGifs.length > 0
+                          ? editableGifs.map((gif) => `
+                              <label style="display:flex;align-items:center;gap:8px;">
+                                <input type="checkbox" name="remove_gifs" value="${escapeHtml(gif)}" />
+                                <span style="font-family:monospace;font-size:0.9em;word-break:break-all;">${escapeHtml(gif)}</span>
+                              </label>
+                            `).join("")
+                          : `<span style="opacity:0.7;">No GIFs currently attached.</span>`}
+                      </div>
+                    </div>
+                    <label>
+                      <span>Add GIF URL(s), one per line</span>
+                      <textarea name="add_gifs" rows="3" placeholder="https://..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+                    </label>
+                    <label>
+                      <span>Upload additional GIF/image file(s)</span>
+                      <input type="file" name="gif_files_add" accept="image/gif,image/png,image/jpeg,image/webp" multiple />
+                    </label>
+                    <div>
+                      <button type="submit">Save GIF Changes</button>
+                    </div>
+                  </form>
+                </details>
               </td>
             </tr>
           `;
@@ -5856,7 +5903,32 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
             <th>Enabled</th>
             <th>Actions</th>
           </tr>
-          ${autoReplies.map((item) => `
+          ${autoReplies.map((item) => {
+            let replyText = "";
+            let replyGifs = [];
+            let replyEmoji = "";
+            const replyType = String(item.response_type || "text").toLowerCase();
+
+            if (replyType === "emoji") {
+              replyEmoji = String(item.responses || "").trim();
+            } else {
+              try {
+                const parsed = JSON.parse(item.responses || "{}");
+                if (Array.isArray(parsed)) {
+                  const first = parsed[0] || {};
+                  replyText = String(first.text || "");
+                  replyGifs = Array.isArray(first.gifs) ? first.gifs : [];
+                } else {
+                  replyText = String(parsed.text || "");
+                  replyGifs = Array.isArray(parsed.gifs) ? parsed.gifs : [];
+                }
+              } catch {
+                replyText = String(item.responses || "");
+                replyGifs = [];
+              }
+            }
+
+            return `
             <tr>
               <td>${escapeHtml(item.trigger_message || "")}</td>
               <td>${escapeHtml(item.response_type || "text")}</td>
@@ -5870,7 +5942,62 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
                 </form>
               </td>
             </tr>
-          `).join("")}
+            <tr>
+              <td colspan="4" style="background:rgba(0,0,0,0.03);">
+                <details>
+                  <summary style="cursor:pointer;font-weight:600;">Manage Reply Media</summary>
+                  <form method="post" action="/guild/${guildId}/auto-replies/update/${item.id}" enctype="multipart/form-data" style="margin-top:10px;display:grid;gap:10px;">
+                    <label>
+                      <span>Trigger Text</span>
+                      <input type="text" name="trigger_message" value="${escapeHtml(item.trigger_message || "")}" required style="max-width:320px;" />
+                    </label>
+                    <label>
+                      <span>Response Mode</span>
+                      <select name="response_type" required style="max-width:320px;">
+                        <option value="text" ${replyType === "text" ? "selected" : ""}>Reply with message only</option>
+                        <option value="text_image" ${replyType === "text_image" ? "selected" : ""}>Reply with message + picture</option>
+                        <option value="image" ${replyType === "image" ? "selected" : ""}>Reply with picture only</option>
+                        <option value="emoji" ${replyType === "emoji" ? "selected" : ""}>React with emoji only</option>
+                      </select>
+                    </label>
+                    <label>
+                      <span>Reply Message</span>
+                      <textarea name="response_text" rows="2" style="width:100%;max-width:100%;font-family:inherit;">${escapeHtml(replyText)}</textarea>
+                    </label>
+                    <label>
+                      <span>Emoji (for emoji mode)</span>
+                      <input type="text" name="reaction_emoji" value="${escapeHtml(replyEmoji)}" style="max-width:180px;" />
+                    </label>
+                    <div>
+                      <strong>Current GIFs (${replyGifs.length})</strong>
+                      <div style="display:grid;gap:6px;margin-top:6px;">
+                        ${replyGifs.length > 0
+                          ? replyGifs.map((gif) => `
+                              <label style="display:flex;align-items:center;gap:8px;">
+                                <input type="checkbox" name="remove_gifs" value="${escapeHtml(gif)}" />
+                                <span style="font-family:monospace;font-size:0.9em;word-break:break-all;">${escapeHtml(gif)}</span>
+                              </label>
+                            `).join("")
+                          : `<span style="opacity:0.7;">No GIFs currently attached.</span>`}
+                      </div>
+                    </div>
+                    <label>
+                      <span>Add picture URL(s), one per line</span>
+                      <textarea name="add_gifs" rows="3" placeholder="https://..." style="width:100%;max-width:100%;font-family:monospace;font-size:0.9em;"></textarea>
+                    </label>
+                    <label>
+                      <span>Upload additional picture file(s)</span>
+                      <input type="file" name="gif_files_add" accept="image/gif,image/png,image/jpeg,image/webp" multiple />
+                    </label>
+                    <div>
+                      <button type="submit">Save Reply Changes</button>
+                    </div>
+                  </form>
+                </details>
+              </td>
+            </tr>
+          `;
+          }).join("")}
         </table>
       ` : `<p style="opacity:0.7;">No auto replies yet.</p>`}
       `;
@@ -7277,6 +7404,93 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
   });
 
+  app.post("/guild/:guildId/custom-commands/update/:id", upload.any(), requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+      const row = await get(`SELECT * FROM custom_commands WHERE guild_id=? AND id=?`, [guildId, id]);
+      if (!row) {
+        return res.status(404).send("Custom command not found.");
+      }
+
+      let targetMode = String(row.target_mode || "none");
+      let responses = [];
+      try {
+        const parsed = JSON.parse(row.responses || "[]");
+        if (Array.isArray(parsed)) {
+          responses = parsed;
+        } else {
+          targetMode = String(parsed.target_mode || targetMode);
+          responses = Array.isArray(parsed.responses) ? parsed.responses : [];
+        }
+      } catch {
+        responses = [];
+      }
+
+      if (!responses.length) {
+        let legacyGifs = [];
+        try {
+          const parsedLegacy = JSON.parse(row.gifs || "[]");
+          legacyGifs = Array.isArray(parsedLegacy) ? parsedLegacy : [];
+        } catch {
+          legacyGifs = [];
+        }
+        responses = [{ text: String(row.response_text || ""), gifs: legacyGifs }];
+      }
+
+      const first = responses[0] || { text: "", gifs: [] };
+      const removeSet = new Set(asArrayValue(req.body.remove_gifs).map((v) => String(v || "").trim()).filter(Boolean));
+      let nextGifs = Array.isArray(first.gifs) ? first.gifs.map((v) => String(v || "").trim()).filter(Boolean) : [];
+      nextGifs = nextGifs.filter((gif) => !removeSet.has(gif));
+
+      const addGifsRaw = String(req.body.add_gifs || "").trim();
+      if (addGifsRaw) {
+        nextGifs.push(...addGifsRaw.split("\n").map((v) => v.trim()).filter(Boolean));
+      }
+
+      if (req.files) {
+        for (const file of req.files) {
+          if ((file.fieldname === "gif_files_add" || file.fieldname === "gif_files") && String(file.mimetype || "").startsWith("image/")) {
+            const persistedRef = await persistUploadedMedia(file, guildId);
+            if (persistedRef) nextGifs.push(persistedRef);
+          }
+        }
+      }
+
+      const nextText = String(req.body.response_text ?? first.text ?? "").trim();
+      responses[0] = {
+        ...first,
+        text: nextText,
+        gifs: [...new Set(nextGifs)]
+      };
+
+      const payload = {
+        target_mode: targetMode,
+        responses
+      };
+
+      const primary = responses[0] || { text: "", gifs: [] };
+      await run(
+        `UPDATE custom_commands
+         SET response_text=?, gifs=?, responses=?, target_mode=?
+         WHERE guild_id=? AND id=?`,
+        [
+          String(primary.text || ""),
+          JSON.stringify(Array.isArray(primary.gifs) ? primary.gifs : []),
+          JSON.stringify(payload),
+          targetMode,
+          guildId,
+          id
+        ]
+      );
+
+      return res.redirect(getModuleRedirect(guildId, 'customcommands'));
+    } catch (e) {
+      console.error("custom-commands update error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
   app.post("/guild/:guildId/auto-replies/create", upload.any(), requireGuildAdmin, async (req, res) => {
     try {
       const guildId = req.params.guildId;
@@ -7337,6 +7551,104 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
     } catch (e) {
       console.error("auto-replies create error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/auto-replies/update/:id", upload.any(), requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.params.id, 10);
+      const row = await get(`SELECT * FROM auto_replies WHERE guild_id=? AND id=?`, [guildId, id]);
+      if (!row) {
+        return res.status(404).send("Auto reply not found.");
+      }
+
+      const triggerMessage = String(req.body.trigger_message || row.trigger_message || "").trim();
+      const responseType = String(req.body.response_type || row.response_type || "text").trim();
+      if (!triggerMessage) {
+        return res.status(400).send("Trigger message is required.");
+      }
+
+      let currentText = "";
+      let currentGifs = [];
+      let currentEmoji = "";
+      if (String(row.response_type || "").toLowerCase() === "emoji") {
+        currentEmoji = String(row.responses || "").trim();
+      } else {
+        try {
+          const parsed = JSON.parse(row.responses || "{}");
+          if (Array.isArray(parsed)) {
+            const first = parsed[0] || {};
+            currentText = String(first.text || "");
+            currentGifs = Array.isArray(first.gifs) ? first.gifs : [];
+          } else {
+            currentText = String(parsed.text || "");
+            currentGifs = Array.isArray(parsed.gifs) ? parsed.gifs : [];
+          }
+        } catch {
+          currentText = String(row.responses || "");
+          currentGifs = [];
+        }
+      }
+
+      const removeSet = new Set(asArrayValue(req.body.remove_gifs).map((v) => String(v || "").trim()).filter(Boolean));
+      let nextGifs = currentGifs.map((v) => String(v || "").trim()).filter(Boolean).filter((gif) => !removeSet.has(gif));
+
+      const addGifsRaw = String(req.body.add_gifs || "").trim();
+      if (addGifsRaw) {
+        nextGifs.push(...addGifsRaw.split("\n").map((v) => v.trim()).filter(Boolean));
+      }
+
+      if (req.files) {
+        for (const file of req.files) {
+          if ((file.fieldname === "gif_files_add" || file.fieldname === "gif_files") && String(file.mimetype || "").startsWith("image/")) {
+            const persistedRef = await persistUploadedMedia(file, guildId);
+            if (persistedRef) nextGifs.push(persistedRef);
+          }
+        }
+      }
+      nextGifs = [...new Set(nextGifs)];
+
+      let storedValue = "";
+      if (responseType === "emoji") {
+        const emoji = String(req.body.reaction_emoji || currentEmoji || "").trim();
+        if (!emoji) {
+          return res.status(400).send("Reaction emoji is required for emoji mode.");
+        }
+        storedValue = emoji;
+      } else if (responseType === "image") {
+        if (nextGifs.length === 0) {
+          return res.status(400).send("Picture is required for picture-only mode.");
+        }
+        storedValue = JSON.stringify({ text: "", gifs: nextGifs });
+      } else if (responseType === "text_image") {
+        const text = String(req.body.response_text || currentText || "").trim();
+        if (!text) {
+          return res.status(400).send("Message text is required for message + picture mode.");
+        }
+        if (nextGifs.length === 0) {
+          return res.status(400).send("Picture is required for message + picture mode.");
+        }
+        storedValue = JSON.stringify({ text, gifs: nextGifs });
+      } else {
+        const text = String(req.body.response_text || currentText || "").trim();
+        if (!text) {
+          return res.status(400).send("Message text is required for message-only mode.");
+        }
+        storedValue = JSON.stringify({ text, gifs: [] });
+      }
+
+      await run(
+        `UPDATE auto_replies
+         SET trigger_message=?, response_type=?, responses=?
+         WHERE guild_id=? AND id=?`,
+        [triggerMessage, responseType, storedValue, guildId, id]
+      );
+
+      return res.redirect(getModuleRedirect(guildId, 'autoreplies'));
+    } catch (e) {
+      console.error("auto-replies update error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

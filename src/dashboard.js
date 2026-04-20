@@ -1520,6 +1520,51 @@ function mediaPreviewUrl(guildId, value) {
   return raw;
 }
 
+function buildAutomodPresetValues(name) {
+  const preset = String(name || "").trim().toLowerCase();
+  if (preset === "light") {
+    return {
+      spam_enabled: 1, spam_messages: 7, spam_action: "warn",
+      invites_enabled: 1, invites_action: "delete",
+      links_enabled: 0, links_action: "delete",
+      caps_enabled: 0, caps_percentage: 80, caps_action: "delete",
+      mentions_enabled: 0, mentions_max: 8, mentions_action: "warn",
+      attach_spam_enabled: 0, attach_spam_max: 2, attach_spam_action: "warn"
+    };
+  }
+  if (preset === "raid") {
+    return {
+      spam_enabled: 1, spam_messages: 4, spam_action: "timeout",
+      invites_enabled: 1, invites_action: "timeout",
+      links_enabled: 1, links_action: "timeout",
+      caps_enabled: 1, caps_percentage: 65, caps_action: "delete",
+      mentions_enabled: 1, mentions_max: 3, mentions_action: "timeout",
+      attach_spam_enabled: 1, attach_spam_max: 1, attach_spam_action: "timeout"
+    };
+  }
+  if (preset === "strict") {
+    return {
+      spam_enabled: 1, spam_messages: 5, spam_action: "timeout",
+      invites_enabled: 1, invites_action: "delete",
+      links_enabled: 1, links_action: "delete",
+      caps_enabled: 1, caps_percentage: 70, caps_action: "delete",
+      mentions_enabled: 1, mentions_max: 4, mentions_action: "warn",
+      attach_spam_enabled: 1, attach_spam_max: 1, attach_spam_action: "warn"
+    };
+  }
+  if (preset === "balanced") {
+    return {
+      spam_enabled: 1, spam_messages: 5, spam_action: "warn",
+      invites_enabled: 1, invites_action: "delete",
+      links_enabled: 1, links_action: "delete",
+      caps_enabled: 1, caps_percentage: 75, caps_action: "delete",
+      mentions_enabled: 1, mentions_max: 5, mentions_action: "warn",
+      attach_spam_enabled: 1, attach_spam_max: 1, attach_spam_action: "warn"
+    };
+  }
+  return null;
+}
+
 async function buildGuildConfigBackup(guildId) {
   const singleRowTables = [
     "guild_settings",
@@ -1539,7 +1584,12 @@ async function buildGuildConfigBackup(guildId) {
     "logging_actor_exclusions",
     "reaction_role_bindings",
     "auto_roles",
-    "customization_unlocks"
+    "customization_unlocks",
+    "custom_commands",
+    "auto_replies",
+    "modmail_threads",
+    "temp_roles",
+    "uploaded_media"
   ];
 
   const backup = {
@@ -1626,7 +1676,12 @@ async function importGuildConfigBackup(guildId, payload) {
     "logging_actor_exclusions",
     "reaction_role_bindings",
     "auto_roles",
-    "customization_unlocks"
+    "customization_unlocks",
+    "custom_commands",
+    "auto_replies",
+    "modmail_threads",
+    "temp_roles",
+    "uploaded_media"
   ];
 
   try {
@@ -4376,6 +4431,51 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <input name="new_account_warn_days" value="${escapeHtml(settings.new_account_warn_days || 1)}" style="max-width:120px;" />
         </label>
         <br/><br/>
+        <div style="padding:10px;border:1px solid rgba(123,201,111,0.35);border-radius:8px;max-width:560px;">
+          <div style="font-weight:600;margin-bottom:8px;">Modmail</div>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <input type="checkbox" name="modmail_enabled" ${settings.modmail_enabled ? "checked" : ""} />
+            <span>Enable modmail DM bridge</span>
+          </label>
+          <label>Inbox Channel
+            <select name="modmail_channel_id">
+              <option value="" ${!settings.modmail_channel_id ? "selected" : ""}>None</option>
+              ${textChannels.map((c) => `<option value="${c.id}" ${settings.modmail_channel_id === c.id ? "selected" : ""}>#${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <br/><br/>
+          <label>Thread Category
+            <select name="modmail_category_id">
+              <option value="" ${!settings.modmail_category_id ? "selected" : ""}>Use inbox category / none</option>
+              ${categories.map((c) => `<option value="${c.id}" ${settings.modmail_category_id === c.id ? "selected" : ""}>${escapeHtml(c.name)}</option>`).join("")}
+            </select>
+          </label>
+          <br/><br/>
+          <label>Support Role
+            <select name="modmail_support_role_id">
+              <option value="" ${!settings.modmail_support_role_id ? "selected" : ""}>None</option>
+              ${roleOptions.map((r) => `
+                <option value="${r.id}" ${settings.modmail_support_role_id === r.id ? "selected" : ""}>@${escapeHtml(r.name)}</option>
+              `).join("")}
+            </select>
+          </label>
+        </div>
+        <br/><br/>
+        <div style="padding:10px;border:1px solid rgba(123,201,111,0.35);border-radius:8px;max-width:560px;">
+          <div style="font-weight:600;margin-bottom:8px;">AFK and Snipe</div>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <input type="checkbox" name="afk_enabled" ${settings.afk_enabled ? "checked" : ""} />
+            <span>Enable AFK status tracking</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <input type="checkbox" name="snipe_enabled" ${settings.snipe_enabled ? "checked" : ""} />
+            <span>Enable snipe and editsnipe storage</span>
+          </label>
+          <label>Snipe Retention (minutes)
+            <input name="snipe_retention_minutes" value="${escapeHtml(settings.snipe_retention_minutes || 1440)}" style="max-width:140px;" />
+          </label>
+        </div>
+        <br/><br/>
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="anti_nuke_enabled" ${settings.anti_nuke_enabled ? "checked" : ""} />
           <span>Enable Anti-Nuke Protection</span>
@@ -4620,8 +4720,30 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       </table>
       ` : `<div class="empty-state">No warnings issued yet</div>`}
 
+      <h3 style="margin-top:18px;">Warning Ladder</h3>
+      <p class="section-description">Auto-timeout, kick, or ban users based on cumulative warning points.</p>
+      <form class="admin-grid-form" method="post" action="/guild/${guildId}/warn-ladder">
+        <label><span>Timeout Threshold</span><input type="number" name="timeout_threshold" min="0" max="100" value="${Number(settings.warn_points_timeout_threshold || 3)}" /></label>
+        <label><span>Kick Threshold</span><input type="number" name="kick_threshold" min="0" max="100" value="${Number(settings.warn_points_kick_threshold || 5)}" /></label>
+        <label><span>Ban Threshold</span><input type="number" name="ban_threshold" min="0" max="100" value="${Number(settings.warn_points_ban_threshold || 7)}" /></label>
+        <label><span>Timeout Minutes</span><input type="number" name="timeout_minutes" min="1" max="10080" value="${Number(settings.warn_timeout_minutes || 60)}" /></label>
+        <button type="submit">Save Warning Ladder</button>
+      </form>
+
       <h3>🤖 Auto-Moderation</h3>
       <p class="section-description">Automatically moderate spam, links, and unwanted content</p>
+      <form class="admin-grid-form" method="post" action="/guild/${guildId}/automod-preset" style="margin-bottom:12px;">
+        <label>
+          <span>Quick Preset</span>
+          <select name="preset">
+            <option value="light">Light</option>
+            <option value="balanced">Balanced</option>
+            <option value="strict">Strict</option>
+            <option value="raid">Raid Mode</option>
+          </select>
+        </label>
+        <button type="submit">Apply Preset</button>
+      </form>
       <form method="post" action="/guild/${guildId}/automod-settings">
         <label style="display:flex;align-items:center;gap:8px;">
           <input type="checkbox" name="spam_enabled" ${automodSettings?.spam_enabled ? "checked" : ""} />
@@ -6161,11 +6283,19 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const antiNukeLockBanMembers = req.body.anti_nuke_lock_ban_members === "on";
       const antiNukeLockKickMembers = req.body.anti_nuke_lock_kick_members === "on";
       const antiNukeLockManageWebhooks = req.body.anti_nuke_lock_manage_webhooks === "on";
+      const modmailEnabled = req.body.modmail_enabled === "on";
+      const modmailChannelId = String(req.body.modmail_channel_id || "").trim() || null;
+      const modmailCategoryId = String(req.body.modmail_category_id || "").trim() || null;
+      const modmailSupportRoleId = String(req.body.modmail_support_role_id || "").trim() || null;
+      const afkEnabled = req.body.afk_enabled === "on";
+      const snipeEnabled = req.body.snipe_enabled === "on";
+      const snipeRetentionRaw = Number.parseInt(String(req.body.snipe_retention_minutes || "1440"), 10);
       const logSummaryCardsEnabled = req.body.log_summary_cards_enabled === "on";
       const logQuickModActionsEnabled = req.body.log_quick_mod_actions_enabled === "on";
       const newAccountWarnDays = Number.isInteger(newAccountWarnDaysRaw) && newAccountWarnDaysRaw >= 0
         ? newAccountWarnDaysRaw
         : 1;
+      const snipeRetentionMinutes = Number.isInteger(snipeRetentionRaw) ? Math.min(10080, Math.max(1, snipeRetentionRaw)) : 1440;
       const antiNukeWindowSeconds = Number.isInteger(antiNukeWindowRaw) ? Math.min(300, Math.max(5, antiNukeWindowRaw)) : 30;
       const antiNukeAutoUnlockMinutes = Number.isInteger(antiNukeAutoUnlockRaw) ? Math.min(1440, Math.max(0, antiNukeAutoUnlockRaw)) : 0;
       const antiNukeCooldownMinutes = Number.isInteger(antiNukeCooldownRaw) ? Math.min(120, Math.max(1, antiNukeCooldownRaw)) : 10;
@@ -6195,7 +6325,14 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         anti_nuke_lock_manage_roles: antiNukeLockManageRoles,
         anti_nuke_lock_ban_members: antiNukeLockBanMembers,
         anti_nuke_lock_kick_members: antiNukeLockKickMembers,
-        anti_nuke_lock_manage_webhooks: antiNukeLockManageWebhooks
+        anti_nuke_lock_manage_webhooks: antiNukeLockManageWebhooks,
+        modmail_enabled: modmailEnabled,
+        modmail_channel_id: modmailChannelId,
+        modmail_category_id: modmailCategoryId,
+        modmail_support_role_id: modmailSupportRoleId,
+        afk_enabled: afkEnabled,
+        snipe_enabled: snipeEnabled,
+        snipe_retention_minutes: snipeRetentionMinutes
       });
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
@@ -7098,6 +7235,81 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'moderation'));
     } catch (e) {
       console.error("automod-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/automod-preset", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const presetName = String(req.body.preset || "").trim().toLowerCase();
+      const preset = buildAutomodPresetValues(presetName);
+      if (!preset) {
+        return res.status(400).send("Invalid automod preset.");
+      }
+
+      await run(`
+        INSERT INTO automod_settings (
+          guild_id, spam_enabled, spam_messages, spam_action,
+          invites_enabled, invites_action,
+          links_enabled, links_action,
+          caps_enabled, caps_percentage, caps_action,
+          mentions_enabled, mentions_max, mentions_action,
+          attach_spam_enabled, attach_spam_max, attach_spam_action
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(guild_id) DO UPDATE SET
+          spam_enabled=excluded.spam_enabled,
+          spam_messages=excluded.spam_messages,
+          spam_action=excluded.spam_action,
+          invites_enabled=excluded.invites_enabled,
+          invites_action=excluded.invites_action,
+          links_enabled=excluded.links_enabled,
+          links_action=excluded.links_action,
+          caps_enabled=excluded.caps_enabled,
+          caps_percentage=excluded.caps_percentage,
+          caps_action=excluded.caps_action,
+          mentions_enabled=excluded.mentions_enabled,
+          mentions_max=excluded.mentions_max,
+          mentions_action=excluded.mentions_action,
+          attach_spam_enabled=excluded.attach_spam_enabled,
+          attach_spam_max=excluded.attach_spam_max,
+          attach_spam_action=excluded.attach_spam_action
+      `, [
+        guildId,
+        preset.spam_enabled, preset.spam_messages, preset.spam_action,
+        preset.invites_enabled, preset.invites_action,
+        preset.links_enabled, preset.links_action,
+        preset.caps_enabled, preset.caps_percentage, preset.caps_action,
+        preset.mentions_enabled, preset.mentions_max, preset.mentions_action,
+        preset.attach_spam_enabled, preset.attach_spam_max, preset.attach_spam_action
+      ]);
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("automod-preset save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/warn-ladder", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const timeoutThreshold = Math.max(0, Number.parseInt(String(req.body.timeout_threshold || "3"), 10) || 0);
+      const kickThreshold = Math.max(timeoutThreshold, Number.parseInt(String(req.body.kick_threshold || "5"), 10) || timeoutThreshold);
+      const banThreshold = Math.max(kickThreshold, Number.parseInt(String(req.body.ban_threshold || "7"), 10) || kickThreshold);
+      const timeoutMinutes = Math.max(1, Number.parseInt(String(req.body.timeout_minutes || "60"), 10) || 60);
+
+      await run(
+        `UPDATE guild_settings
+         SET warn_points_timeout_threshold=?, warn_points_kick_threshold=?, warn_points_ban_threshold=?, warn_timeout_minutes=?
+         WHERE guild_id=?`,
+        [timeoutThreshold, kickThreshold, banThreshold, timeoutMinutes, guildId]
+      );
+
+      return res.redirect(getModuleRedirect(guildId, 'moderation'));
+    } catch (e) {
+      console.error("warn-ladder save error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

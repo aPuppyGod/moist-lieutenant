@@ -369,14 +369,18 @@ async function cmdModCommands(message) {
   const embed = compactEmbed("Moderation Commands", [
     "`!mod-role <role-id>` `/mod-role`",
     `\`${prefix}ban <user> [reason]\` \`/ban\``,
+    `\`${prefix}tempban <user> <duration> [reason]\` \`/tempban\``,
     `\`${prefix}unban <user-id> [reason]\` \`/unban\``,
     `\`${prefix}kick <user> [reason]\` \`/kick\``,
     `\`${prefix}mute <user> [duration] [reason]\` \`/mute\``,
+    `\`${prefix}temprole <user> <role> <duration> [reason]\``,
     `\`${prefix}unmute <user> [reason]\` \`/unmute\``,
     `\`${prefix}purge <count>\` \`/purge\``,
-    `\`${prefix}warn <user> [reason]\` \`/warn\``,
+    `\`${prefix}warn <user> [points] <reason>\` \`/warn\``,
     `\`${prefix}warnings <user>\` \`/warnings\``,
     `\`${prefix}clearwarns <user>\` \`/clearwarns\``,
+    `\`${prefix}warnladder [view|set ...]\``,
+    `\`${prefix}snipe\` \`${prefix}editsnipe\``,
     `\`${prefix}nick <user> <nick>\` \`/nick\``,
     `\`${prefix}role <user> <role-id>\` \`/role\``,
     `\`${prefix}softban <user> [reason]\` \`/softban\``,
@@ -394,6 +398,9 @@ async function cmdAdminCommands(message) {
     `\`${prefix}xp add/set <user> <amount>\` \`/xp\``,
     `\`${prefix}recalc-levels\` \`/recalc-levels\``,
     `\`${prefix}sync-roles\` \`/sync-roles\``,
+    `\`${prefix}automodpreset <light|balanced|strict|raid>\``,
+    `\`${prefix}modmail status|setup|disable|close\``,
+    `\`${prefix}afk [reason]\``,
     `\`${prefix}reactionrole add <msgId> <emoji> <roleId>\``,
     `\`${prefix}reactionrole remove <msgId> <emoji>\``,
     `\`${prefix}reactionrole list\``
@@ -1309,6 +1316,143 @@ function parseDurationMs(text) {
   return amount * unitMs;
 }
 
+function formatDurationText(ms) {
+  const totalSeconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function parseRoleId(raw) {
+  const value = String(raw || "").trim().replace(/[<@&>]/g, "");
+  return /^\d{15,21}$/.test(value) ? value : null;
+}
+
+async function getWarnLadderSettings(guildId) {
+  const settings = await getGuildSettings(guildId).catch(() => null);
+  return {
+    timeoutThreshold: Math.max(0, Number(settings?.warn_points_timeout_threshold ?? 3)),
+    kickThreshold: Math.max(0, Number(settings?.warn_points_kick_threshold ?? 5)),
+    banThreshold: Math.max(0, Number(settings?.warn_points_ban_threshold ?? 7)),
+    timeoutMinutes: Math.max(1, Number(settings?.warn_timeout_minutes ?? 60))
+  };
+}
+
+async function getTotalWarningPoints(guildId, userId) {
+  const row = await get(
+    `SELECT COALESCE(SUM(points), 0) AS total_points, COUNT(*) AS total_warnings
+     FROM mod_warnings
+     WHERE guild_id=? AND user_id=?`,
+    [guildId, userId]
+  );
+
+  return {
+    totalPoints: Math.max(0, Number(row?.total_points || 0)),
+    totalWarnings: Math.max(0, Number(row?.total_warnings || 0))
+  };
+}
+
+async function applyWarnLadder(message, targetMember, totalPoints, reason) {
+  if (!message?.guild || !targetMember) return null;
+  const ladder = await getWarnLadderSettings(message.guild.id);
+  const baseReason = `Warn ladder triggered at ${totalPoints} points. ${reason}`.trim();
+
+  if (ladder.banThreshold > 0 && totalPoints >= ladder.banThreshold && targetMember.bannable) {
+    await targetMember.ban({ reason: baseReason }).catch(() => null);
+    await logModAction(message.guild.id, targetMember.id, message.author.id, "warn_auto_ban", reason, `Points: ${totalPoints}`);
+    return `Auto punishment: banned at ${totalPoints} warning points.`;
+  }
+
+  if (ladder.kickThreshold > 0 && totalPoints >= ladder.kickThreshold && targetMember.kickable) {
+    await targetMember.kick(baseReason).catch(() => null);
+    await logModAction(message.guild.id, targetMember.id, message.author.id, "warn_auto_kick", reason, `Points: ${totalPoints}`);
+    return `Auto punishment: kicked at ${totalPoints} warning points.`;
+  }
+
+  if (ladder.timeoutThreshold > 0 && totalPoints >= ladder.timeoutThreshold) {
+    const timeoutMs = ladder.timeoutMinutes * 60_000;
+    if (targetMember.moderatable) {
+      await targetMember.timeout(timeoutMs, baseReason).catch(() => null);
+      await logModAction(message.guild.id, targetMember.id, message.author.id, "warn_auto_timeout", reason, `Points: ${totalPoints}; Duration: ${timeoutMs}ms`);
+      return `Auto punishment: timed out for ${formatDurationText(timeoutMs)} at ${totalPoints} warning points.`;
+    }
+  }
+
+  return null;
+}
+
+function buildAutomodPreset(name) {
+  const preset = String(name || "").trim().toLowerCase();
+  if (preset === "light") {
+    return {
+      spam_enabled: 1, spam_messages: 7, spam_action: "warn",
+      invites_enabled: 1, invites_action: "delete",
+      links_enabled: 0, links_action: "delete",
+      caps_enabled: 0, caps_percentage: 80, caps_action: "delete",
+      mentions_enabled: 0, mentions_max: 8, mentions_action: "warn",
+      attach_spam_enabled: 0, attach_spam_max: 2, attach_spam_action: "warn"
+    };
+  }
+  if (preset === "raid") {
+    return {
+      spam_enabled: 1, spam_messages: 4, spam_action: "timeout",
+      invites_enabled: 1, invites_action: "timeout",
+      links_enabled: 1, links_action: "timeout",
+      caps_enabled: 1, caps_percentage: 65, caps_action: "delete",
+      mentions_enabled: 1, mentions_max: 3, mentions_action: "timeout",
+      attach_spam_enabled: 1, attach_spam_max: 1, attach_spam_action: "timeout"
+    };
+  }
+  if (preset === "strict") {
+    return {
+      spam_enabled: 1, spam_messages: 5, spam_action: "timeout",
+      invites_enabled: 1, invites_action: "delete",
+      links_enabled: 1, links_action: "delete",
+      caps_enabled: 1, caps_percentage: 70, caps_action: "delete",
+      mentions_enabled: 1, mentions_max: 4, mentions_action: "warn",
+      attach_spam_enabled: 1, attach_spam_max: 1, attach_spam_action: "warn"
+    };
+  }
+  if (preset === "balanced") {
+    return {
+      spam_enabled: 1, spam_messages: 5, spam_action: "warn",
+      invites_enabled: 1, invites_action: "delete",
+      links_enabled: 1, links_action: "delete",
+      caps_enabled: 1, caps_percentage: 75, caps_action: "delete",
+      mentions_enabled: 1, mentions_max: 5, mentions_action: "warn",
+      attach_spam_enabled: 1, attach_spam_max: 1, attach_spam_action: "warn"
+    };
+  }
+  return null;
+}
+
+async function getSnipeRecord(guildId, channelId) {
+  return await get(
+    `SELECT id, author_id, content, attachments_json, deleted_at
+     FROM snipe_messages
+     WHERE guild_id=? AND channel_id=?
+     ORDER BY deleted_at DESC
+     LIMIT 1`,
+    [guildId, channelId]
+  );
+}
+
+async function getEditSnipeRecord(guildId, channelId) {
+  return await get(
+    `SELECT id, author_id, before_content, after_content, attachments_json, edited_at
+     FROM edit_snipes
+     WHERE guild_id=? AND channel_id=?
+     ORDER BY edited_at DESC
+     LIMIT 1`,
+    [guildId, channelId]
+  );
+}
+
 async function cmdBan(message, args) {
   if (!(await requireModerator(message))) return;
   const arg = args[0];
@@ -1540,18 +1684,27 @@ async function cmdWarn(message, args) {
     return;
   }
 
-  const reason = args.slice(1).join(" ").trim();
+  let points = 1;
+  let reasonArgs = args.slice(1);
+  if (reasonArgs[0] && /^\d+$/.test(String(reasonArgs[0]))) {
+    points = Math.min(10, Math.max(1, Number.parseInt(String(reasonArgs[0]), 10) || 1));
+    reasonArgs = reasonArgs.slice(1);
+  }
+
+  const reason = reasonArgs.join(" ").trim();
   if (!reason) {
-    await message.reply("Usage: `?warn <user> <reason>` - A reason is required.").catch(() => {});
+    await message.reply("Usage: `?warn <user> [points] <reason>` - A reason is required.").catch(() => {});
     return;
   }
   await run(
-    `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, pick.member.id, message.author.id, reason, Date.now()]
+    `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, points, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [message.guild.id, pick.member.id, message.author.id, reason, points, Date.now()]
   );
-  await logModAction(message.guild.id, pick.member.id, message.author.id, "warn", reason);
-  await message.reply(`✅ Warned ${pick.member.user.tag}.`).catch(() => {});
+  await logModAction(message.guild.id, pick.member.id, message.author.id, "warn", reason, `Points: ${points}`);
+  const totals = await getTotalWarningPoints(message.guild.id, pick.member.id);
+  const ladderResult = await applyWarnLadder(message, pick.member, totals.totalPoints, reason);
+  await message.reply(`✅ Warned ${pick.member.user.tag} for ${points} point${points === 1 ? "" : "s"}. Total: ${totals.totalPoints} point${totals.totalPoints === 1 ? "" : "s"}.${ladderResult ? `\n${ladderResult}` : ""}`).catch(() => {});
 }
 
 async function cmdWarnings(message, args) {
@@ -1568,7 +1721,7 @@ async function cmdWarnings(message, args) {
   }
 
   const rows = await all(
-    `SELECT id, moderator_id, reason, created_at FROM mod_warnings WHERE guild_id=? AND user_id=? ORDER BY created_at DESC LIMIT 15`,
+    `SELECT id, moderator_id, reason, points, created_at FROM mod_warnings WHERE guild_id=? AND user_id=? ORDER BY created_at DESC LIMIT 15`,
     [message.guild.id, pick.member.id]
   );
 
@@ -1599,13 +1752,255 @@ async function cmdWarnings(message, args) {
     
     embed.addFields({
       name: `Warning #${row.id}`,
-      value: `**Moderator:** ${modTag}\n**Reason:** ${row.reason}\n**Date:** ${timestamp}`,
+      value: `**Moderator:** ${modTag}\n**Points:** ${Number(row.points || 1)}\n**Reason:** ${row.reason}\n**Date:** ${timestamp}`,
       inline: false
     });
   }
 
-  embed.setFooter({ text: `Total Warnings: ${rows.length}` });
+  const totals = await getTotalWarningPoints(message.guild.id, pick.member.id);
+  embed.setFooter({ text: `Total Warnings: ${totals.totalWarnings} • Total Points: ${totals.totalPoints}` });
   await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdWarnLadder(message, args) {
+  if (!(await requireModerator(message))) return;
+  if (!args.length || args[0] === "view") {
+    const ladder = await getWarnLadderSettings(message.guild.id);
+    await message.reply(
+      `Warn ladder:\n• ${ladder.timeoutThreshold} points → timeout (${ladder.timeoutMinutes}m)\n• ${ladder.kickThreshold} points → kick\n• ${ladder.banThreshold} points → ban\nUse \`!warnladder set <timeoutThreshold> <kickThreshold> <banThreshold> [timeoutMinutes]\` to update.`
+    ).catch(() => {});
+    return;
+  }
+
+  if (args[0] !== "set") {
+    await message.reply("Usage: `!warnladder view` or `!warnladder set <timeoutThreshold> <kickThreshold> <banThreshold> [timeoutMinutes]`").catch(() => {});
+    return;
+  }
+
+  const timeoutThreshold = Math.max(0, Number.parseInt(String(args[1] || "3"), 10) || 0);
+  const kickThreshold = Math.max(timeoutThreshold, Number.parseInt(String(args[2] || "5"), 10) || timeoutThreshold);
+  const banThreshold = Math.max(kickThreshold, Number.parseInt(String(args[3] || "7"), 10) || kickThreshold);
+  const timeoutMinutes = Math.max(1, Number.parseInt(String(args[4] || "60"), 10) || 60);
+
+  await getGuildSettings(message.guild.id).catch(() => null);
+  await run(
+    `UPDATE guild_settings
+     SET warn_points_timeout_threshold=?, warn_points_kick_threshold=?, warn_points_ban_threshold=?, warn_timeout_minutes=?
+     WHERE guild_id=?`,
+    [timeoutThreshold, kickThreshold, banThreshold, timeoutMinutes, message.guild.id]
+  );
+
+  await message.reply(`✅ Updated warn ladder: ${timeoutThreshold} → timeout (${timeoutMinutes}m), ${kickThreshold} → kick, ${banThreshold} → ban.`).catch(() => {});
+}
+
+async function cmdTempRole(message, args) {
+  if (!(await requireModerator(message))) return;
+  const arg = args[0];
+  const roleId = parseRoleId(args[1]);
+  const durationMs = parseDurationMs(args[2]);
+  if (!arg || !roleId || !durationMs) {
+    await message.reply("Usage: `!temprole <user> <role-id|@role> <duration> [reason]`").catch(() => {});
+    return;
+  }
+
+  const pick = await pickUserSmart(message, arg);
+  if (!pick || pick.ambiguous) {
+    await message.reply("Usage: `!temprole <user> <role-id|@role> <duration> [reason]`").catch(() => {});
+    return;
+  }
+
+  const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
+  if (!role) {
+    await message.reply("❌ Role not found.").catch(() => {});
+    return;
+  }
+
+  if (!canModerate(message.member, pick.member)) {
+    await message.reply("❌ You cannot modify roles for someone with a higher or equal role.").catch(() => {});
+    return;
+  }
+
+  const reason = args.slice(3).join(" ").trim() || "No reason provided";
+  await pick.member.roles.add(role, `Temporary role: ${reason}`).catch(() => null);
+  await run(
+    `INSERT INTO temp_roles (guild_id, user_id, role_id, moderator_id, reason, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [message.guild.id, pick.member.id, role.id, message.author.id, reason, Date.now(), Date.now() + durationMs]
+  );
+  await logModAction(message.guild.id, pick.member.id, message.author.id, "temp_role_add", reason, `Role: ${role.name}; Duration: ${durationMs}ms`);
+  await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag} for ${formatDurationText(durationMs)}.`).catch(() => {});
+}
+
+async function cmdAutomodPreset(message, args) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("Only admins/managers can apply automod presets.").catch(() => {});
+    return;
+  }
+
+  const presetName = String(args[0] || "").trim().toLowerCase();
+  const preset = buildAutomodPreset(presetName);
+  if (!preset) {
+    await message.reply("Usage: `!automodpreset <light|balanced|strict|raid>`").catch(() => {});
+    return;
+  }
+
+  await run(
+    `INSERT INTO automod_settings (
+      guild_id, spam_enabled, spam_messages, spam_action,
+      invites_enabled, invites_action,
+      links_enabled, links_action,
+      caps_enabled, caps_percentage, caps_action,
+      mentions_enabled, mentions_max, mentions_action,
+      attach_spam_enabled, attach_spam_max, attach_spam_action
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(guild_id) DO UPDATE SET
+      spam_enabled=excluded.spam_enabled,
+      spam_messages=excluded.spam_messages,
+      spam_action=excluded.spam_action,
+      invites_enabled=excluded.invites_enabled,
+      invites_action=excluded.invites_action,
+      links_enabled=excluded.links_enabled,
+      links_action=excluded.links_action,
+      caps_enabled=excluded.caps_enabled,
+      caps_percentage=excluded.caps_percentage,
+      caps_action=excluded.caps_action,
+      mentions_enabled=excluded.mentions_enabled,
+      mentions_max=excluded.mentions_max,
+      mentions_action=excluded.mentions_action,
+      attach_spam_enabled=excluded.attach_spam_enabled,
+      attach_spam_max=excluded.attach_spam_max,
+      attach_spam_action=excluded.attach_spam_action`,
+    [
+      message.guild.id,
+      preset.spam_enabled, preset.spam_messages, preset.spam_action,
+      preset.invites_enabled, preset.invites_action,
+      preset.links_enabled, preset.links_action,
+      preset.caps_enabled, preset.caps_percentage, preset.caps_action,
+      preset.mentions_enabled, preset.mentions_max, preset.mentions_action,
+      preset.attach_spam_enabled, preset.attach_spam_max, preset.attach_spam_action
+    ]
+  );
+
+  await message.reply(`✅ Applied automod preset: **${presetName}**.`).catch(() => {});
+}
+
+async function cmdAfk(message, args) {
+  if (!message.guild) return;
+  const reason = args.join(" ").trim() || "AFK";
+  await run(
+    `INSERT INTO user_afk_status (guild_id, user_id, reason, afk_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (guild_id, user_id)
+     DO UPDATE SET reason=excluded.reason, afk_at=excluded.afk_at`,
+    [message.guild.id, message.author.id, reason, Date.now()]
+  );
+  await message.reply(`✅ AFK set: ${reason}`).catch(() => {});
+}
+
+async function cmdSnipe(message) {
+  if (!(await requireModerator(message))) return;
+  const row = await getSnipeRecord(message.guild.id, message.channel.id);
+  if (!row) {
+    await message.reply("No recently deleted message stored for this channel.").catch(() => {});
+    return;
+  }
+  const author = await message.guild.members.fetch(row.author_id).catch(() => null);
+  const attachments = (() => {
+    try {
+      const parsed = JSON.parse(String(row.attachments_json || "[]"));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+  const embed = new EmbedBuilder()
+    .setColor(0x8b7355)
+    .setTitle("Recently Deleted Message")
+    .setDescription(String(row.content || "(no text)"))
+    .addFields(
+      { name: "Author", value: author ? author.user.tag : String(row.author_id || "Unknown"), inline: true },
+      { name: "Deleted", value: `<t:${Math.floor(Number(row.deleted_at || Date.now()) / 1000)}:R>`, inline: true },
+      ...(attachments.length ? [{ name: "Attachments", value: attachments.map((item) => item.url || item.name || "attachment").join("\n") }] : [])
+    )
+    .setTimestamp(new Date(Number(row.deleted_at || Date.now())));
+  await message.reply({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
+}
+
+async function cmdEditSnipe(message) {
+  if (!(await requireModerator(message))) return;
+  const row = await getEditSnipeRecord(message.guild.id, message.channel.id);
+  if (!row) {
+    await message.reply("No recently edited message stored for this channel.").catch(() => {});
+    return;
+  }
+  const author = await message.guild.members.fetch(row.author_id).catch(() => null);
+  const embed = new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle("Recently Edited Message")
+    .addFields(
+      { name: "Author", value: author ? author.user.tag : String(row.author_id || "Unknown"), inline: true },
+      { name: "Edited", value: `<t:${Math.floor(Number(row.edited_at || Date.now()) / 1000)}:R>`, inline: true },
+      { name: "Before", value: String(row.before_content || "(no text)").slice(0, 1024) || "(no text)" },
+      { name: "After", value: String(row.after_content || "(no text)").slice(0, 1024) || "(no text)" }
+    )
+    .setTimestamp(new Date(Number(row.edited_at || Date.now())));
+  await message.reply({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
+}
+
+async function cmdModmail(message, args) {
+  if (!message.guild) return;
+  const sub = String(args[0] || "").trim().toLowerCase();
+  if (!sub || sub === "status") {
+    const settings = await getGuildSettings(message.guild.id);
+    await message.reply(
+      `Modmail: ${settings.modmail_enabled ? "enabled" : "disabled"}\nInbox channel: ${settings.modmail_channel_id ? `<#${settings.modmail_channel_id}>` : "not set"}\nCategory: ${settings.modmail_category_id ? `<#${settings.modmail_category_id}>` : "none"}\nSupport role: ${settings.modmail_support_role_id ? `<@&${settings.modmail_support_role_id}>` : "none"}`
+    ).catch(() => {});
+    return;
+  }
+
+  if (sub === "close") {
+    if (!(await requireModerator(message))) return;
+    const thread = await get(`SELECT id FROM modmail_threads WHERE guild_id=? AND channel_id=? AND status='open'`, [message.guild.id, message.channel.id]);
+    if (!thread) {
+      await message.reply("This channel is not an open modmail thread.").catch(() => {});
+      return;
+    }
+    await run(`UPDATE modmail_threads SET status='closed', closed_at=?, last_message_at=? WHERE id=?`, [Date.now(), Date.now(), thread.id]);
+    await message.reply("✅ Modmail thread closed.").catch(() => {});
+    return;
+  }
+
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("Only admins/managers can configure modmail.").catch(() => {});
+    return;
+  }
+
+  if (sub === "disable") {
+    await getGuildSettings(message.guild.id).catch(() => null);
+    await run(`UPDATE guild_settings SET modmail_enabled=0 WHERE guild_id=?`, [message.guild.id]);
+    await message.reply("✅ Modmail disabled.").catch(() => {});
+    return;
+  }
+
+  if (sub !== "setup") {
+    await message.reply("Usage: `!modmail status`, `!modmail setup <channel-id|#channel> [support-role-id|@role] [category-id]`, or `!modmail disable`").catch(() => {});
+    return;
+  }
+
+  const channelId = String(args[1] || "").replace(/[<#>]/g, "");
+  const supportRoleId = parseRoleId(args[2]) || null;
+  const categoryId = String(args[3] || "").replace(/[<#>]/g, "") || null;
+  if (!/^\d{15,21}$/.test(channelId)) {
+    await message.reply("Usage: `!modmail setup <channel-id|#channel> [support-role-id|@role] [category-id]`").catch(() => {});
+    return;
+  }
+
+  await getGuildSettings(message.guild.id).catch(() => null);
+  await run(
+    `UPDATE guild_settings SET modmail_enabled=1, modmail_channel_id=?, modmail_support_role_id=?, modmail_category_id=? WHERE guild_id=?`,
+    [channelId, supportRoleId, categoryId, message.guild.id]
+  );
+  await message.reply(`✅ Modmail enabled. Inbox: <#${channelId}>${supportRoleId ? ` • Support role: <@&${supportRoleId}>` : ""}${categoryId ? ` • Category: <#${categoryId}>` : ""}`).catch(() => {});
 }
 
 async function cmdClearWarns(message, args) {
@@ -3917,7 +4312,7 @@ async function handleCommands(message) {
   }
   
   // List of moderation commands that use the configurable prefix
-  const modCommands = ["ban", "unban", "kick", "mute", "unmute", "purge", "warn", "warnings", "clearwarns", "clearwarn", "modlogs", "auditsearch", "lock", "unlock", "slowmode", "nick", "role", "softban"];
+  const modCommands = ["ban", "tempban", "unban", "kick", "mute", "unmute", "temprole", "purge", "warn", "warnings", "clearwarns", "clearwarn", "warnladder", "modlogs", "auditsearch", "lock", "unlock", "slowmode", "nick", "role", "softban", "snipe", "editsnipe"];
   
   // Try moderation prefix first for mod commands
   const modPrefixes = await getModPrefixes(message);
@@ -4263,6 +4658,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "temprole") {
+    await cmdTempRole(message, args);
+    return true;
+  }
+
   if (cmd === "unban") {
     await cmdUnban(message, args);
     return true;
@@ -4293,6 +4693,11 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "warnladder") {
+    await cmdWarnLadder(message, args);
+    return true;
+  }
+
   if (cmd === "warnings") {
     await cmdWarnings(message, args);
     return true;
@@ -4310,6 +4715,16 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "modlogs") {
     await cmdModLogs(message, args);
+    return true;
+  }
+
+  if (cmd === "snipe") {
+    await cmdSnipe(message);
+    return true;
+  }
+
+  if (cmd === "editsnipe") {
+    await cmdEditSnipe(message);
     return true;
   }
 
@@ -4345,6 +4760,21 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "softban") {
     await cmdSoftban(message, args);
+    return true;
+  }
+
+  if (cmd === "automodpreset") {
+    await cmdAutomodPreset(message, args);
+    return true;
+  }
+
+  if (cmd === "afk") {
+    await cmdAfk(message, args);
+    return true;
+  }
+
+  if (cmd === "modmail") {
+    await cmdModmail(message, args);
     return true;
   }
 
@@ -4554,16 +4984,23 @@ function buildSlashCommands() {
     { name: "mute", description: "Mute (timeout) member", default_member_permissions: slashPerm(MODERATION_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "duration", description: "e.g. 10m", required: false }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "unmute", description: "Unmute member", default_member_permissions: slashPerm(MODERATION_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "purge", description: "Delete recent messages", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "count", description: "1-100", required: true }] },
-    { name: "warn", description: "Warn a user", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
+    { name: "warn", description: "Warn a user", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 4, name: "points", description: "Warning points (1-10)", required: false }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "auditsearch", description: "Search moderation audit logs", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "Action filter (warn/ban/kick/etc)", required: false }, { type: 6, name: "user", description: "Target user filter", required: false }, { type: 6, name: "moderator", description: "Moderator filter", required: false }, { type: 4, name: "days", description: "Lookback days (1-90)", required: false }, { type: 4, name: "limit", description: "Result limit (1-50)", required: false }] },
     { name: "warnings", description: "View user warnings", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }] },
     { name: "clearwarns", description: "Clear user warnings", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }] },
+    { name: "warnladder", description: "View or update warning ladder thresholds", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "view or set", required: true, choices: [{ name: "view", value: "view" }, { name: "set", value: "set" }] }, { type: 4, name: "timeout_threshold", description: "Points for timeout", required: false }, { type: 4, name: "kick_threshold", description: "Points for kick", required: false }, { type: 4, name: "ban_threshold", description: "Points for ban", required: false }, { type: 4, name: "timeout_minutes", description: "Timeout minutes", required: false }] },
     { name: "nick", description: "Set nickname", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "name", description: "Nickname", required: true }] },
     { name: "role", description: "Toggle role on user", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 8, name: "role", description: "Role", required: true }] },
+    { name: "temprole", description: "Assign a role temporarily", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 8, name: "role", description: "Role", required: true }, { type: 3, name: "duration", description: "e.g. 10m, 1h, 1d", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "softban", description: "Softban member", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 6, name: "user", description: "User", required: true }, { type: 3, name: "reason", description: "Reason", required: false }] },
     { name: "lock", description: "Lock channel", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
     { name: "unlock", description: "Unlock channel", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
     { name: "slowmode", description: "Set channel slowmode", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 4, name: "seconds", description: "0-21600", required: true }] },
+    { name: "snipe", description: "Show the latest deleted message", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
+    { name: "editsnipe", description: "Show the latest edited message", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) },
+    { name: "automodpreset", description: "Apply a quick automod preset", default_member_permissions: slashPerm(PermissionsBitField.Flags.Administrator), options: [{ type: 3, name: "preset", description: "Preset", required: true, choices: [{ name: "light", value: "light" }, { name: "balanced", value: "balanced" }, { name: "strict", value: "strict" }, { name: "raid", value: "raid" }] }] },
+    { name: "afk", description: "Set your AFK status", options: [{ type: 3, name: "reason", description: "AFK reason", required: false }] },
+    { name: "modmail", description: "View or configure modmail", default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION), options: [{ type: 3, name: "action", description: "status, setup, disable, or close", required: true, choices: [{ name: "status", value: "status" }, { name: "setup", value: "setup" }, { name: "disable", value: "disable" }, { name: "close", value: "close" }] }, { type: 7, name: "channel", description: "Inbox channel", required: false }, { type: 8, name: "support_role", description: "Support role", required: false }, { type: 7, name: "category", description: "Category for threads", required: false }] },
     // Message context menu command
     { name: "Purge Until Here", type: 3, default_member_permissions: slashPerm(DEFAULT_MOD_COMMAND_PERMISSION) }
   ];
@@ -4680,6 +5117,9 @@ async function handleSlashCommand(interaction) {
   const userOption = interaction.options.getUser("user");
   const moderatorOption = interaction.options.getUser("moderator");
   const roleOption = interaction.options.getRole("role");
+  const supportRoleOption = interaction.options.getRole("support_role");
+  const channelOption = interaction.options.getChannel("channel");
+  const categoryOption = interaction.options.getChannel("category");
   const args = [];
 
   if (name === "xp") {
@@ -4696,9 +5136,15 @@ async function handleSlashCommand(interaction) {
     if (userOption) args.push(userOption.id);
     const reason = optionValue(interaction, "reason");
     if (reason) args.push(...String(reason).split(/\s+/));
-  } else if (name === "ban" || name === "kick" || name === "warn" || name === "softban") {
+  } else if (name === "ban" || name === "kick" || name === "softban") {
     if (userOption) args.push(userOption.id);
     const reason = optionValue(interaction, "reason");
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "warn") {
+    if (userOption) args.push(userOption.id);
+    const points = optionValue(interaction, "points");
+    const reason = optionValue(interaction, "reason");
+    if (points !== "") args.push(String(points));
     if (reason) args.push(...String(reason).split(/\s+/));
   } else if (name === "tempban") {
     if (userOption) args.push(userOption.id);
@@ -4706,6 +5152,26 @@ async function handleSlashCommand(interaction) {
     const reason = optionValue(interaction, "reason");
     if (duration) args.push(String(duration));
     if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "temprole") {
+    if (userOption) args.push(userOption.id);
+    if (roleOption) args.push(roleOption.id);
+    const duration = optionValue(interaction, "duration");
+    const reason = optionValue(interaction, "reason");
+    if (duration) args.push(String(duration));
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "warnladder") {
+    const action = optionValue(interaction, "action");
+    const timeoutThreshold = optionValue(interaction, "timeout_threshold");
+    const kickThreshold = optionValue(interaction, "kick_threshold");
+    const banThreshold = optionValue(interaction, "ban_threshold");
+    const timeoutMinutes = optionValue(interaction, "timeout_minutes");
+    if (action) args.push(String(action));
+    if (String(action) === "set") {
+      if (timeoutThreshold !== "") args.push(String(timeoutThreshold));
+      if (kickThreshold !== "") args.push(String(kickThreshold));
+      if (banThreshold !== "") args.push(String(banThreshold));
+      if (timeoutMinutes !== "") args.push(String(timeoutMinutes));
+    }
   } else if (name === "role") {
     if (userOption) args.push(userOption.id);
     if (roleOption) args.push(roleOption.id);
@@ -4820,6 +5286,20 @@ async function handleSlashCommand(interaction) {
     const date = optionValue(interaction, "date");
     if (action) args.push(String(action));
     if (date) args.push(String(date));
+  } else if (name === "automodpreset") {
+    const preset = optionValue(interaction, "preset");
+    if (preset) args.push(String(preset));
+  } else if (name === "afk") {
+    const reason = optionValue(interaction, "reason");
+    if (reason) args.push(...String(reason).split(/\s+/));
+  } else if (name === "modmail") {
+    const action = optionValue(interaction, "action");
+    if (action) args.push(String(action));
+    if (String(action) === "setup") {
+      if (channelOption?.id) args.push(channelOption.id);
+      if (supportRoleOption?.id) args.push(supportRoleOption.id);
+      if (categoryOption?.id) args.push(categoryOption.id);
+    }
   } else if (name === "balance") {
     if (userOption) args.push(userOption.id);
   } else if (name === "pay") {

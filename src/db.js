@@ -233,6 +233,18 @@ async function initDb() {
 
       member_count_channel_id TEXT DEFAULT NULL,
 
+      modmail_enabled INTEGER DEFAULT 0,
+      modmail_channel_id TEXT DEFAULT NULL,
+      modmail_category_id TEXT DEFAULT NULL,
+      modmail_support_role_id TEXT DEFAULT NULL,
+      warn_points_timeout_threshold INTEGER DEFAULT 3,
+      warn_points_kick_threshold INTEGER DEFAULT 5,
+      warn_points_ban_threshold INTEGER DEFAULT 7,
+      warn_timeout_minutes INTEGER DEFAULT 60,
+      snipe_enabled INTEGER DEFAULT 1,
+      snipe_retention_minutes INTEGER DEFAULT 1440,
+      afk_enabled INTEGER DEFAULT 1,
+
       claim_all_done INTEGER DEFAULT 0
     )
   `);
@@ -301,7 +313,74 @@ async function initDb() {
       user_id TEXT NOT NULL,
       moderator_id TEXT NOT NULL,
       reason TEXT NOT NULL,
+      points INTEGER NOT NULL DEFAULT 1,
       created_at BIGINT NOT NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS temp_roles (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      role_id TEXT NOT NULL,
+      moderator_id TEXT DEFAULT NULL,
+      reason TEXT DEFAULT NULL,
+      created_at BIGINT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      completed INTEGER DEFAULT 0,
+      completed_at BIGINT DEFAULT NULL,
+      UNIQUE (guild_id, user_id, role_id, expires_at)
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_afk_status (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      reason TEXT DEFAULT NULL,
+      afk_at BIGINT NOT NULL,
+      PRIMARY KEY (guild_id, user_id)
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS snipe_messages (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      author_id TEXT DEFAULT NULL,
+      content TEXT DEFAULT NULL,
+      attachments_json TEXT DEFAULT '[]',
+      deleted_at BIGINT NOT NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS edit_snipes (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      author_id TEXT DEFAULT NULL,
+      before_content TEXT DEFAULT NULL,
+      after_content TEXT DEFAULT NULL,
+      attachments_json TEXT DEFAULT '[]',
+      edited_at BIGINT NOT NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS modmail_threads (
+      id BIGSERIAL PRIMARY KEY,
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_at BIGINT NOT NULL,
+      last_message_at BIGINT NOT NULL,
+      closed_at BIGINT DEFAULT NULL
     )
   `);
 
@@ -980,6 +1059,18 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_quick_mod_actions_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS social_default_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS member_count_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS modmail_enabled INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS modmail_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS modmail_category_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS modmail_support_role_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS warn_points_timeout_threshold INTEGER DEFAULT 3`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS warn_points_kick_threshold INTEGER DEFAULT 5`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS warn_points_ban_threshold INTEGER DEFAULT 7`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS warn_timeout_minutes INTEGER DEFAULT 60`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS snipe_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS snipe_retention_minutes INTEGER DEFAULT 1440`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS afk_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE mod_warnings ADD COLUMN IF NOT EXISTS points INTEGER DEFAULT 1`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_log_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_transcript_channel_id TEXT DEFAULT NULL`);

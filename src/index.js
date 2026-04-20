@@ -291,6 +291,328 @@ async function processAutoReplies(message) {
   }
 }
 
+function formatDurationCompact(ms) {
+  const totalSeconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function attachmentsToJson(message) {
+  if (!message?.attachments?.size) return "[]";
+  return JSON.stringify(
+    [...message.attachments.values()].map((att) => ({
+      name: att.name || "attachment",
+      url: att.url || att.proxyURL || ""
+    }))
+  );
+}
+
+function readAttachmentsJson(raw) {
+  try {
+    const parsed = JSON.parse(String(raw || "[]"));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatAttachmentsList(raw) {
+  const items = readAttachmentsJson(raw);
+  if (!items.length) return "";
+  return items
+    .map((item) => {
+      const name = String(item?.name || "attachment");
+      const url = String(item?.url || "");
+      return url ? `${name}: ${url}` : name;
+    })
+    .join("\n");
+}
+
+async function getOpenModmailThreadByUser(guildId, userId) {
+  return await get(
+    `SELECT id, guild_id, user_id, channel_id, status, created_at, last_message_at
+     FROM modmail_threads
+     WHERE guild_id=? AND user_id=? AND status='open'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [guildId, userId]
+  );
+}
+
+async function getOpenModmailThreadByChannel(guildId, channelId) {
+  return await get(
+    `SELECT id, guild_id, user_id, channel_id, status, created_at, last_message_at
+     FROM modmail_threads
+     WHERE guild_id=? AND channel_id=? AND status='open'
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [guildId, channelId]
+  );
+}
+
+async function findModmailGuildForUser(userId) {
+  const rows = await all(
+    `SELECT guild_id, modmail_channel_id, modmail_category_id, modmail_support_role_id
+     FROM guild_settings
+     WHERE modmail_enabled=1 AND modmail_channel_id IS NOT NULL`
+  ).catch(() => []);
+
+  for (const row of rows) {
+    const guild = client.guilds.cache.get(row.guild_id) || await client.guilds.fetch(row.guild_id).catch(() => null);
+    if (!guild) continue;
+    const member = guild.members.cache.get(userId) || await guild.members.fetch(userId).catch(() => null);
+    if (member) return { guild, settings: row, member };
+  }
+
+  return null;
+}
+
+async function ensureModmailThread(guild, user) {
+  const settings = await getGuildSettings(guild.id).catch(() => null);
+  if (!settings?.modmail_enabled || !settings.modmail_channel_id) {
+    return { ok: false, reason: "Modmail is not configured for this server." };
+  }
+
+  const existing = await getOpenModmailThreadByUser(guild.id, user.id);
+  if (existing?.channel_id) {
+    const existingChannel = guild.channels.cache.get(existing.channel_id) || await guild.channels.fetch(existing.channel_id).catch(() => null);
+    if (existingChannel) {
+      return { ok: true, thread: existing, channel: existingChannel, reused: true };
+    }
+  }
+
+  const inboxChannel = guild.channels.cache.get(settings.modmail_channel_id) || await guild.channels.fetch(settings.modmail_channel_id).catch(() => null);
+  if (!inboxChannel) {
+    return { ok: false, reason: "Configured modmail channel was not found." };
+  }
+
+  const parentId = settings.modmail_category_id || inboxChannel.parentId || undefined;
+  const safeUser = String(user.username || user.id).toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 32) || user.id;
+  const channelName = `modmail-${safeUser}-${String(Date.now()).slice(-4)}`.slice(0, 95);
+  const overwrites = [
+    {
+      id: guild.roles.everyone.id,
+      deny: [PermissionsBitField.Flags.ViewChannel]
+    },
+    {
+      id: client.user.id,
+      allow: [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.ManageChannels,
+        PermissionsBitField.Flags.AttachFiles
+      ]
+    }
+  ];
+
+  if (settings.modmail_support_role_id) {
+    overwrites.push({
+      id: settings.modmail_support_role_id,
+      allow: [
+        PermissionsBitField.Flags.ViewChannel,
+        PermissionsBitField.Flags.SendMessages,
+        PermissionsBitField.Flags.ReadMessageHistory,
+        PermissionsBitField.Flags.AttachFiles
+      ]
+    });
+  }
+
+  for (const [, role] of guild.roles.cache) {
+    if (role.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      overwrites.push({
+        id: role.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages,
+          PermissionsBitField.Flags.ReadMessageHistory,
+          PermissionsBitField.Flags.AttachFiles
+        ]
+      });
+    }
+  }
+
+  const channel = await guild.channels.create({
+    name: channelName,
+    type: ChannelType.GuildText,
+    parent: parentId,
+    permissionOverwrites: overwrites
+  }).catch(() => null);
+
+  if (!channel) {
+    return { ok: false, reason: "Failed to create modmail channel." };
+  }
+
+  const inserted = await get(
+    `INSERT INTO modmail_threads (guild_id, user_id, channel_id, status, created_at, last_message_at)
+     VALUES (?, ?, ?, 'open', ?, ?)
+     RETURNING id, guild_id, user_id, channel_id, status, created_at, last_message_at`,
+    [guild.id, user.id, channel.id, Date.now(), Date.now()]
+  );
+
+  await channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x7bc96f)
+        .setTitle("Modmail Opened")
+        .setDescription(`DM bridge opened for ${user.tag}. Staff messages in this channel are forwarded to the user.`)
+        .addFields(
+          { name: "User", value: `${user.tag} (${user.id})`, inline: true },
+          { name: "Close", value: "Use `!modmail close` in this channel to close the thread.", inline: false }
+        )
+        .setTimestamp(new Date())
+    ]
+  }).catch(() => {});
+
+  return { ok: true, thread: inserted, channel, reused: false };
+}
+
+async function forwardUserDmToModmail(message) {
+  const target = await findModmailGuildForUser(message.author.id);
+  if (!target) {
+    await message.reply("Modmail is not enabled for any shared server.").catch(() => {});
+    return true;
+  }
+
+  const threadResult = await ensureModmailThread(target.guild, message.author);
+  if (!threadResult.ok || !threadResult.channel) {
+    await message.reply(threadResult.reason || "I could not open modmail.").catch(() => {});
+    return true;
+  }
+
+  const attachmentText = formatAttachmentsList(attachmentsToJson(message));
+  const content = String(message.content || "").trim() || "(no text)";
+  await threadResult.channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0x3498db)
+        .setTitle(threadResult.reused ? "Modmail Reply" : "New Modmail Message")
+        .setDescription(content)
+        .addFields(
+          { name: "From", value: `${message.author.tag} (${message.author.id})`, inline: true },
+          ...(attachmentText ? [{ name: "Attachments", value: attachmentText }] : [])
+        )
+        .setTimestamp(new Date())
+    ]
+  }).catch(() => {});
+
+  await run(`UPDATE modmail_threads SET last_message_at=? WHERE id=?`, [Date.now(), threadResult.thread.id]).catch(() => {});
+  await message.react("📨").catch(() => {});
+  return true;
+}
+
+async function relayModmailChannelMessage(message) {
+  if (!message?.guild || !message.channelId) return false;
+  const thread = await getOpenModmailThreadByChannel(message.guild.id, message.channelId);
+  if (!thread) return false;
+
+  const settings = await getGuildSettings(message.guild.id).catch(() => null);
+  const isSupport = Boolean(settings?.modmail_support_role_id && message.member?.roles?.cache?.has(settings.modmail_support_role_id));
+  const isAdmin = Boolean(message.member?.permissions?.has(PermissionsBitField.Flags.Administrator));
+  if (!isSupport && !isAdmin) return false;
+
+  const prefix = String(settings?.command_prefix || "!").trim() || "!";
+  if (String(message.content || "").startsWith(prefix)) return true;
+
+  const user = await client.users.fetch(thread.user_id).catch(() => null);
+  if (!user) return true;
+
+  const attachmentText = formatAttachmentsList(attachmentsToJson(message));
+  const content = String(message.content || "").trim() || "(no text)";
+  await user.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor(0xa8d5a8)
+        .setTitle(`Reply from ${message.guild.name}`)
+        .setDescription(content)
+        .addFields(
+          { name: "Staff", value: `${message.author.tag}`, inline: true },
+          ...(attachmentText ? [{ name: "Attachments", value: attachmentText }] : [])
+        )
+        .setTimestamp(new Date())
+    ]
+  }).catch(() => {});
+
+  await run(`UPDATE modmail_threads SET last_message_at=? WHERE id=?`, [Date.now(), thread.id]).catch(() => {});
+  return true;
+}
+
+async function closeModmailThread(guild, channelId) {
+  const thread = await getOpenModmailThreadByChannel(guild.id, channelId);
+  if (!thread) return { ok: false, reason: "This channel is not an open modmail thread." };
+
+  await run(`UPDATE modmail_threads SET status='closed', closed_at=?, last_message_at=? WHERE id=?`, [Date.now(), Date.now(), thread.id]);
+  const user = await client.users.fetch(thread.user_id).catch(() => null);
+  if (user) {
+    await user.send(`Your modmail thread for **${guild.name}** has been closed.`).catch(() => {});
+  }
+  return { ok: true, thread };
+}
+
+async function storeDeletedMessageForSnipe(message) {
+  const settings = await getGuildSettings(message.guild.id).catch(() => null);
+  if (!settings?.snipe_enabled) return;
+
+  await run(
+    `INSERT INTO snipe_messages (guild_id, channel_id, message_id, author_id, content, attachments_json, deleted_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      message.guild.id,
+      message.channel.id,
+      message.id,
+      message.author?.id || null,
+      String(message.content || ""),
+      attachmentsToJson(message),
+      Date.now()
+    ]
+  ).catch(() => {});
+}
+
+async function storeEditedMessageForSnipe(oldMessage, newMessage) {
+  const settings = await getGuildSettings(newMessage.guild.id).catch(() => null);
+  if (!settings?.snipe_enabled) return;
+
+  await run(
+    `INSERT INTO edit_snipes (guild_id, channel_id, message_id, author_id, before_content, after_content, attachments_json, edited_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      newMessage.guild.id,
+      newMessage.channel.id,
+      newMessage.id,
+      newMessage.author?.id || null,
+      String(oldMessage.content || ""),
+      String(newMessage.content || ""),
+      attachmentsToJson(newMessage),
+      Date.now()
+    ]
+  ).catch(() => {});
+}
+
+function permissionDiffLines(oldPermissions, newPermissions) {
+  const oldSet = new PermissionsBitField(oldPermissions);
+  const newSet = new PermissionsBitField(newPermissions);
+  const added = [];
+  const removed = [];
+  for (const [name, bit] of Object.entries(PermissionsBitField.Flags)) {
+    const hadOld = oldSet.has(bit);
+    const hasNew = newSet.has(bit);
+    if (hadOld === hasNew) continue;
+    if (hasNew) added.push(name);
+    else removed.push(name);
+  }
+
+  const lines = [];
+  if (added.length) lines.push(`Added: ${added.join(", ")}`);
+  if (removed.length) lines.push(`Removed: ${removed.join(", ")}`);
+  return lines;
+}
+
 // ─────────────────────────────────────────────────────
 
 function randInt(min, max) {
@@ -1268,6 +1590,7 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.DirectMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
     GatewayIntentBits.GuildMembers,
@@ -1360,6 +1683,51 @@ client.once(Events.ClientReady, async () => {
         console.error("Reminder check failed:", err);
       }
     }, 15_000);
+
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const dueRoles = await all(`SELECT * FROM temp_roles WHERE completed=0 AND expires_at <= ? ORDER BY expires_at ASC LIMIT 50`, [now]);
+        for (const row of dueRoles) {
+          const guild = client.guilds.cache.get(row.guild_id) || await client.guilds.fetch(row.guild_id).catch(() => null);
+          if (!guild) {
+            await run(`UPDATE temp_roles SET completed=1, completed_at=? WHERE id=?`, [now, row.id]).catch(() => {});
+            continue;
+          }
+          const member = guild.members.cache.get(row.user_id) || await guild.members.fetch(row.user_id).catch(() => null);
+          const role = guild.roles.cache.get(row.role_id) || await guild.roles.fetch(row.role_id).catch(() => null);
+          if (member && role && member.roles.cache.has(role.id)) {
+            await member.roles.remove(role, "Temporary role expired").catch(() => {});
+            await sendGuildLog(guild, {
+              eventKey: "member_role_update",
+              actorUserId: row.moderator_id || null,
+              color: LOG_THEME.info,
+              title: "⏳ Temporary Role Expired",
+              description: `${userLabel(member.user)} lost @${role.name} because the temporary role expired.`,
+              fields: [{ name: "Duration Ended", value: new Date(Number(row.expires_at || now)).toLocaleString(), inline: true }]
+            });
+          }
+          await run(`UPDATE temp_roles SET completed=1, completed_at=? WHERE id=?`, [now, row.id]).catch(() => {});
+        }
+      } catch (err) {
+        console.error("Temp role expiry check failed:", err);
+      }
+    }, 30_000);
+
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const guildSettingsRows = await all(`SELECT guild_id, snipe_retention_minutes FROM guild_settings WHERE snipe_enabled=1`);
+        for (const row of guildSettingsRows) {
+          const retentionMs = Math.max(1, Number(row.snipe_retention_minutes || 1440)) * 60_000;
+          const cutoff = now - retentionMs;
+          await run(`DELETE FROM snipe_messages WHERE guild_id=? AND deleted_at < ?`, [row.guild_id, cutoff]).catch(() => {});
+          await run(`DELETE FROM edit_snipes WHERE guild_id=? AND edited_at < ?`, [row.guild_id, cutoff]).catch(() => {});
+        }
+      } catch (err) {
+        console.error("Snipe cleanup failed:", err);
+      }
+    }, 10 * 60_000);
 
     // Check for birthdays once a day at midnight (or on startup)
     const checkBirthdays = async () => {
@@ -1501,10 +1869,58 @@ client.once(Events.ClientReady, async () => {
 // ─────────────────────────────────────────────────────
 
 client.on(Events.MessageCreate, async (message) => {
+  if (!message.guild && !message.author?.bot) {
+    await forwardUserDmToModmail(message).catch((err) => {
+      console.error("Direct modmail handling failed:", err);
+    });
+    return;
+  }
+
   // Commands first (important)
   await handleCommands(message);
 
   if (!message.guild || message.author.bot) return;
+
+  const guildSettings = await getGuildSettings(message.guild.id).catch(() => null);
+  const commandPrefix = String(guildSettings?.command_prefix || "!").trim() || "!";
+  const lowerContent = String(message.content || "").trim().toLowerCase();
+
+  if (await relayModmailChannelMessage(message).catch(() => false)) {
+    return;
+  }
+
+  if (guildSettings?.afk_enabled) {
+    const isAfkCommand = lowerContent.startsWith(`${commandPrefix}afk`);
+    if (!isAfkCommand) {
+      const existingAfk = await get(`SELECT reason, afk_at FROM user_afk_status WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]).catch(() => null);
+      if (existingAfk) {
+        await run(`DELETE FROM user_afk_status WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]).catch(() => {});
+        const awayFor = formatDurationCompact(Date.now() - Number(existingAfk.afk_at || Date.now()));
+        await message.reply({ content: `Welcome back. Your AFK status was cleared after ${awayFor}.`, allowedMentions: { parse: [] } }).catch(() => {});
+      }
+    }
+
+    const mentionIds = [...new Set(message.mentions.users.map((user) => user.id).filter((id) => id !== message.author.id))];
+    if (mentionIds.length) {
+      const rows = await all(
+        `SELECT user_id, reason, afk_at FROM user_afk_status WHERE guild_id=? AND user_id = ANY($2)`,
+        [message.guild.id, mentionIds]
+      ).catch(() => []);
+      if (rows.length) {
+        const afkLines = [];
+        for (const row of rows) {
+          const user = message.guild.members.cache.get(row.user_id)?.user || await client.users.fetch(row.user_id).catch(() => null);
+          const name = user ? user.tag : row.user_id;
+          const awayFor = formatDurationCompact(Date.now() - Number(row.afk_at || Date.now()));
+          const reason = String(row.reason || "AFK").trim();
+          afkLines.push(`• ${name} is AFK (${awayFor})${reason ? `: ${reason}` : ""}`);
+        }
+        if (afkLines.length) {
+          await message.reply({ content: afkLines.join("\n"), allowedMentions: { parse: [] } }).catch(() => {});
+        }
+      }
+    }
+  }
 
   await processAutoReplies(message).catch((err) => {
     console.error("Auto-reply handler failed:", err?.message || err);
@@ -2291,6 +2707,8 @@ client.on(Events.MessageDelete, async (message) => {
     await message.fetch().catch(() => {});
   }
 
+  await storeDeletedMessageForSnipe(message).catch(() => {});
+
   const deleter = await getAuditExecutor(message.guild, AuditLogEvent.MessageDelete, message.author?.id);
   const deletedBy = deleter
     ? userLabel(deleter)
@@ -2357,6 +2775,8 @@ client.on(Events.MessageUpdate, async (oldMessage, newMessage) => {
   if (newMessage.partial) await newMessage.fetch().catch(() => {});
   if ((oldMessage.content || "") === (newMessage.content || "")) return;
   if (newMessage.author?.bot) return;
+
+  await storeEditedMessageForSnipe(oldMessage, newMessage).catch(() => {});
 
   const beforeMediaItems = collectRenderableMediaItems(oldMessage);
   const afterMediaItems = collectRenderableMediaItems(newMessage);
@@ -2836,7 +3256,7 @@ client.on(Events.RoleUpdate, async (oldRole, newRole) => {
     changes.push({ name: "Color", value: `${oldRole.hexColor} → ${newRole.hexColor}`, inline: true });
   }
   if (oldRole.permissions.bitfield !== newRole.permissions.bitfield) {
-    changes.push({ name: "Permissions", value: "Changed", inline: true });
+    changes.push({ name: "Permissions", value: permissionDiffLines(oldRole.permissions.bitfield, newRole.permissions.bitfield).join("\n") || "Changed", inline: false });
   }
   if (oldRole.hoist !== newRole.hoist) {
     changes.push({ name: "Display Separately", value: `${oldRole.hoist} → ${newRole.hoist}`, inline: true });

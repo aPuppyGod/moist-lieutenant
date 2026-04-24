@@ -107,7 +107,9 @@ function replaceAutoReplyPlaceholders(text, message) {
     .replace(/{servername}/gi, message.guild?.name || "")
     .replace(/{serverid}/gi, message.guild?.id || "")
     .replace(/{channelname}/gi, message.channel?.name || "")
-    .replace(/{channelid}/gi, message.channel?.id || "");
+    .replace(/{channelid}/gi, message.channel?.id || "")
+    .replace(/{role:(\d+)}/gi, (_, id) => `<@&${id}>`)
+    .replace(/{channel:(\d+)}/gi, (_, id) => `<#${id}>`);
 }
 
 function pickRandomItem(items) {
@@ -627,7 +629,9 @@ function formatLevelUpMessage(template, { user, level, xp }) {
   )
     .replaceAll("{user}", user)
     .replaceAll("{level}", String(level))
-    .replaceAll("{xp}", String(xp));
+    .replaceAll("{xp}", String(xp))
+    .replace(/{role:(\d+)}/gi, (_, id) => `<@&${id}>`)
+    .replace(/{channel:(\d+)}/gi, (_, id) => `<#${id}>`);
 }
 
 const LOG_THEME = {
@@ -1753,7 +1757,9 @@ client.once(Events.ClientReady, async () => {
           
           const message = settings.message
             .replace(/{user}/g, `<@${birthday.user_id}>`)
-            .replace(/{server}/g, guild.name);
+            .replace(/{server}/g, guild.name)
+            .replace(/{role:(\d+)}/g, (_, id) => `<@&${id}>`)
+            .replace(/{channel:(\d+)}/g, (_, id) => `<#${id}>`);
           
           await channel.send(message).catch(() => {});
           
@@ -2907,7 +2913,9 @@ client.on(Events.GuildMemberAdd, async (member) => {
         let message = (welcomeSettings.welcome_message || 'Welcome {user} to {server}!')
           .replace(/{user}/g, `<@${member.id}>`)
           .replace(/{server}/g, member.guild.name)
-          .replace(/{count}/g, String(member.guild.memberCount));
+          .replace(/{count}/g, String(member.guild.memberCount))
+          .replace(/{role:(\d+)}/g, (_, id) => `<@&${id}>`)
+          .replace(/{channel:(\d+)}/g, (_, id) => `<#${id}>`);
         
         if (welcomeSettings.welcome_embed) {
           const embed = new EmbedBuilder()
@@ -2981,7 +2989,9 @@ client.on(Events.GuildMemberRemove, async (member) => {
         let message = (goodbyeSettings.goodbye_message || 'Goodbye {user}!')
           .replace(/{user}/g, member.user.tag)
           .replace(/{server}/g, member.guild.name)
-          .replace(/{count}/g, String(member.guild.memberCount));
+          .replace(/{count}/g, String(member.guild.memberCount))
+          .replace(/{role:(\d+)}/g, (_, id) => `<@&${id}>`)
+          .replace(/{channel:(\d+)}/g, (_, id) => `<#${id}>`);
         
         if (goodbyeSettings.goodbye_embed) {
           const embed = new EmbedBuilder()

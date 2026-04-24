@@ -4797,7 +4797,9 @@ async function executeCommand(message, cmd, args, prefix) {
       .replace(/{servername}/gi, message.guild?.name || 'Unknown')
       .replace(/{serverid}/gi, message.guild?.id || 'Unknown')
       .replace(/{channelname}/gi, message.channel?.name || 'Unknown')
-      .replace(/{channelid}/gi, message.channel?.id || 'Unknown');
+      .replace(/{channelid}/gi, message.channel?.id || 'Unknown')
+      .replace(/{role:(\d+)}/gi, (_, id) => `<@&${id}>`)
+      .replace(/{channel:(\d+)}/gi, (_, id) => `<#${id}>`);
     if (targetMember) {
       result = result
         .replace(/{target}/gi, `<@${targetMember.id}>`)

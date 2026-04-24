@@ -4923,7 +4923,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </select>
         </label>
         <br/><br/>
-        <label>Welcome Message <span style="font-size:0.85em;opacity:0.8;">(Use {user}, {server}, {count} as placeholders)</span>
+        <label>Welcome Message <span style="font-size:0.85em;opacity:0.8;">(Use {user}, {server}, {count}, {role:ID}, {channel:ID} as placeholders)</span>
           <textarea name="welcome_message" rows="3" style="width:100%;max-width:600px;font-family:inherit;">${escapeHtml(welcomeSettings?.welcome_message || "Welcome {user} to {server}!")}</textarea>
         </label>
         <br/>
@@ -4954,7 +4954,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </select>
         </label>
         <br/><br/>
-        <label>Goodbye Message <span style="font-size:0.85em;opacity:0.8;">(Use {user}, {server}, {count} as placeholders)</span>
+        <label>Goodbye Message <span style="font-size:0.85em;opacity:0.8;">(Use {user}, {server}, {count}, {role:ID}, {channel:ID} as placeholders)</span>
           <textarea name="goodbye_message" rows="3" style="width:100%;max-width:600px;font-family:inherit;">${escapeHtml(welcomeSettings?.goodbye_message || "Goodbye {user}!")}</textarea>
         </label>
         <br/>
@@ -5564,7 +5564,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <br/><br/>
 
         <label>
-          Level-up Message (supports {user}, {level}, {xp})<br/>
+          Level-up Message (supports {user}, {level}, {xp}, {role:ID}, {channel:ID})<br/>
           <input name="level_up_message"
                  value="${escapeHtml(settings.level_up_message || "")}"
                  style="max-width:520px;width:100%;box-sizing:border-box;" />
@@ -5844,7 +5844,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </label>
           
           <label>
-            <span>Birthday Message (use {user} for mention, {server} for server name)</span>
+            <span>Birthday Message (use {user} for mention, {server} for server name, {role:ID}, {channel:ID})</span>
             <textarea name="message" rows="2" style="width:100%;max-width:500px;font-family:inherit;">${escapeHtml(birthdaySettings?.message || "Happy birthday {user}! 🎂🎉")}</textarea>
           </label>
           

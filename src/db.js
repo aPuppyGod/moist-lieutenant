@@ -2,7 +2,11 @@
 // Uses process.env.DATABASE_URL
 // Keeps the same API: run/get/all/initDb
 
-const { Pool } = require("pg");
+const { Pool, types } = require("pg");
+
+// Parse BIGINT (int8) columns as numbers so arithmetic in command handlers
+// does not concatenate strings (e.g. "100" + 50 => "10050").
+types.setTypeParser(20, (value) => Number(value));
 
 // Railway provides DATABASE_URL automatically when you add Postgres
 const DATABASE_URL = process.env.DATABASE_URL;

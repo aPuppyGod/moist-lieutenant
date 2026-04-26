@@ -4233,6 +4233,9 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const giveaways = await all(`SELECT * FROM giveaways WHERE guild_id=? ORDER BY end_time DESC LIMIT 20`, [guildId]);
     const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
     const topEconomy = await all(`SELECT user_id, balance, bank, (balance + bank) as total FROM user_economy WHERE guild_id=? ORDER BY total DESC LIMIT 10`, [guildId]);
+    const economyShopItems = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [guildId]);
+    const economyJobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY min_pay ASC`, [guildId]);
+    const recentTransactions = await all(`SELECT * FROM economy_transactions WHERE guild_id=? ORDER BY id DESC LIMIT 20`, [guildId]);
     const reactionRolesConfig = await all(`SELECT * FROM reaction_roles WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
     const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
@@ -5733,94 +5736,256 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       ` : ""}
 
       ${activeModule === "economy" ? `
-      <h3>💰 Economy System</h3>
-      <p class="section-description">Virtual currency system for your server</p>
-      
-      <form method="post" action="/guild/${guildId}/economy-settings">
-        <div style="display:grid; gap:12px;">
-          <label>
-            <input type="checkbox" name="enabled" ${economySettings?.enabled ? "checked" : ""} />
-            <span style="font-weight:600;">Enable Economy</span>
-          </label>
-          
-          <label>
-            <span>Currency Name</span>
-            <input name="currency_name" value="${escapeHtml(economySettings?.currency_name || "coins")}" style="max-width:200px;" />
-          </label>
-          
-          <label>
-            <span>Currency Symbol</span>
-            <input name="currency_symbol" value="${escapeHtml(economySettings?.currency_symbol || "🪙")}" style="max-width:100px;" />
-          </label>
-          
-          <label>
-            <span>Economy Prefix (for economy commands)</span>
-            <input name="economy_prefix" value="${escapeHtml(economySettings?.economy_prefix || "$")}" style="max-width:100px;" />
-          </label>
-          
-          <label>
-            <span>Daily Reward Amount (base)</span>
-            <input type="number" name="daily_amount" value="${economySettings?.daily_amount || 100}" min="1" max="100000" style="max-width:150px;" />
-          </label>
-          
-          <label>
-            <span>Daily Streak Bonus (per day)</span>
-            <input type="number" name="daily_streak_bonus" value="${economySettings?.daily_streak_bonus || 10}" min="0" max="10000" style="max-width:150px;" />
-          </label>
-          
-          <label>
-            <span>Weekly Reward Amount</span>
-            <input type="number" name="weekly_amount" value="${economySettings?.weekly_amount || 500}" min="1" max="500000" style="max-width:150px;" />
-          </label>
-          
-          <label>
-            <input type="checkbox" name="rob_enabled" ${economySettings?.rob_enabled ? "checked" : ""} />
-            <span>Enable Robbing</span>
-          </label>
-          
-          <label>
-            <span>Rob Cooldown (seconds)</span>
-            <input type="number" name="rob_cooldown" value="${economySettings?.rob_cooldown || 3600}" min="60" max="86400" style="max-width:150px;" />
-          </label>
-          <label>
-            <span>Economy Guide</span>
-            <textarea name="economy_guide" rows="10" style="width:100%;max-width:100%;font-family:inherit;">${escapeHtml(economySettings?.economy_guide || "")}</textarea>
-            <small style="display:block;margin-top:6px;color:rgba(0,0,0,0.6);">This text is saved to your server economy settings and can be used as an editable admin guide.</small>
-          </label>
-        </div>
-        <button type="submit" style="margin-top:16px;">Save Economy Settings</button>
-      </form>
+      <h3>🪙 The Murk Economy</h3>
+      <p class="section-description">Manage currency, shop items, jobs, and the wealth rankings of your server.</p>
 
-      ${topEconomy.length > 0 ? `
-      <h4 style="margin-top:24px;">Top 10 Richest Members</h4>
-      <table>
-        <tr>
-          <th>Rank</th>
-          <th>User</th>
-          <th>Balance</th>
-        </tr>
-        ${topEconomy.map((row, i) => {
-          const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-          return `
+      <style>
+        .eco-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+        .eco-tab { padding:7px 16px; border-radius:6px; border:2px solid var(--border,#ccc); background:transparent; cursor:pointer; font-size:14px; font-weight:600; color:inherit; }
+        .eco-tab.active { background:var(--accent,#2ecc71); color:#fff; border-color:var(--accent,#2ecc71); }
+        .eco-panel { display:none; }
+        .eco-panel.active { display:block; }
+        .eco-stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin:16px 0; }
+        .eco-stat { background:var(--card-bg,#f9f9f9); border:1px solid var(--border,#ddd); border-radius:10px; padding:16px; text-align:center; }
+        .eco-stat .num { font-size:24px; font-weight:700; color:var(--accent,#2ecc71); }
+        .eco-stat .lbl { font-size:12px; opacity:0.7; margin-top:4px; }
+        .murk-lb { width:100%; border-collapse:collapse; margin-top:12px; }
+        .murk-lb th { background:var(--card-bg,#f0f0f0); padding:8px 12px; text-align:left; font-size:13px; border-bottom:2px solid var(--border,#ddd); }
+        .murk-lb td { padding:8px 12px; border-bottom:1px solid var(--border,#eee); font-size:14px; }
+        .murk-lb tr:hover td { background:var(--hover,rgba(46,204,113,0.08)); }
+        .item-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; margin:16px 0; }
+        .item-card { background:var(--card-bg,#f9f9f9); border:1px solid var(--border,#ddd); border-radius:10px; padding:14px; }
+        .item-card .item-name { font-weight:700; font-size:15px; }
+        .item-card .item-price { color:var(--accent,#2ecc71); font-weight:600; font-size:13px; }
+        .item-card .item-type { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; background:var(--border,#e0e0e0); margin:4px 0; }
+        .item-card .item-desc { font-size:13px; opacity:0.8; margin-top:6px; }
+        .job-card { background:var(--card-bg,#f9f9f9); border:1px solid var(--border,#ddd); border-radius:10px; padding:14px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+        .job-card .job-name { font-weight:700; }
+        .job-card .job-meta { font-size:13px; opacity:0.7; }
+        .txn-row-positive td { color:#2ecc71; }
+        .txn-row-negative td:last-child { color:#e74c3c; }
+        .badge-type { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600; }
+        .badge-tool { background:#3498db22; color:#3498db; }
+        .badge-consumable { background:#9b59b622; color:#9b59b6; }
+        .badge-material { background:#e67e2222; color:#e67e22; }
+        .badge-collectible { background:#f1c40f22; color:#b7950b; }
+        .badge-single { background:#e74c3c22; color:#e74c3c; }
+        .badge-misc { background:#9599a222; color:#555; }
+      </style>
+
+      <div class="eco-tabs">
+        <button class="eco-tab active" onclick="showEcoPanel('settings',this)">⚙️ Settings</button>
+        <button class="eco-tab" onclick="showEcoPanel('leaderboard',this)">🏆 Leaderboard</button>
+        <button class="eco-tab" onclick="showEcoPanel('shop',this)">🛒 Shop Items</button>
+        <button class="eco-tab" onclick="showEcoPanel('jobs',this)">💼 Jobs</button>
+        <button class="eco-tab" onclick="showEcoPanel('transactions',this)">📋 Transactions</button>
+      </div>
+      <script>
+        function showEcoPanel(id,btn){
+          document.querySelectorAll('.eco-panel').forEach(p=>p.classList.remove('active'));
+          document.querySelectorAll('.eco-tab').forEach(b=>b.classList.remove('active'));
+          document.getElementById('eco-'+id).classList.add('active');
+          btn.classList.add('active');
+        }
+      </script>
+
+      <!-- ── SETTINGS ── -->
+      <div id="eco-settings" class="eco-panel active">
+        <form method="post" action="/guild/${guildId}/economy-settings">
+          <div style="display:grid;gap:14px;max-width:520px;">
+            <label style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" name="enabled" ${economySettings?.enabled ? "checked" : ""} />
+              <span style="font-weight:600;">Enable Economy System</span>
+            </label>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <label>
+                <span>Currency Name</span>
+                <input name="currency_name" value="${escapeHtml(economySettings?.currency_name || "Murk Coins")}" />
+              </label>
+              <label>
+                <span>Currency Symbol</span>
+                <input name="currency_symbol" value="${escapeHtml(economySettings?.currency_symbol || "🪙")}" style="max-width:80px;" />
+              </label>
+            </div>
+
+            <label>
+              <span>Economy Command Prefix</span>
+              <input name="economy_prefix" value="${escapeHtml(economySettings?.economy_prefix || "$")}" style="max-width:100px;" />
+              <small style="display:block;opacity:0.6;margin-top:3px;">Prefix specifically for economy commands (e.g. $ or !)</small>
+            </label>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
+              <label>
+                <span>Daily Reward</span>
+                <input type="number" name="daily_amount" value="${economySettings?.daily_amount || 100}" min="1" max="100000" />
+              </label>
+              <label>
+                <span>Streak Bonus / day</span>
+                <input type="number" name="daily_streak_bonus" value="${economySettings?.daily_streak_bonus || 10}" min="0" max="10000" />
+              </label>
+              <label>
+                <span>Weekly Reward</span>
+                <input type="number" name="weekly_amount" value="${economySettings?.weekly_amount || 500}" min="1" max="500000" />
+              </label>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <label style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" name="rob_enabled" ${economySettings?.rob_enabled ? "checked" : ""} />
+                <span>Enable Robbing</span>
+              </label>
+              <label>
+                <span>Rob Cooldown (seconds)</span>
+                <input type="number" name="rob_cooldown" value="${economySettings?.rob_cooldown || 3600}" min="60" max="86400" />
+              </label>
+            </div>
+
+            <label>
+              <span>Economy Guide / Notes (admin-only memo)</span>
+              <textarea name="economy_guide" rows="5" style="width:100%;font-family:inherit;">${escapeHtml(economySettings?.economy_guide || "")}</textarea>
+            </label>
+          </div>
+          <button type="submit" style="margin-top:16px;">💾 Save Economy Settings</button>
+        </form>
+
+        <div class="info-box" style="margin-top:20px;">
+          <strong>Quick Command Reference</strong>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px;margin-top:8px;font-size:13px;">
+            <code>balance / bal</code>
+            <code>daily / weekly</code>
+            <code>pay &lt;user&gt; &lt;amount&gt;</code>
+            <code>deposit / withdraw</code>
+            <code>rob @user</code>
+            <code>bankrob</code>
+            <code>fish / dig</code>
+            <code>adventure / explore</code>
+            <code>shop / buy &lt;#&gt;</code>
+            <code>inventory / inv</code>
+            <code>craft / crafting</code>
+            <code>prestige</code>
+            <code>class</code>
+            <code>bounty / bounties</code>
+            <code>slots / coinflip / dice</code>
+            <code>baltop / richest</code>
+            <code>guide / howtoplay</code>
+            <code>postguide (admin)</code>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── LEADERBOARD ── -->
+      <div id="eco-leaderboard" class="eco-panel">
+        ${topEconomy.length > 0 ? `
+        <div class="eco-stat-grid">
+          <div class="eco-stat">
+            <div class="num">${topEconomy.length}</div>
+            <div class="lbl">Players on Board</div>
+          </div>
+          <div class="eco-stat">
+            <div class="num">${topEconomy[0]?.total?.toLocaleString?.() ?? topEconomy[0]?.total ?? 0}</div>
+            <div class="lbl">Top Balance (wallet+bank)</div>
+          </div>
+          <div class="eco-stat">
+            <div class="num">${Math.round(topEconomy.reduce((s,r)=>s+(r.total||0),0)/topEconomy.length).toLocaleString()}</div>
+            <div class="lbl">Average (top 10)</div>
+          </div>
+        </div>
+        <table class="murk-lb">
+          <thead>
             <tr>
-              <td>${medal}</td>
-              <td><@${row.user_id}></td>
-              <td>${row.total} ${economySettings?.currency_name || "coins"}</td>
+              <th>Rank</th>
+              <th>User</th>
+              <th>💵 Wallet</th>
+              <th>🏦 Bank</th>
+              <th>💎 Total</th>
             </tr>
-          `;
-        }).join("")}
-      </table>
-      ` : ""}
-      
-      <div class="info-box">
-        <strong>Commands:</strong>
-        <ul style="margin:8px 0;">
-          <li><code>!balance [@user]</code> or <code>!bal</code> - Check balance</li>
-          <li><code>!daily</code> - Claim daily reward</li>
-          <li><code>!weekly</code> - Claim weekly reward</li>
-          <li><code>!pay &lt;user&gt; &lt;amount&gt;</code> - Send money to another user</li>
-          <li><code>!baltop</code> or <code>!richest</code> - View leaderboard</li>
-        </ul>
+          </thead>
+          <tbody>
+            ${topEconomy.map((row, i) => {
+              const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
+              return `<tr>
+                <td>${medal}</td>
+                <td><code>${row.user_id}</code></td>
+                <td>${(row.balance||0).toLocaleString()}</td>
+                <td>${(row.bank||0).toLocaleString()}</td>
+                <td><strong>${(row.total||0).toLocaleString()}</strong> ${escapeHtml(economySettings?.currency_name || "coins")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+        ` : `<p style="opacity:0.6;margin-top:16px;">No economy data yet. Members need to run <code>daily</code> or earn coins first.</p>`}
+      </div>
+
+      <!-- ── SHOP ITEMS ── -->
+      <div id="eco-shop" class="eco-panel">
+        ${economyShopItems.length > 0 ? `
+        <p style="margin-bottom:12px;opacity:0.7;">${economyShopItems.length} item${economyShopItems.length !== 1 ? "s" : ""} in the Murk Grand Bazaar</p>
+        <div class="item-grid">
+          ${economyShopItems.map(item => {
+            const typeClass = `badge-${item.item_type || "misc"}`;
+            return `<div class="item-card">
+              ${item.item_image_url ? `<img src="${escapeHtml(item.item_image_url)}" style="width:48px;height:48px;object-fit:cover;border-radius:6px;float:right;margin-left:8px;" onerror="this.style.display='none'" />` : ""}
+              <div class="item-name">${escapeHtml(item.name)}</div>
+              <div class="item-price">🪙 ${(item.price||0).toLocaleString()} ${escapeHtml(economySettings?.currency_name || "coins")}</div>
+              <span class="badge-type ${typeClass}">${item.item_type || "misc"}</span>
+              ${item.use_effect ? `<span class="badge-type" style="background:#1a7a4a22;color:#1a7a4a;">🔧 ${escapeHtml(item.use_effect)}</span>` : ""}
+              <div class="item-desc">${escapeHtml(item.description || "")}</div>
+              <div style="font-size:11px;opacity:0.5;margin-top:6px;">ID: ${escapeHtml(item.item_id)}</div>
+            </div>`;
+          }).join("")}
+        </div>
+        ` : `<p style="opacity:0.6;margin-top:16px;">No shop items loaded yet. The Murk Catalog seeds automatically when economy is enabled and the first shop command is used.</p>`}
+      </div>
+
+      <!-- ── JOBS ── -->
+      <div id="eco-jobs" class="eco-panel">
+        ${economyJobs.length > 0 ? `
+        ${economyJobs.map(job => `
+          <div class="job-card">
+            <div>
+              <div class="job-name">💼 ${escapeHtml(job.name)}</div>
+              <div class="job-meta">Pay: ${job.min_pay}–${job.max_pay} ${escapeHtml(economySettings?.currency_name || "coins")} per shift</div>
+              <div class="job-meta">Requires ${job.required_shifts} total shifts to apply · ${job.weekly_shifts_required} shifts/week to keep</div>
+            </div>
+          </div>
+        `).join("")}
+        ` : `<p style="opacity:0.6;margin-top:16px;">No jobs configured. Jobs are seeded automatically with the economy system.</p>`}
+
+        <div class="info-box" style="margin-top:16px;">
+          <strong>How Jobs Work</strong>
+          <ul style="margin:8px 0;font-size:13px;">
+            <li><code>job list</code> — Browse available positions</li>
+            <li><code>job apply &lt;name&gt;</code> — Apply once you have enough shifts</li>
+            <li><code>work</code> — Complete a shift (1h cooldown, interactive mini-game)</li>
+            <li><code>job info</code> — Check your current position and weekly progress</li>
+            <li>Miss your weekly quota → automatically fired</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- ── TRANSACTIONS ── -->
+      <div id="eco-transactions" class="eco-panel">
+        ${recentTransactions.length > 0 ? `
+        <p style="opacity:0.6;margin-bottom:12px;">Last 20 transactions server-wide</p>
+        <table class="murk-lb">
+          <thead>
+            <tr><th>User</th><th>Type</th><th>Amount</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            ${recentTransactions.map(txn => {
+              const amt = txn.amount || 0;
+              const cls = amt >= 0 ? "txn-row-positive" : "txn-row-negative";
+              return `<tr class="${cls}">
+                <td><code>${txn.user_id}</code></td>
+                <td><span class="badge-type" style="background:#3498db22;color:#3498db;">${escapeHtml(txn.type||"")}</span></td>
+                <td>${amt >= 0 ? "+" : ""}${amt.toLocaleString()}</td>
+                <td style="opacity:0.8;font-size:13px;">${escapeHtml(txn.description||"")}</td>
+              </tr>`;
+            }).join("")}
+          </tbody>
+        </table>
+        ` : `<p style="opacity:0.6;margin-top:16px;">No transactions recorded yet.</p>`}
       </div>
       ` : ""}
 

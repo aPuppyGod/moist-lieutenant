@@ -1,4 +1,4 @@
-// src/commands.js
+﻿// src/commands.js
 const { PermissionsBitField, ChannelType, AttachmentBuilder, EmbedBuilder } = require("discord.js");
 const { get, all, run } = require("./db");
 const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
@@ -8,6 +8,7 @@ registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'stati
 const { getLevelRoles, getGuildSettings, upsertReactionRoleBinding, removeReactionRoleBinding, getReactionRoleBindings } = require("./settings");
 const { normalizeEmojiKey } = require("./reactionRoles");
 const { cmdFish, cmdDig, cmdRobBank, cmdPhone, cmdAdventure, cmdExplore, cmdBounty, cmdCraft, cmdPrestige, cmdClass, cmdUse, cmdItemInfo, cmdGift } = require("./economy");
+const { cmdGuide, cmdPostGuide } = require("./guide");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
 const path = require("path");
@@ -19,9 +20,9 @@ const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
 const MODERATION_PERMISSION = PermissionsBitField.Flags.ModerateMembers;
 const DEFAULT_MOD_COMMAND_PERMISSION = PermissionsBitField.Flags.ManageMessages;
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Permission helpers
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function isAdminOrManager(member) {
   if (!member) return false;
@@ -58,9 +59,9 @@ async function requireModerator(message) {
   return false;
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Private VC room lookup + auth
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function getRoomByTextChannel(guildId, textChannelId) {
   return await get(
@@ -92,9 +93,9 @@ async function assertVoiceCmdAllowed(message) {
   return { ok: true, room };
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Role hierarchy check for moderation
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function canModerate(executor, target) {
   if (!executor || !target) return false;
@@ -108,9 +109,9 @@ function canModerate(executor, target) {
   return executorHighest.position > targetHighest.position;
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Parsing helpers
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function parseCommand(content, prefixes) {
   const matchedPrefix = prefixes.find((p) => content.startsWith(p));
@@ -252,9 +253,9 @@ async function setUserXp(guildId, userId, xp) {
   );
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Command implementations
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 // Draw avatar border and frame effects
 function drawAvatarBorder(ctx, prefs) {
@@ -434,7 +435,7 @@ async function cmdSetModRole(message, args) {
     [message.guild.id, role.id]
   );
 
-  await message.reply(`✅ Mod role set to <@&${role.id}>.`).catch(() => {});
+  await message.reply(`âœ… Mod role set to <@&${role.id}>.`).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -734,22 +735,22 @@ async function cmdLeaderboard(message, args) {
 
     // Medal emojis for top 3
     let medal = "";
-    if (rank === 1) medal = "🥇";
-    else if (rank === 2) medal = "🥈";
-    else if (rank === 3) medal = "🥉";
+    if (rank === 1) medal = "ðŸ¥‡";
+    else if (rank === 2) medal = "ðŸ¥ˆ";
+    else if (rank === 3) medal = "ðŸ¥‰";
     else medal = `\`${rank}\``;
 
-    // Compact format: rank emoji • name • level • XP
+    // Compact format: rank emoji â€¢ name â€¢ level â€¢ XP
     lines.push(
-      `${medal} **${name}** • Lv.${r.level} • \`${r.xp.toLocaleString()} XP\``
+      `${medal} **${name}** â€¢ Lv.${r.level} â€¢ \`${r.xp.toLocaleString()} XP\``
     );
   }
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle(`🏆 ${message.guild.name} Leaderboard`)
+    .setTitle(`ðŸ† ${message.guild.name} Leaderboard`)
     .setDescription(lines.join("\n"))
-    .setFooter({ text: `Page ${page} • Use !leaderboard <page> to view other pages` })
+    .setFooter({ text: `Page ${page} â€¢ Use !leaderboard <page> to view other pages` })
     .setTimestamp();
 
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -768,7 +769,7 @@ async function cmdXp(message, args) {
   const pick = await pickUserSmart(message, arg);
   if (!sub || !["add", "set"].includes(sub) || !pick) {
     await message.reply(
-      "Usage:\n• `!xp add <user> <amount>`\n• `!xp set <user> <amount>`"
+      "Usage:\nâ€¢ `!xp add <user> <amount>`\nâ€¢ `!xp set <user> <amount>`"
     ).catch(() => {});
     return;
   }
@@ -801,7 +802,7 @@ async function cmdXp(message, args) {
     [newXp, newLevel, message.guild.id, target.id]
   );
   await message.reply(
-    `${sub === "set" ? "Set" : "Added"} XP for ${target} → XP **${newXp}**, Level **${newLevel}**`
+    `${sub === "set" ? "Set" : "Added"} XP for ${target} â†’ XP **${newXp}**, Level **${newLevel}**`
   ).catch(() => {});
 }
 
@@ -902,14 +903,14 @@ async function cmdSyncRoles(message) {
   await message.reply(`Synced roles: **${assigned}** assigned, **${removed}** removed.`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Fun commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmd8Ball(message, args) {
   const question = args.join(" ").trim();
   if (!question) {
-    await message.reply("❓ Ask me a question! Usage: `!8ball <question>`").catch(() => {});
+    await message.reply("â“ Ask me a question! Usage: `!8ball <question>`").catch(() => {});
     return;
   }
 
@@ -934,7 +935,7 @@ async function cmd8Ball(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🎱 Magic 8-Ball")
+    .setTitle("ðŸŽ± Magic 8-Ball")
     .addFields(
       { name: "Question", value: question, inline: false },
       { name: "Answer", value: answer, inline: false }
@@ -947,11 +948,11 @@ async function cmd8Ball(message, args) {
 
 async function cmdCoinFlip(message) {
   const result = Math.random() < 0.5 ? "Heads" : "Tails";
-  const emoji = result === "Heads" ? "🟡" : "⚪";
+  const emoji = result === "Heads" ? "ðŸŸ¡" : "âšª";
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🪙 Coin Flip")
+    .setTitle("ðŸª™ Coin Flip")
     .setDescription(`${emoji} **${result}**!`)
     .setTimestamp();
   
@@ -1033,9 +1034,9 @@ async function cmdRoll(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🎲 Dice Roll")
+    .setTitle("ðŸŽ² Dice Roll")
     .addFields(
-      { name: "Configuration", value: `${count} × d${sides}`, inline: true },
+      { name: "Configuration", value: `${count} Ã— d${sides}`, inline: true },
       { name: "Results", value: rolls.join(", "), inline: false }
     );
   
@@ -1058,7 +1059,7 @@ async function cmdChoose(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🤔 I choose...")
+    .setTitle("ðŸ¤” I choose...")
     .setDescription(`**${choice}**`)
     .setTimestamp();
   
@@ -1112,10 +1113,10 @@ async function cmdSuggest(message, args) {
   const embed = new EmbedBuilder()
     .setColor("#7bc96f")
     .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-    .setTitle(`💡 Suggestion #${suggestionId}`)
+    .setTitle(`ðŸ’¡ Suggestion #${suggestionId}`)
     .setDescription(suggestion)
-    .addFields({ name: "Status", value: requireReview ? "🕵️ Under Review" : "🟡 Pending", inline: true })
-    .setFooter({ text: requireReview ? "Awaiting staff review" : `👍 0 | 👎 0` })
+    .addFields({ name: "Status", value: requireReview ? "ðŸ•µï¸ Under Review" : "ðŸŸ¡ Pending", inline: true })
+    .setFooter({ text: requireReview ? "Awaiting staff review" : `ðŸ‘ 0 | ðŸ‘Ž 0` })
     .setTimestamp();
 
   const suggestionMsg = await targetChannel.send({ embeds: [embed] });
@@ -1124,20 +1125,20 @@ async function cmdSuggest(message, args) {
     await run(`UPDATE suggestions SET review_message_id=? WHERE id=?`, [suggestionMsg.id, suggestionId]);
   } else {
     // React with voting emojis only for directly published suggestions.
-    await suggestionMsg.react("👍").catch(() => {});
-    await suggestionMsg.react("👎").catch(() => {});
+    await suggestionMsg.react("ðŸ‘").catch(() => {});
+    await suggestionMsg.react("ðŸ‘Ž").catch(() => {});
     await run(`UPDATE suggestions SET message_id=?, published_message_id=?, upvotes=0, downvotes=0 WHERE id=?`, [suggestionMsg.id, suggestionMsg.id, suggestionId]);
   }
 
-  await message.react("✅").catch(() => {});
+  await message.react("âœ…").catch(() => {});
 }
 
 function renderSuggestionStatus(statusRaw) {
   const status = String(statusRaw || "pending").toLowerCase();
-  if (status === "approved") return "✅ Approved";
-  if (status === "denied") return "❌ Denied";
-  if (status === "under_review") return "🕵️ Under Review";
-  return "🟡 Pending";
+  if (status === "approved") return "âœ… Approved";
+  if (status === "denied") return "âŒ Denied";
+  if (status === "under_review") return "ðŸ•µï¸ Under Review";
+  return "ðŸŸ¡ Pending";
 }
 
 async function cmdSuggestions(message, args) {
@@ -1176,15 +1177,15 @@ async function cmdSuggestions(message, args) {
   const lines = rows.map((s) => {
     const createdTs = Number(s.created_at || 0) > 0 ? Math.floor(Number(s.created_at) / 1000) : null;
     const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
-    const authorText = mode === "all" ? ` • by <@${s.user_id}>` : "";
+    const authorText = mode === "all" ? ` â€¢ by <@${s.user_id}>` : "";
     const preview = String(s.content || "").replace(/\n+/g, " ").slice(0, 120);
     const note = s.staff_response ? `\nStaff: ${String(s.staff_response).replace(/\n+/g, " ").slice(0, 90)}` : "";
-    return `**#${s.id}** ${renderSuggestionStatus(s.status)}${authorText} • ${createdText}\n${preview || "(no content)"}${note}`;
+    return `**#${s.id}** ${renderSuggestionStatus(s.status)}${authorText} â€¢ ${createdText}\n${preview || "(no content)"}${note}`;
   });
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
-    .setTitle(mode === "all" ? "💡 Server Suggestions" : "💡 Your Suggestions")
+    .setTitle(mode === "all" ? "ðŸ’¡ Server Suggestions" : "ðŸ’¡ Your Suggestions")
     .setDescription(lines.join("\n\n"))
     .setFooter({ text: "Use !suggestion-status <id> for full details." })
     .setTimestamp();
@@ -1208,7 +1209,7 @@ async function cmdSuggestionStatus(message, args) {
   );
 
   if (!suggestion) {
-    await message.reply("❌ Suggestion not found for this server.").catch(() => {});
+    await message.reply("âŒ Suggestion not found for this server.").catch(() => {});
     return;
   }
 
@@ -1216,7 +1217,7 @@ async function cmdSuggestionStatus(message, args) {
   const fields = [
     { name: "Status", value: renderSuggestionStatus(suggestion.status), inline: true },
     { name: "Author", value: `<@${suggestion.user_id}>`, inline: true },
-    { name: "Votes", value: `👍 ${Number(suggestion.upvotes || 0)} | 👎 ${Number(suggestion.downvotes || 0)}`, inline: true }
+    { name: "Votes", value: `ðŸ‘ ${Number(suggestion.upvotes || 0)} | ðŸ‘Ž ${Number(suggestion.downvotes || 0)}`, inline: true }
   ];
 
   if (suggestion.staff_response) {
@@ -1233,7 +1234,7 @@ async function cmdSuggestionStatus(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle(`💡 Suggestion #${suggestion.id}`)
+    .setTitle(`ðŸ’¡ Suggestion #${suggestion.id}`)
     .setDescription(String(suggestion.content || "(no content)").slice(0, 4096))
     .addFields(fields)
     .setFooter({ text: createdTs ? `Created <t:${createdTs}:R>` : "Created time unknown" })
@@ -1258,19 +1259,19 @@ async function cmdSuggestionWithdraw(message, args) {
   );
 
   if (!suggestion) {
-    await message.reply("❌ Suggestion not found for this server.").catch(() => {});
+    await message.reply("âŒ Suggestion not found for this server.").catch(() => {});
     return;
   }
 
   const staff = isAdminOrManager(message.member) || await isModerator(message.member);
   const isOwner = String(suggestion.user_id) === String(message.author.id);
   if (!staff && !isOwner) {
-    await message.reply("❌ You can only withdraw your own suggestions.").catch(() => {});
+    await message.reply("âŒ You can only withdraw your own suggestions.").catch(() => {});
     return;
   }
 
   if (!staff && ["approved", "denied"].includes(String(suggestion.status || "").toLowerCase())) {
-    await message.reply("❌ You can only withdraw pending or under-review suggestions.").catch(() => {});
+    await message.reply("âŒ You can only withdraw pending or under-review suggestions.").catch(() => {});
     return;
   }
 
@@ -1298,12 +1299,12 @@ async function cmdSuggestionWithdraw(message, args) {
   }
 
   await run(`DELETE FROM suggestions WHERE guild_id=? AND id=?`, [message.guild.id, suggestionId]);
-  await message.reply(`✅ Suggestion #${suggestionId} has been withdrawn.`).catch(() => {});
+  await message.reply(`âœ… Suggestion #${suggestionId} has been withdrawn.`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Moderation commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function parseDurationMs(text) {
   if (!text) return null;
@@ -1469,7 +1470,7 @@ async function cmdBan(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("❌ You cannot ban someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot ban someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -1482,7 +1483,7 @@ async function cmdBan(message, args) {
   trackModerationAction(message, "ban_add", { targetUserId: target.id });
   await target.ban({ reason }).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "ban", reason);
-  await message.reply(`✅ Banned ${target.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Banned ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdTempBan(message, args) {
@@ -1501,7 +1502,7 @@ async function cmdTempBan(message, args) {
 
   const target = pick.member;
   if (!canModerate(message.member, target)) {
-    await message.reply("❌ You cannot temp-ban someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot temp-ban someone with a higher or equal role.").catch(() => {});
     return;
   }
   if (!target.bannable) {
@@ -1511,7 +1512,7 @@ async function cmdTempBan(message, args) {
 
   const durationMs = parseDurationMs(args[1]);
   if (!durationMs || durationMs < 60_000) {
-    await message.reply("❌ Invalid duration. Use format like 10m, 1h, 1d (minimum 1m).").catch(() => {});
+    await message.reply("âŒ Invalid duration. Use format like 10m, 1h, 1d (minimum 1m).").catch(() => {});
     return;
   }
 
@@ -1528,7 +1529,7 @@ async function cmdTempBan(message, args) {
   );
   await logModAction(message.guild.id, target.id, message.author.id, "tempban", reason, `Until: ${new Date(unbanAt).toISOString()}`);
 
-  await message.reply(`✅ Temp-banned ${target.user.tag} until <t:${Math.floor(unbanAt / 1000)}:F> (<t:${Math.floor(unbanAt / 1000)}:R>).`).catch(() => {});
+  await message.reply(`âœ… Temp-banned ${target.user.tag} until <t:${Math.floor(unbanAt / 1000)}:F> (<t:${Math.floor(unbanAt / 1000)}:R>).`).catch(() => {});
 }
 
 async function cmdUnban(message, args) {
@@ -1542,7 +1543,7 @@ async function cmdUnban(message, args) {
   trackModerationAction(message, "ban_remove", { targetUserId: userId });
   await message.guild.members.unban(userId, reason).catch(() => {});
   await logModAction(message.guild.id, userId, message.author.id, "unban", reason);
-  await message.reply("✅ Unbanned user.").catch(() => {});
+  await message.reply("âœ… Unbanned user.").catch(() => {});
 }
 
 async function cmdKick(message, args) {
@@ -1561,7 +1562,7 @@ async function cmdKick(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("❌ You cannot kick someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot kick someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -1574,7 +1575,7 @@ async function cmdKick(message, args) {
   trackModerationAction(message, "member_remove", { targetUserId: target.id });
   await target.kick(reason).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "kick", reason);
-  await message.reply(`✅ Kicked ${target.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Kicked ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdMute(message, args) {
@@ -1593,7 +1594,7 @@ async function cmdMute(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("❌ You cannot mute someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot mute someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -1606,7 +1607,7 @@ async function cmdMute(message, args) {
   trackModerationAction(message, "member_timeout", { targetUserId: target.id, timedOut: true });
   await target.timeout(durationMs, reason).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "mute", reason, `Duration: ${durationMs}ms`);
-  await message.reply(`✅ Muted ${target.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Muted ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdUnmute(message, args) {
@@ -1631,7 +1632,7 @@ async function cmdUnmute(message, args) {
   trackModerationAction(message, "member_timeout", { targetUserId: target.id, timedOut: false });
   await target.timeout(null, reason).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "unmute", reason);
-  await message.reply(`✅ Unmuted ${target.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Unmuted ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdPurge(message, args) {
@@ -1662,7 +1663,7 @@ async function cmdPurge(message, args) {
   trackModerationAction(message, "message_bulk_delete", { channelId: message.channel.id, count: purgedCount || amount });
 
   if (isInteractionCommand) {
-    await message.reply(`✅ Purged ${purgedCount} messages.`).catch(() => {});
+    await message.reply(`âœ… Purged ${purgedCount} messages.`).catch(() => {});
   }
 }
 
@@ -1680,7 +1681,7 @@ async function cmdWarn(message, args) {
   }
 
   if (!canModerate(message.member, pick.member)) {
-    await message.reply("❌ You cannot warn someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot warn someone with a higher or equal role.").catch(() => {});
     return;
   }
 
@@ -1704,7 +1705,7 @@ async function cmdWarn(message, args) {
   await logModAction(message.guild.id, pick.member.id, message.author.id, "warn", reason, `Points: ${points}`);
   const totals = await getTotalWarningPoints(message.guild.id, pick.member.id);
   const ladderResult = await applyWarnLadder(message, pick.member, totals.totalPoints, reason);
-  await message.reply(`✅ Warned ${pick.member.user.tag} for ${points} point${points === 1 ? "" : "s"}. Total: ${totals.totalPoints} point${totals.totalPoints === 1 ? "" : "s"}.${ladderResult ? `\n${ladderResult}` : ""}`).catch(() => {});
+  await message.reply(`âœ… Warned ${pick.member.user.tag} for ${points} point${points === 1 ? "" : "s"}. Total: ${totals.totalPoints} point${totals.totalPoints === 1 ? "" : "s"}.${ladderResult ? `\n${ladderResult}` : ""}`).catch(() => {});
 }
 
 async function cmdWarnings(message, args) {
@@ -1758,7 +1759,7 @@ async function cmdWarnings(message, args) {
   }
 
   const totals = await getTotalWarningPoints(message.guild.id, pick.member.id);
-  embed.setFooter({ text: `Total Warnings: ${totals.totalWarnings} • Total Points: ${totals.totalPoints}` });
+  embed.setFooter({ text: `Total Warnings: ${totals.totalWarnings} â€¢ Total Points: ${totals.totalPoints}` });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
@@ -1767,7 +1768,7 @@ async function cmdWarnLadder(message, args) {
   if (!args.length || args[0] === "view") {
     const ladder = await getWarnLadderSettings(message.guild.id);
     await message.reply(
-      `Warn ladder:\n• ${ladder.timeoutThreshold} points → timeout (${ladder.timeoutMinutes}m)\n• ${ladder.kickThreshold} points → kick\n• ${ladder.banThreshold} points → ban\nUse \`!warnladder set <timeoutThreshold> <kickThreshold> <banThreshold> [timeoutMinutes]\` to update.`
+      `Warn ladder:\nâ€¢ ${ladder.timeoutThreshold} points â†’ timeout (${ladder.timeoutMinutes}m)\nâ€¢ ${ladder.kickThreshold} points â†’ kick\nâ€¢ ${ladder.banThreshold} points â†’ ban\nUse \`!warnladder set <timeoutThreshold> <kickThreshold> <banThreshold> [timeoutMinutes]\` to update.`
     ).catch(() => {});
     return;
   }
@@ -1790,7 +1791,7 @@ async function cmdWarnLadder(message, args) {
     [timeoutThreshold, kickThreshold, banThreshold, timeoutMinutes, message.guild.id]
   );
 
-  await message.reply(`✅ Updated warn ladder: ${timeoutThreshold} → timeout (${timeoutMinutes}m), ${kickThreshold} → kick, ${banThreshold} → ban.`).catch(() => {});
+  await message.reply(`âœ… Updated warn ladder: ${timeoutThreshold} â†’ timeout (${timeoutMinutes}m), ${kickThreshold} â†’ kick, ${banThreshold} â†’ ban.`).catch(() => {});
 }
 
 async function cmdTempRole(message, args) {
@@ -1811,12 +1812,12 @@ async function cmdTempRole(message, args) {
 
   const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
   if (!role) {
-    await message.reply("❌ Role not found.").catch(() => {});
+    await message.reply("âŒ Role not found.").catch(() => {});
     return;
   }
 
   if (!canModerate(message.member, pick.member)) {
-    await message.reply("❌ You cannot modify roles for someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot modify roles for someone with a higher or equal role.").catch(() => {});
     return;
   }
 
@@ -1828,7 +1829,7 @@ async function cmdTempRole(message, args) {
     [message.guild.id, pick.member.id, role.id, message.author.id, reason, Date.now(), Date.now() + durationMs]
   );
   await logModAction(message.guild.id, pick.member.id, message.author.id, "temp_role_add", reason, `Role: ${role.name}; Duration: ${durationMs}ms`);
-  await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag} for ${formatDurationText(durationMs)}.`).catch(() => {});
+  await message.reply(`âœ… Added ${role.name} to ${pick.member.user.tag} for ${formatDurationText(durationMs)}.`).catch(() => {});
 }
 
 async function cmdAutomodPreset(message, args) {
@@ -1881,7 +1882,7 @@ async function cmdAutomodPreset(message, args) {
     ]
   );
 
-  await message.reply(`✅ Applied automod preset: **${presetName}**.`).catch(() => {});
+  await message.reply(`âœ… Applied automod preset: **${presetName}**.`).catch(() => {});
 }
 
 async function cmdAfk(message, args) {
@@ -1894,7 +1895,7 @@ async function cmdAfk(message, args) {
      DO UPDATE SET reason=excluded.reason, afk_at=excluded.afk_at`,
     [message.guild.id, message.author.id, reason, Date.now()]
   );
-  await message.reply(`✅ AFK set: ${reason}`).catch(() => {});
+  await message.reply(`âœ… AFK set: ${reason}`).catch(() => {});
 }
 
 async function cmdSnipe(message) {
@@ -1966,7 +1967,7 @@ async function cmdModmail(message, args) {
       return;
     }
     await run(`UPDATE modmail_threads SET status='closed', closed_at=?, last_message_at=? WHERE id=?`, [Date.now(), Date.now(), thread.id]);
-    await message.reply("✅ Modmail thread closed.").catch(() => {});
+    await message.reply("âœ… Modmail thread closed.").catch(() => {});
     return;
   }
 
@@ -1978,7 +1979,7 @@ async function cmdModmail(message, args) {
   if (sub === "disable") {
     await getGuildSettings(message.guild.id).catch(() => null);
     await run(`UPDATE guild_settings SET modmail_enabled=0 WHERE guild_id=?`, [message.guild.id]);
-    await message.reply("✅ Modmail disabled.").catch(() => {});
+    await message.reply("âœ… Modmail disabled.").catch(() => {});
     return;
   }
 
@@ -2000,7 +2001,7 @@ async function cmdModmail(message, args) {
     `UPDATE guild_settings SET modmail_enabled=1, modmail_channel_id=?, modmail_support_role_id=?, modmail_category_id=? WHERE guild_id=?`,
     [channelId, supportRoleId, categoryId, message.guild.id]
   );
-  await message.reply(`✅ Modmail enabled. Inbox: <#${channelId}>${supportRoleId ? ` • Support role: <@&${supportRoleId}>` : ""}${categoryId ? ` • Category: <#${categoryId}>` : ""}`).catch(() => {});
+  await message.reply(`âœ… Modmail enabled. Inbox: <#${channelId}>${supportRoleId ? ` â€¢ Support role: <@&${supportRoleId}>` : ""}${categoryId ? ` â€¢ Category: <#${categoryId}>` : ""}`).catch(() => {});
 }
 
 async function cmdClearWarns(message, args) {
@@ -2018,7 +2019,7 @@ async function cmdClearWarns(message, args) {
 
   const result = await run(`DELETE FROM mod_warnings WHERE guild_id=? AND user_id=?`, [message.guild.id, pick.member.id]);
   const count = result?.changes || 0;
-  await message.reply(`✅ Cleared ${count} warning(s) for ${pick.member.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Cleared ${count} warning(s) for ${pick.member.user.tag}.`).catch(() => {});
 }
 
 async function cmdClearWarn(message, args) {
@@ -2031,12 +2032,12 @@ async function cmdClearWarn(message, args) {
 
   const warning = await get(`SELECT user_id FROM mod_warnings WHERE guild_id=? AND id=?`, [message.guild.id, warningId]);
   if (!warning) {
-    await message.reply("❌ Warning not found.").catch(() => {});
+    await message.reply("âŒ Warning not found.").catch(() => {});
     return;
   }
 
   await run(`DELETE FROM mod_warnings WHERE guild_id=? AND id=?`, [message.guild.id, warningId]);
-  await message.reply(`✅ Cleared warning #${warningId}.`).catch(() => {});
+  await message.reply(`âœ… Cleared warning #${warningId}.`).catch(() => {});
 }
 
 async function cmdModLogs(message, args) {
@@ -2072,16 +2073,16 @@ async function cmdModLogs(message, args) {
     .setTimestamp();
 
   const actionEmojis = {
-    ban: "🔨",
-    kick: "👢",
-    mute: "🔇",
-    unmute: "🔊",
-    warn: "⚠️",
-    timeout: "⏰",
-    role_add: "➕",
-    role_remove: "➖",
-    nick_change: "✏️",
-    softban: "🧹"
+    ban: "ðŸ”¨",
+    kick: "ðŸ‘¢",
+    mute: "ðŸ”‡",
+    unmute: "ðŸ”Š",
+    warn: "âš ï¸",
+    timeout: "â°",
+    role_add: "âž•",
+    role_remove: "âž–",
+    nick_change: "âœï¸",
+    softban: "ðŸ§¹"
   };
 
   for (const row of rows) {
@@ -2095,7 +2096,7 @@ async function cmdModLogs(message, args) {
       minute: '2-digit'
     });
     
-    const emoji = actionEmojis[row.action] || "📋";
+    const emoji = actionEmojis[row.action] || "ðŸ“‹";
     const actionName = row.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     
     let value = `**Moderator:** ${modTag}\n**Date:** ${timestamp}`;
@@ -2206,7 +2207,7 @@ async function cmdAuditSearch(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0xffaa55)
-    .setTitle("🔎 Audit Search Results")
+    .setTitle("ðŸ”Ž Audit Search Results")
     .setDescription(trimText(lines.join("\n"), 3900))
     .setFooter({ text: `Filters: action=${parsed.action || "any"}, days=${parsed.days}, limit=${parsed.limit}` })
     .setTimestamp();
@@ -2220,7 +2221,7 @@ async function cmdLock(message) {
   await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
     SendMessages: false
   }).catch(() => {});
-  await message.reply("🔒 Channel locked.").catch(() => {});
+  await message.reply("ðŸ”’ Channel locked.").catch(() => {});
 }
 
 async function cmdUnlock(message) {
@@ -2229,7 +2230,7 @@ async function cmdUnlock(message) {
   await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
     SendMessages: null
   }).catch(() => {});
-  await message.reply("🔓 Channel unlocked.").catch(() => {});
+  await message.reply("ðŸ”“ Channel unlocked.").catch(() => {});
 }
 
 async function cmdSlowmode(message, args) {
@@ -2241,7 +2242,7 @@ async function cmdSlowmode(message, args) {
   }
   trackModerationAction(message, "channel_update", { channelId: message.channel.id });
   await message.channel.setRateLimitPerUser(seconds).catch(() => {});
-  await message.reply(`✅ Slowmode set to ${seconds}s.`).catch(() => {});
+  await message.reply(`âœ… Slowmode set to ${seconds}s.`).catch(() => {});
 }
 
 async function cmdNick(message, args) {
@@ -2266,7 +2267,7 @@ async function cmdNick(message, args) {
   await pick.member.setNickname(nick.slice(0, 32)).catch(() => {});
   trackModerationAction(message, "member_nick_update", { targetUserId: pick.member.id });
   await logModAction(message.guild.id, pick.member.id, message.author.id, "nick_change", null, `New nickname: ${nick.slice(0, 32)}`);
-  await message.reply(`✅ Updated nickname for ${pick.member.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Updated nickname for ${pick.member.user.tag}.`).catch(() => {});
 }
 
 async function cmdRole(message, args) {
@@ -2298,14 +2299,14 @@ async function cmdRole(message, args) {
     trackModerationAction(message, "member_role_update", { targetUserId: pick.member.id });
     await pick.member.roles.remove(role).catch(() => {});
     await logModAction(message.guild.id, pick.member.id, message.author.id, "role_remove", null, `Role: ${role.name}`);
-    await message.reply(`✅ Removed ${role.name} from ${pick.member.user.tag}.`).catch(() => {});
+    await message.reply(`âœ… Removed ${role.name} from ${pick.member.user.tag}.`).catch(() => {});
     return;
   }
 
   trackModerationAction(message, "member_role_update", { targetUserId: pick.member.id });
   await pick.member.roles.add(role).catch(() => {});
   await logModAction(message.guild.id, pick.member.id, message.author.id, "role_add", null, `Role: ${role.name}`);
-  await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Added ${role.name} to ${pick.member.user.tag}.`).catch(() => {});
 }
 
 async function cmdSoftban(message, args) {
@@ -2324,7 +2325,7 @@ async function cmdSoftban(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("❌ You cannot softban someone with a higher or equal role.").catch(() => {});
+    await message.reply("âŒ You cannot softban someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -2338,16 +2339,16 @@ async function cmdSoftban(message, args) {
   trackModerationAction(message, "ban_remove", { targetUserId: target.id });
   await message.guild.members.unban(target.id, "Softban release").catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "softban", reason);
-  await message.reply(`✅ Softbanned ${target.user.tag}.`).catch(() => {});
+  await message.reply(`âœ… Softbanned ${target.user.tag}.`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Reaction Role commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdReactionRole(message, args) {
   if (!isAdminOrManager(message.member)) {
-    await message.reply("❌ Only admins/managers can configure reaction roles.").catch(() => {});
+    await message.reply("âŒ Only admins/managers can configure reaction roles.").catch(() => {});
     return;
   }
 
@@ -2384,14 +2385,14 @@ async function cmdReactionRoleAdd(message, args) {
   try {
     targetMessage = await message.channel.messages.fetch(messageId);
   } catch (e) {
-    await message.reply("❌ Message not found in this channel. Make sure the message ID is correct and in this channel.").catch(() => {});
+    await message.reply("âŒ Message not found in this channel. Make sure the message ID is correct and in this channel.").catch(() => {});
     return;
   }
 
   // Parse emoji
   const emojiKey = normalizeEmojiKey(emojiRaw);
   if (!emojiKey) {
-    await message.reply("❌ Invalid emoji. Use a unicode emoji or a custom emoji like `:name:id` or `<:name:id>`.").catch(() => {});
+    await message.reply("âŒ Invalid emoji. Use a unicode emoji or a custom emoji like `:name:id` or `<:name:id>`.").catch(() => {});
     return;
   }
 
@@ -2401,7 +2402,7 @@ async function cmdReactionRoleAdd(message, args) {
   const roleId = roleRaw.replace(/[<@&>]/g, "");
   const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
   if (!role) {
-    await message.reply("❌ Role not found. Mention the role or use its ID.").catch(() => {});
+    await message.reply("âŒ Role not found. Mention the role or use its ID.").catch(() => {});
     return;
   }
 
@@ -2430,7 +2431,7 @@ async function cmdReactionRoleAdd(message, args) {
     console.error("Failed to react to message:", e);
   }
 
-  await message.reply(`✅ Reaction role added! Reacting with ${emojiRaw} will give the ${role.name} role.`).catch(() => {});
+  await message.reply(`âœ… Reaction role added! Reacting with ${emojiRaw} will give the ${role.name} role.`).catch(() => {});
 }
 
 async function cmdReactionRoleRemove(message, args) {
@@ -2445,14 +2446,14 @@ async function cmdReactionRoleRemove(message, args) {
   // Parse emoji
   const emojiKey = normalizeEmojiKey(emojiRaw);
   if (!emojiKey) {
-    await message.reply("❌ Invalid emoji.").catch(() => {});
+    await message.reply("âŒ Invalid emoji.").catch(() => {});
     return;
   }
 
   // Remove from database
   await removeReactionRoleBinding(message.guild.id, messageId, emojiKey);
 
-  await message.reply(`✅ Reaction role removed for message ${messageId} with emoji ${emojiRaw}.`).catch(() => {});
+  await message.reply(`âœ… Reaction role removed for message ${messageId} with emoji ${emojiRaw}.`).catch(() => {});
 }
 
 async function cmdReactionRoleList(message) {
@@ -2468,7 +2469,7 @@ async function cmdReactionRoleList(message) {
     const role = message.guild.roles.cache.get(binding.role_id);
     const roleName = role ? role.name : `Unknown (${binding.role_id})`;
     const channelLink = `<#${binding.channel_id}>`;
-    lines.push(`• Message \`${binding.message_id}\` in ${channelLink}: \`${binding.emoji_key}\` → @${roleName}`);
+    lines.push(`â€¢ Message \`${binding.message_id}\` in ${channelLink}: \`${binding.emoji_key}\` â†’ @${roleName}`);
   }
 
   const embed = new EmbedBuilder()
@@ -2479,9 +2480,9 @@ async function cmdReactionRoleList(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Private VC commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdVoiceLimit(message, args) {
   const check = await assertVoiceCmdAllowed(message);
@@ -2525,7 +2526,7 @@ async function cmdVoiceLock(message) {
     Connect: false
   }).catch((e) => console.error(e));
 
-  await message.reply("🔒 VC locked (everyone can still see it, but can’t join).").catch(() => {});
+  await message.reply("ðŸ”’ VC locked (everyone can still see it, but canâ€™t join).").catch(() => {});
 }
 
 async function cmdVoiceUnlock(message) {
@@ -2547,7 +2548,7 @@ async function cmdVoiceUnlock(message) {
     Connect: true
   }).catch((e) => console.error(e));
 
-  await message.reply("🔓 VC unlocked (everyone can join).").catch(() => {});
+  await message.reply("ðŸ”“ VC unlocked (everyone can join).").catch(() => {});
 }
 
 async function cmdVoiceRename(message, args) {
@@ -2599,21 +2600,21 @@ async function cmdVoiceBan(message, args = []) {
     Connect: false
   }).catch((e) => console.error(e));
 
-  // If they’re currently inside, kick them out of the VC
+  // If theyâ€™re currently inside, kick them out of the VC
   if (target.voice?.channelId === voice.id) {
     await target.voice.setChannel(null).catch(() => {});
   }
 
-  await message.reply(`🚫 Banned ${target} from joining this VC.`).catch(() => {});
+  await message.reply(`ðŸš« Banned ${target} from joining this VC.`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Member Count Channel
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdMemberCount(message, args) {
   if (!isAdminOrManager(message.member)) {
-    await message.reply("❌ Only administrators can use this command.").catch(() => {});
+    await message.reply("âŒ Only administrators can use this command.").catch(() => {});
     return;
   }
 
@@ -2625,14 +2626,14 @@ async function cmdMemberCount(message, args) {
     if (existingSettings?.member_count_channel_id) {
       const existingChannel = message.guild.channels.cache.get(existingSettings.member_count_channel_id);
       if (existingChannel) {
-        await message.reply(`❌ Member count channel is already enabled: ${existingChannel}`).catch(() => {});
+        await message.reply(`âŒ Member count channel is already enabled: ${existingChannel}`).catch(() => {});
         return;
       }
     }
 
     // Create the voice channel
     const memberCount = message.guild.memberCount;
-    const channelName = `👥 Members: ${memberCount}`;
+    const channelName = `ðŸ‘¥ Members: ${memberCount}`;
 
     try {
       const channel = await message.guild.channels.create({
@@ -2652,10 +2653,10 @@ async function cmdMemberCount(message, args) {
         [channel.id, message.guild.id]
       );
 
-      await message.reply(`✅ Member count channel created: ${channel}\nWill update every 5 minutes.`).catch(() => {});
+      await message.reply(`âœ… Member count channel created: ${channel}\nWill update every 5 minutes.`).catch(() => {});
     } catch (err) {
       console.error("[members] Failed to create channel:", err);
-      await message.reply("❌ Failed to create member count channel. Check bot permissions.").catch(() => {});
+      await message.reply("âŒ Failed to create member count channel. Check bot permissions.").catch(() => {});
     }
     return;
   }
@@ -2663,7 +2664,7 @@ async function cmdMemberCount(message, args) {
   if (subcommand === "disable" || subcommand === "off") {
     const settings = await get(`SELECT member_count_channel_id FROM guild_settings WHERE guild_id=?`, [message.guild.id]);
     if (!settings?.member_count_channel_id) {
-      await message.reply("❌ Member count channel is not enabled.").catch(() => {});
+      await message.reply("âŒ Member count channel is not enabled.").catch(() => {});
       return;
     }
 
@@ -2681,16 +2682,16 @@ async function cmdMemberCount(message, args) {
       [message.guild.id]
     );
 
-    await message.reply(`✅ Member count channel disabled and removed.`).catch(() => {});
+    await message.reply(`âœ… Member count channel disabled and removed.`).catch(() => {});
     return;
   }
 
-  await message.reply(`🔧 **Member Count Commands**\n\n\`!member-count enable\` - Create and enable member count channel\n\`!member-count disable\` - Disable and delete member count channel`).catch(() => {});
+  await message.reply(`ðŸ”§ **Member Count Commands**\n\n\`!member-count enable\` - Create and enable member count channel\n\`!member-count disable\` - Disable and delete member count channel`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Giveaway Commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdGiveaway(message, args) {
   const subcommand = args[0]?.toLowerCase();
@@ -2698,7 +2699,7 @@ async function cmdGiveaway(message, args) {
 
   if (subcommand === "start") {
     if (!isStaff) {
-      await message.reply("❌ Only moderators/admins can start giveaways.").catch(() => {});
+      await message.reply("âŒ Only moderators/admins can start giveaways.").catch(() => {});
       return;
     }
 
@@ -2711,13 +2712,13 @@ async function cmdGiveaway(message, args) {
 
     const durationMs = parseDurationMs(args[1]);
     if (!durationMs) {
-      await message.reply("❌ Invalid duration. Use format like: 1m, 1h, 1d (m=minutes, h=hours, d=days)").catch(() => {});
+      await message.reply("âŒ Invalid duration. Use format like: 1m, 1h, 1d (m=minutes, h=hours, d=days)").catch(() => {});
       return;
     }
 
     const winners = Number.parseInt(args[2], 10);
     if (!Number.isFinite(winners) || winners < 1 || winners > 10) {
-      await message.reply("❌ Winners must be between 1 and 10.").catch(() => {});
+      await message.reply("âŒ Winners must be between 1 and 10.").catch(() => {});
       return;
     }
 
@@ -2726,26 +2727,26 @@ async function cmdGiveaway(message, args) {
 
     const giveawayEmbed = {
       color: 0x00ff00,
-      title: "🎉 GIVEAWAY 🎉",
-      description: `**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nReact with 🎉 to enter!`,
+      title: "ðŸŽ‰ GIVEAWAY ðŸŽ‰",
+      description: `**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nReact with ðŸŽ‰ to enter!`,
       footer: { text: `Hosted by ${message.author.tag}` },
       timestamp: new Date(endTime).toISOString()
     };
 
     const giveawayMsg = await message.channel.send({ embeds: [giveawayEmbed] }).catch(() => null);
     if (!giveawayMsg) {
-      await message.reply("❌ Failed to create giveaway message.").catch(() => {});
+      await message.reply("âŒ Failed to create giveaway message.").catch(() => {});
       return;
     }
 
-    await giveawayMsg.react("🎉").catch(() => {});
+    await giveawayMsg.react("ðŸŽ‰").catch(() => {});
 
     const result = await run(`
       INSERT INTO giveaways (guild_id, channel_id, message_id, host_id, prize, winners_count, end_time)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [message.guild.id, message.channel.id, giveawayMsg.id, message.author.id, prize, winners, endTime]);
 
-    await message.reply(`✅ Giveaway created! ID: ${result.lastID}`).catch(() => {});
+    await message.reply(`âœ… Giveaway created! ID: ${result.lastID}`).catch(() => {});
   } else if (subcommand === "end") {
     // !giveaway end <message_id>
     if (!args[1]) {
@@ -2755,17 +2756,17 @@ async function cmdGiveaway(message, args) {
 
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!giveaway) {
-      await message.reply("❌ Giveaway not found or already ended.").catch(() => {});
+      await message.reply("âŒ Giveaway not found or already ended.").catch(() => {});
       return;
     }
 
     if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
-      await message.reply("❌ Only the giveaway host or server staff can end this giveaway.").catch(() => {});
+      await message.reply("âŒ Only the giveaway host or server staff can end this giveaway.").catch(() => {});
       return;
     }
 
     await endGiveaway(message.client, giveaway);
-    await message.reply("✅ Giveaway ended!").catch(() => {});
+    await message.reply("âœ… Giveaway ended!").catch(() => {});
   } else if (subcommand === "reroll") {
     // !giveaway reroll <message_id>
     if (!args[1]) {
@@ -2775,17 +2776,17 @@ async function cmdGiveaway(message, args) {
 
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=?`, [args[1], message.guild.id]);
     if (!giveaway) {
-      await message.reply("❌ Giveaway not found.").catch(() => {});
+      await message.reply("âŒ Giveaway not found.").catch(() => {});
       return;
     }
 
     if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
-      await message.reply("❌ Only the giveaway host or server staff can reroll this giveaway.").catch(() => {});
+      await message.reply("âŒ Only the giveaway host or server staff can reroll this giveaway.").catch(() => {});
       return;
     }
 
     await rerollGiveaway(message.client, giveaway);
-    await message.reply("✅ Giveaway rerolled!").catch(() => {});
+    await message.reply("âœ… Giveaway rerolled!").catch(() => {});
   } else if (subcommand === "cancel") {
     if (!args[1]) {
       await message.reply("Usage: `!giveaway cancel <message_id> [reason]`").catch(() => {});
@@ -2794,18 +2795,18 @@ async function cmdGiveaway(message, args) {
 
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!giveaway) {
-      await message.reply("❌ Active giveaway not found.").catch(() => {});
+      await message.reply("âŒ Active giveaway not found.").catch(() => {});
       return;
     }
 
     if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
-      await message.reply("❌ Only the giveaway host or server staff can cancel this giveaway.").catch(() => {});
+      await message.reply("âŒ Only the giveaway host or server staff can cancel this giveaway.").catch(() => {});
       return;
     }
 
     const reason = args.slice(2).join(" ").trim() || "Canceled by staff.";
     await cancelGiveaway(message.client, giveaway, reason, message.author);
-    await message.reply("✅ Giveaway canceled.").catch(() => {});
+    await message.reply("âœ… Giveaway canceled.").catch(() => {});
   } else if (subcommand === "list") {
     const activeGiveaways = await all(
       `SELECT id, channel_id, message_id, host_id, prize, winners_count, end_time
@@ -2825,12 +2826,12 @@ async function cmdGiveaway(message, args) {
       const endsAtTs = Number(g.end_time || 0) > 0 ? Math.floor(Number(g.end_time) / 1000) : null;
       const endText = endsAtTs ? `<t:${endsAtTs}:R>` : "unknown";
       const link = `https://discord.com/channels/${message.guild.id}/${g.channel_id}/${g.message_id}`;
-      return `**#${g.id}** • ${g.prize}\nWinners: ${g.winners_count} • Ends: ${endText} • Host: <@${g.host_id}>\n[Jump to giveaway](${link})`;
+      return `**#${g.id}** â€¢ ${g.prize}\nWinners: ${g.winners_count} â€¢ Ends: ${endText} â€¢ Host: <@${g.host_id}>\n[Jump to giveaway](${link})`;
     });
 
     const embed = new EmbedBuilder()
       .setColor(0x00ff99)
-      .setTitle("🎉 Active Giveaways")
+      .setTitle("ðŸŽ‰ Active Giveaways")
       .setDescription(lines.join("\n\n"))
       .setFooter({ text: "Use !giveaway end|reroll|cancel <message_id>" })
       .setTimestamp();
@@ -2850,7 +2851,7 @@ async function cmdGiveaway(message, args) {
     );
 
     if (!giveaway) {
-      await message.reply("❌ Giveaway not found.").catch(() => {});
+      await message.reply("âŒ Giveaway not found.").catch(() => {});
       return;
     }
 
@@ -2863,7 +2864,7 @@ async function cmdGiveaway(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(Number(giveaway.ended || 0) === 1 ? 0x8b0000 : 0x00ff99)
-      .setTitle(`🎉 Giveaway #${giveaway.id}`)
+      .setTitle(`ðŸŽ‰ Giveaway #${giveaway.id}`)
       .addFields(
         { name: "Prize", value: String(giveaway.prize || "Unknown"), inline: false },
         { name: "Status", value: Number(giveaway.ended || 0) === 1 ? "Ended" : "Active", inline: true },
@@ -2896,7 +2897,7 @@ async function cancelGiveaway(client, giveaway, reason = "Canceled by staff.", c
 
   const cancelEmbed = {
     color: 0x808080,
-    title: "🚫 GIVEAWAY CANCELED",
+    title: "ðŸš« GIVEAWAY CANCELED",
     description: `**Prize:** ${giveaway.prize}\n**Reason:** ${reason}`,
     footer: { text: canceledBy ? `Canceled by ${canceledBy.tag}` : `Hosted by ${giveaway.host_id}` }
   };
@@ -2915,7 +2916,7 @@ async function endGiveaway(client, giveaway) {
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
   if (!giveawayMsg) return;
 
-  const reaction = giveawayMsg.reactions.cache.get("🎉");
+  const reaction = giveawayMsg.reactions.cache.get("ðŸŽ‰");
   if (!reaction) {
     await run(`UPDATE giveaways SET ended=1 WHERE id=?`, [giveaway.id]);
     return;
@@ -2938,7 +2939,7 @@ async function endGiveaway(client, giveaway) {
     }
 
     const winnerMentions = winners.map(w => `<@${w.id}>`).join(", ");
-    await channel.send(`🎉 Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
+    await channel.send(`ðŸŽ‰ Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
   }
 
   const winnerIds = winners.map(w => w.id).join(",");
@@ -2946,7 +2947,7 @@ async function endGiveaway(client, giveaway) {
 
   const endEmbed = {
     color: 0xff0000,
-    title: "🎉 GIVEAWAY ENDED 🎉",
+    title: "ðŸŽ‰ GIVEAWAY ENDED ðŸŽ‰",
     description: `**Prize:** ${giveaway.prize}\n**Winners:** ${winners.length > 0 ? winners.map(w => w.tag).join(", ") : "No winners"}`,
     footer: { text: `Hosted by ${giveaway.host_id}` }
   };
@@ -2965,7 +2966,7 @@ async function rerollGiveaway(client, giveaway) {
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
   if (!giveawayMsg) return;
 
-  const reaction = giveawayMsg.reactions.cache.get("🎉");
+  const reaction = giveawayMsg.reactions.cache.get("ðŸŽ‰");
   if (!reaction) return;
 
   const users = await reaction.users.fetch();
@@ -2987,12 +2988,12 @@ async function rerollGiveaway(client, giveaway) {
   }
 
   const winnerMentions = winners.map(w => `<@${w.id}>`).join(", ");
-  await channel.send(`🎉 **REROLL!** Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
+  await channel.send(`ðŸŽ‰ **REROLL!** Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Advanced Poll Commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdAdvancedPoll(message, args) {
   // !poll create <question> | <option1> | <option2> | ...
@@ -3011,7 +3012,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const parts = content.split("|").map(p => p.trim());
     if (parts.length < 3) {
-      await message.reply("❌ You need at least a question and 2 options.").catch(() => {});
+      await message.reply("âŒ You need at least a question and 2 options.").catch(() => {});
       return;
     }
 
@@ -3019,15 +3020,15 @@ async function cmdAdvancedPoll(message, args) {
     const options = parts.slice(1);
 
     if (options.length > 10) {
-      await message.reply("❌ Maximum 10 options allowed.").catch(() => {});
+      await message.reply("âŒ Maximum 10 options allowed.").catch(() => {});
       return;
     }
 
-    const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+    const emojis = ["1ï¸âƒ£", "2ï¸âƒ£", "3ï¸âƒ£", "4ï¸âƒ£", "5ï¸âƒ£", "6ï¸âƒ£", "7ï¸âƒ£", "8ï¸âƒ£", "9ï¸âƒ£", "ðŸ”Ÿ"];
     
     const pollEmbed = {
       color: 0x3498db,
-      title: "📊 Poll",
+      title: "ðŸ“Š Poll",
       description: `**${question}**\n\n${options.map((opt, i) => `${emojis[i]} ${opt}`).join("\n")}`,
       footer: { text: `Created by ${message.author.tag}` },
       timestamp: new Date().toISOString()
@@ -3035,7 +3036,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const pollMsg = await message.channel.send({ embeds: [pollEmbed] }).catch(() => null);
     if (!pollMsg) {
-      await message.reply("❌ Failed to create poll.").catch(() => {});
+      await message.reply("âŒ Failed to create poll.").catch(() => {});
       return;
     }
 
@@ -3048,7 +3049,7 @@ async function cmdAdvancedPoll(message, args) {
       VALUES (?, ?, ?, ?, ?, ?)
     `, [message.guild.id, message.channel.id, pollMsg.id, message.author.id, question, JSON.stringify(options)]);
 
-    await message.reply(`✅ Poll created! React to vote. ID: ${result.lastID}`).catch(() => {});
+    await message.reply(`âœ… Poll created! React to vote. ID: ${result.lastID}`).catch(() => {});
   } else if (subcommand === "end") {
     if (!args[1]) {
       await message.reply("Usage: `!poll end <message_id>`").catch(() => {});
@@ -3057,18 +3058,18 @@ async function cmdAdvancedPoll(message, args) {
 
     const poll = await get(`SELECT * FROM polls WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!poll) {
-      await message.reply("❌ Active poll not found.").catch(() => {});
+      await message.reply("âŒ Active poll not found.").catch(() => {});
       return;
     }
 
     const canManage = poll.creator_id === message.author.id || isAdminOrManager(message.member) || await isModerator(message.member);
     if (!canManage) {
-      await message.reply("❌ Only the poll creator or server staff can end this poll.").catch(() => {});
+      await message.reply("âŒ Only the poll creator or server staff can end this poll.").catch(() => {});
       return;
     }
 
     await endPoll(message.client, poll);
-    await message.reply("✅ Poll ended!").catch(() => {});
+    await message.reply("âœ… Poll ended!").catch(() => {});
   } else if (subcommand === "list") {
     const polls = await all(
       `SELECT id, message_id, question, creator_id, created_at
@@ -3088,12 +3089,12 @@ async function cmdAdvancedPoll(message, args) {
       const createdTs = Number(poll.created_at || 0) > 0 ? Math.floor(Number(poll.created_at) / 1000) : null;
       const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
       const question = String(poll.question || "").slice(0, 140);
-      return `**${question || "Untitled poll"}**\nMessage ID: \`${poll.message_id}\` • Creator: <@${poll.creator_id}> • Created: ${createdText}`;
+      return `**${question || "Untitled poll"}**\nMessage ID: \`${poll.message_id}\` â€¢ Creator: <@${poll.creator_id}> â€¢ Created: ${createdText}`;
     });
 
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
-      .setTitle("📊 Active Polls")
+      .setTitle("ðŸ“Š Active Polls")
       .setDescription(lines.join("\n\n"))
       .setFooter({ text: "Use !poll end <message_id> to close one." })
       .setTimestamp();
@@ -3113,7 +3114,7 @@ async function cmdAdvancedPoll(message, args) {
     );
 
     if (!poll) {
-      await message.reply("❌ Poll not found.").catch(() => {});
+      await message.reply("âŒ Poll not found.").catch(() => {});
       return;
     }
 
@@ -3128,7 +3129,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(Number(poll.ended || 0) === 1 ? 0x2ecc71 : 0x3498db)
-      .setTitle(`📊 Poll #${poll.id}`)
+      .setTitle(`ðŸ“Š Poll #${poll.id}`)
       .setDescription(`**${poll.question || "Untitled poll"}**`)
       .addFields(
         { name: "Status", value: Number(poll.ended || 0) === 1 ? "Ended" : "Active", inline: true },
@@ -3157,7 +3158,7 @@ async function endPoll(client, poll) {
   if (!pollMsg) return;
 
   const options = JSON.parse(poll.options);
-  const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
+  const emojis = ["1ï¸âƒ£", "2ï¸âƒ£", "3ï¸âƒ£", "4ï¸âƒ£", "5ï¸âƒ£", "6ï¸âƒ£", "7ï¸âƒ£", "8ï¸âƒ£", "9ï¸âƒ£", "ðŸ”Ÿ"];
   
   const results = [];
   for (let i = 0; i < options.length; i++) {
@@ -3171,8 +3172,8 @@ async function endPoll(client, poll) {
 
   const resultsEmbed = {
     color: 0x2ecc71,
-    title: "📊 Poll Results",
-    description: `**${poll.question}**\n\n${results.map((r, i) => `${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "•"} **${r.option}**: ${r.votes} vote${r.votes !== 1 ? "s" : ""} (${totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0}%)`).join("\n")}\n\n**Total Votes:** ${totalVotes}`,
+    title: "ðŸ“Š Poll Results",
+    description: `**${poll.question}**\n\n${results.map((r, i) => `${i === 0 ? "ðŸ¥‡" : i === 1 ? "ðŸ¥ˆ" : i === 2 ? "ðŸ¥‰" : "â€¢"} **${r.option}**: ${r.votes} vote${r.votes !== 1 ? "s" : ""} (${totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0}%)`).join("\n")}\n\n**Total Votes:** ${totalVotes}`,
     footer: { text: "Poll ended" },
     timestamp: new Date().toISOString()
   };
@@ -3181,928 +3182,18 @@ async function endPoll(client, poll) {
   await run(`UPDATE polls SET ended=1 WHERE id=?`, [poll.id]);
 }
 
-// ─────────────────────────────────────────────────────
-// Economy Commands
-// ─────────────────────────────────────────────────────
-
-async function cmdBalance(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  const targetUser = args[0] ? await pickUserSmart(message, args[0]) : null;
-  const userId = targetUser?.member?.id || message.author.id;
-
-  await run(`
-    INSERT INTO user_economy (guild_id, user_id)
-    VALUES (?, ?)
-    ON CONFLICT (guild_id, user_id) DO NOTHING
-  `, [message.guild.id, userId]);
-
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, userId]);
-  
-  const embed = {
-    color: 0xf1c40f,
-    title: `${economySettings.currency_symbol} Balance`,
-    description: `💰 **Wallet:** ${economy.balance} ${economySettings.currency_name}\n🏦 **Bank:** ${economy.bank} ${economySettings.currency_name}\n💎 **Total:** ${economy.balance + economy.bank} ${economySettings.currency_name}`,
-    footer: { text: userId === message.author.id ? "Your balance" : `Balance of ${targetUser.member.user.tag}` }
-  };
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-async function cmdDaily(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`
-    INSERT INTO user_economy (guild_id, user_id)
-    VALUES (?, ?)
-    ON CONFLICT (guild_id, user_id) DO NOTHING
-  `, [message.guild.id, message.author.id]);
-
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-  
-  const now = Date.now();
-  const dayInMs = 86400000;
-  
-  if (economy.last_daily && (now - economy.last_daily) < dayInMs) {
-    const timeLeft = dayInMs - (now - economy.last_daily);
-    const hours = Math.floor(timeLeft / 3600000);
-    const minutes = Math.floor((timeLeft % 3600000) / 60000);
-    await message.reply(`⏰ You already claimed your daily reward! Come back in ${hours}h ${minutes}m.\n🔥 Current streak: **${economy.daily_streak || 0}** days`).catch(() => {});
-    return;
-  }
-
-  // Check streak
-  const today = new Date().toDateString();
-  const yesterday = new Date(Date.now() - dayInMs).toDateString();
-  let newStreak = 1;
-  
-  if (economy.daily_streak_date === yesterday) {
-    newStreak = (economy.daily_streak || 0) + 1;
-  } else if (economy.daily_streak_date !== today) {
-    newStreak = 1;
-  }
-
-  // Calculate reward with streak bonus
-  const baseAmount = economySettings.daily_amount || 100;
-  const streakBonus = Math.floor((newStreak - 1) * (economySettings.daily_streak_bonus || 10));
-  const totalAmount = baseAmount + streakBonus;
-
-  const newBalance = economy.balance + totalAmount;
-  await run(`UPDATE user_economy SET balance=?, last_daily=?, daily_streak=?, daily_streak_date=? WHERE guild_id=? AND user_id=?`, 
-    [newBalance, now, newStreak, today, message.guild.id, message.author.id]);
-  
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "daily", totalAmount, `Daily reward (${newStreak} day streak)`]);
-
-  const embed = {
-    color: 0x2ecc71,
-    title: `${economySettings.currency_symbol} Daily Reward`,
-    description: `**Base:** ${baseAmount} ${economySettings.currency_name}\n**Streak Bonus:** ${streakBonus} ${economySettings.currency_name} (${newStreak} days)\n**Total:** ${totalAmount} ${economySettings.currency_name}`,
-    fields: [
-      { name: "🔥 Current Streak", value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
-      { name: "💰 New Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
-    ],
-    footer: { text: `Keep your streak going! Come back tomorrow for ${baseAmount + (newStreak * (economySettings.daily_streak_bonus || 10))} ${economySettings.currency_name}` }
-  };
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-async function cmdWeekly(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`
-    INSERT INTO user_economy (guild_id, user_id)
-    VALUES (?, ?)
-    ON CONFLICT (guild_id, user_id) DO NOTHING
-  `, [message.guild.id, message.author.id]);
-
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-  
-  const now = Date.now();
-  const weekInMs = 604800000;
-  
-  if (economy.last_weekly && (now - economy.last_weekly) < weekInMs) {
-    const timeLeft = weekInMs - (now - economy.last_weekly);
-    const days = Math.floor(timeLeft / 86400000);
-    const hours = Math.floor((timeLeft % 86400000) / 3600000);
-    await message.reply(`⏰ You already claimed your weekly reward! Come back in ${days}d ${hours}h.`).catch(() => {});
-    return;
-  }
-
-  const newBalance = economy.balance + economySettings.weekly_amount;
-  await run(`UPDATE user_economy SET balance=?, last_weekly=? WHERE guild_id=? AND user_id=?`, [newBalance, now, message.guild.id, message.author.id]);
-  
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "weekly", economySettings.weekly_amount, "Weekly reward"]);
-
-  await message.reply(`✅ You claimed your weekly reward of ${economySettings.weekly_amount} ${economySettings.currency_name}! ${economySettings.currency_symbol}`).catch(() => {});
-}
-
-async function cmdPay(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const senderEcon = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (args.length < 2) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`💸 **Pay Another User**\n\nTransfer money from your wallet to another user.\n\n**Usage:** \`${ecoPrefix}pay @user <amount>\`\n**Example:** \`${ecoPrefix}pay @John 500\`\n\n**Your Balance:** ${senderEcon.balance} ${economySettings.currency_name}`).catch(() => {});
-    return;
-  }
-
-  const target = await pickUserSmart(message, args[0]);
-  if (!target || target.ambiguous || target.member.user.bot) {
-    await message.reply("❌ Invalid user or cannot pay bots.").catch(() => {});
-    return;
-  }
-
-  const amount = Number.parseInt(args[1], 10);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    await message.reply("❌ Invalid amount.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.member.id]);
-  
-  if (senderEcon.balance < amount) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
-    return;
-  }
-
-  await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, message.author.id]);
-  await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, target.member.id]);
-
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "pay_sent", -amount, `Paid to ${target.member.user.tag}`]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, target.member.id, "pay_received", amount, `Received from ${message.author.tag}`]);
-
-  await message.reply(`✅ You paid ${amount} ${economySettings.currency_name} to ${target.member}! ${economySettings.currency_symbol}`).catch(() => {});
-}
-
-async function cmdEcoLeaderboard(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  const top = await all(`
-    SELECT user_id, balance, bank, (balance + bank) as total
-    FROM user_economy
-    WHERE guild_id=?
-    ORDER BY total DESC
-    LIMIT 10
-  `, [message.guild.id]);
-
-  if (top.length === 0) {
-    await message.reply("No economy data yet!").catch(() => {});
-    return;
-  }
-
-  const embed = {
-    color: 0xf1c40f,
-    title: `${economySettings.currency_symbol} Economy Leaderboard`,
-    description: top.map((row, i) => {
-      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-      return `${medal} <@${row.user_id}>: **${row.total}** ${economySettings.currency_name}`;
-    }).join("\n"),
-    footer: { text: `${message.guild.name}` }
-  };
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-// ==================== ECONOMY: BANKING ====================
-async function cmdDeposit(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (!args[0]) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`💰 **Deposit Money to Bank**\n\nMove money from your wallet to your bank for safekeeping.\n\n**Usage:**\n\`${ecoPrefix}deposit <amount>\` - Deposit specific amount\n\`${ecoPrefix}deposit all\` - Deposit everything\n\n**Your Balance:**\n💵 Wallet: ${economy.balance} ${economySettings.currency_name}\n🏦 Bank: ${economy.bank} ${economySettings.currency_name}`).catch(() => {});
-    return;
-  }
-
-  let amount;
-  if (args[0]?.toLowerCase() === "all") {
-    amount = economy.balance;
-  } else {
-    amount = parseInt(args[0]);
-    if (isNaN(amount) || amount <= 0) {
-      await message.reply("❌ Please specify a valid amount or 'all'.").catch(() => {});
-      return;
-    }
-  }
-
-  if (economy.balance < amount) {
-    await message.reply(`❌ You only have ${economy.balance} ${economySettings.currency_name} in your wallet!`).catch(() => {});
-    return;
-  }
-
-  await run(`UPDATE user_economy SET balance=?, bank=? WHERE guild_id=? AND user_id=?`,
-    [economy.balance - amount, economy.bank + amount, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "deposit", amount, "Bank deposit"]);
-
-  await message.reply(`✅ Deposited ${amount} ${economySettings.currency_name} to your bank. 🏦`).catch(() => {});
-}
-
-async function cmdWithdraw(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (!args[0]) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`💰 **Withdraw Money from Bank**\n\nMove money from your bank to your wallet.\n\n**Usage:**\n\`${ecoPrefix}withdraw <amount>\` - Withdraw specific amount\n\`${ecoPrefix}withdraw all\` - Withdraw everything\n\n**Your Balance:**\n💵 Wallet: ${economy.balance} ${economySettings.currency_name}\n🏦 Bank: ${economy.bank} ${economySettings.currency_name}`).catch(() => {});
-    return;
-  }
-
-  let amount;
-  if (args[0]?.toLowerCase() === "all") {
-    amount = economy.bank;
-  } else {
-    amount = parseInt(args[0]);
-    if (isNaN(amount) || amount <= 0) {
-      await message.reply("❌ Please specify a valid amount or 'all'.").catch(() => {});
-      return;
-    }
-  }
-
-  if (economy.bank < amount) {
-    await message.reply(`❌ You only have ${economy.bank} ${economySettings.currency_name} in your bank!`).catch(() => {});
-    return;
-  }
-
-  await run(`UPDATE user_economy SET balance=?, bank=? WHERE guild_id=? AND user_id=?`,
-    [economy.balance + amount, economy.bank - amount, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "withdraw", amount, "Bank withdrawal"]);
-
-  await message.reply(`✅ Withdrew ${amount} ${economySettings.currency_name} from your bank. 💵`).catch(() => {});
-}
-
-async function cmdRob(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled || !economySettings.rob_enabled) {
-    await message.reply("❌ Robbing is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  if (!args[0]) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    const cooldownMins = Math.floor((economySettings.rob_cooldown || 3600) / 60);
-    await message.reply(`💰 **Rob Another User**\n\nAttempt to steal money from another user's wallet! (50% success rate)\n\n**Usage:** \`${ecoPrefix}rob @user\`\n\n**Rules:**\n• 50% chance to succeed\n• If caught, you pay a fine\n• Users with 🔒 Padlock are protected\n• Cooldown: ${cooldownMins} minutes\n• Target must have at least 50 ${economySettings.currency_name}\n\n**Tip:** Buy a padlock from the shop to protect yourself!`).catch(() => {});
-    return;
-  }
-
-  const target = parseUserMention(message, args[0]);
-  if (!target.found || target.member.user.bot || target.member.id === message.author.id) {
-    await message.reply("❌ Please mention a valid user to rob.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.member.id]);
-
-  const robber = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-  const victim = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, target.member.id]);
-
-  const now = Date.now();
-  const cooldown = (economySettings.rob_cooldown || 3600) * 1000;
-  if (robber.last_normal_rob && (now - robber.last_normal_rob) < cooldown) {
-    const timeLeft = cooldown - (now - robber.last_normal_rob);
-    const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`❌ You must wait ${minutes} minutes before robbing again!`).catch(() => {});
-    return;
-  }
-
-  // Check for padlock
-  const padlock = await get(`SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id='padlock' AND quantity > 0`, 
-    [message.guild.id, target.member.id]);
-  if (padlock) {
-    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id='padlock'`,
-      [message.guild.id, target.member.id]);
-    await message.reply(`❌ ${target.member} had a 🔒 **Padlock** protecting their wallet! It broke when you tried to rob them.`).catch(() => {});
-    await run(`UPDATE user_economy SET last_normal_rob=? WHERE guild_id=? AND user_id=?`, [now, message.guild.id, message.author.id]);
-    return;
-  }
-
-  if (victim.balance < 50) {
-    await message.reply(`❌ ${target.member} is too poor to rob! (less than 50 ${economySettings.currency_name})`).catch(() => {});
-    return;
-  }
-
-  // 50% success rate
-  const success = Math.random() < 0.5;
-  if (!success) {
-    const fine = Math.min(robber.balance, Math.floor(victim.balance * 0.3));
-    await run(`UPDATE user_economy SET balance=?, last_normal_rob=? WHERE guild_id=? AND user_id=?`,
-      [robber.balance - fine, now, message.guild.id, message.author.id]);
-    await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-      [message.guild.id, message.author.id, "rob_failed", -fine, `Failed to rob ${target.member.user.tag}`]);
-    await message.reply(`❌ You got caught trying to rob ${target.member}! You paid a fine of ${fine} ${economySettings.currency_name}.`).catch(() => {});
-    return;
-  }
-
-  const stolen = Math.floor(victim.balance * (0.1 + Math.random() * 0.2)); // 10-30%
-  await run(`UPDATE user_economy SET balance=?, last_normal_rob=? WHERE guild_id=? AND user_id=?`,
-    [robber.balance + stolen, now, message.guild.id, message.author.id]);
-  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
-    [victim.balance - stolen, message.guild.id, target.member.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "rob_success", stolen, `Robbed ${target.member.user.tag}`]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, target.member.id, "robbed", -stolen, `Robbed by ${message.author.tag}`]);
-
-  await message.reply(`✅ You successfully robbed ${stolen} ${economySettings.currency_name} from ${target.member}! 💰`).catch(() => {});
-}
-
-// ==================== ECONOMY: GAMBLING ====================
-async function cmdSlots(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (!args[0]) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`🎰 **Slot Machine**\n\nSpin the slots and win big!\n\n**Usage:** \`${ecoPrefix}slots <bet>\`\n\n**Payouts:**\n🎉 Triple Match: 3x\n💎 Triple Diamonds: 5x\n7️⃣ Triple Sevens: 10x (JACKPOT!)\n🎯 Double Match: 1.5x\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
-    return;
-  }
-
-  const bet = parseInt(args[0]);
-  if (isNaN(bet) || bet <= 0) {
-    await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
-    return;
-  }
-
-  if (economy.balance < bet) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
-    return;
-  }
-
-  const symbols = ["🍒", "🍋", "🍊", "🍇", "💎", "7️⃣"];
-  const reel1 = symbols[Math.floor(Math.random() * symbols.length)];
-  const reel2 = symbols[Math.floor(Math.random() * symbols.length)];
-  const reel3 = symbols[Math.floor(Math.random() * symbols.length)];
-
-  let multiplier = 0;
-  let result = "";
-
-  if (reel1 === reel2 && reel2 === reel3) {
-    if (reel1 === "7️⃣") {
-      multiplier = 10;
-      result = "🎰 JACKPOT!!! 🎰";
-    } else if (reel1 === "💎") {
-      multiplier = 5;
-      result = "💎 Triple Diamonds! 💎";
-    } else {
-      multiplier = 3;
-      result = "🎉 Triple Match! 🎉";
-    }
-  } else if (reel1 === reel2 || reel2 === reel3 || reel1 === reel3) {
-    multiplier = 1.5;
-    result = "🎯 Double Match!";
-  } else {
-    multiplier = 0;
-    result = "❌ No match...";
-  }
-
-  const winnings = Math.floor(bet * multiplier) - bet;
-  const newBalance = economy.balance + winnings;
-
-  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "slots", winnings, `Slots (bet ${bet})`]);
-
-  const embed = {
-    color: winnings > 0 ? 0x2ecc71 : 0xe74c3c,
-    title: "🎰 Slot Machine",
-    description: `${reel1} | ${reel2} | ${reel3}\n\n${result}`,
-    fields: [
-      { name: "Bet", value: `${bet} ${economySettings.currency_name}`, inline: true },
-      { name: "Result", value: winnings > 0 ? `+${winnings} ${economySettings.currency_name}` : `${winnings} ${economySettings.currency_name}`, inline: true },
-      { name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
-    ]
-  };
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-async function cmdCoinflip(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (!args[0] || !args[1]) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`🪙 **Coinflip**\n\nBet on heads or tails! Double your money or lose it all.\n\n**Usage:** \`${ecoPrefix}coinflip <bet> <heads/tails>\`\n**Example:** \`${ecoPrefix}coinflip 100 h\`\n\n**Choices:** heads, tails, h, t\n**Payout:** 2x your bet\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
-    return;
-  }
-
-  const bet = parseInt(args[0]);
-  const choice = args[1]?.toLowerCase();
-  
-  if (isNaN(bet) || bet <= 0) {
-    await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
-    return;
-  }
-
-  if (!["heads", "tails", "h", "t"].includes(choice)) {
-    await message.reply("❌ Please choose heads (h) or tails (t).").catch(() => {});
-    return;
-  }
-
-  if (economy.balance < bet) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
-    return;
-  }
-
-  const flip = Math.random() < 0.5 ? "heads" : "tails";
-  const userChoice = choice === "h" ? "heads" : choice === "t" ? "tails" : choice;
-  const won = flip === userChoice;
-  const winnings = won ? bet : -bet;
-  const newBalance = economy.balance + winnings;
-
-  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "coinflip", winnings, `Coinflip ${flip} (bet ${bet})`]);
-
-  const embed = {
-    color: won ? 0x2ecc71 : 0xe74c3c,
-    title: "🪙 Coinflip",
-    description: `You chose **${userChoice}**\nThe coin landed on **${flip}**!\n\n${won ? "✅ You won!" : "❌ You lost!"}`,
-    fields: [
-      { name: "Bet", value: `${bet} ${economySettings.currency_name}`, inline: true },
-      { name: "Result", value: won ? `+${bet} ${economySettings.currency_name}` : `-${bet} ${economySettings.currency_name}`, inline: true },
-      { name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
-    ]
-  };
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-async function cmdDice(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (!args[0] || !args[1]) {
-    const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`🎲 **Dice Roll**\n\nGuess the dice roll (1-6) and win 6x your bet!\n\n**Usage:** \`${ecoPrefix}dice <bet> <guess>\`\n**Example:** \`${ecoPrefix}dice 100 5\`\n\n**Payout:** 6x your bet if you guess correctly\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
-    return;
-  }
-
-  const bet = parseInt(args[0]);
-  const guess = parseInt(args[1]);
-  
-  if (isNaN(bet) || bet <= 0) {
-    await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
-    return;
-  }
-
-  if (isNaN(guess) || guess < 1 || guess > 6) {
-    await message.reply("❌ Please guess a number between 1 and 6.").catch(() => {});
-    return;
-  }
-
-  if (economy.balance < bet) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
-    return;
-  }
-
-  const roll = Math.floor(Math.random() * 6) + 1;
-  const won = roll === guess;
-  const winnings = won ? bet * 5 : -bet; // 6x payout (5x profit + original bet)
-  const newBalance = economy.balance + winnings;
-
-  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "dice", winnings, `Dice ${roll} (bet ${bet})`]);
-
-  const embed = {
-    color: won ? 0x2ecc71 : 0xe74c3c,
-    title: "🎲 Dice Roll",
-    description: `You guessed **${guess}**\nThe dice rolled **${roll}**!\n\n${won ? "🎉 You won 6x your bet!" : "❌ You lost!"}`,
-    fields: [
-      { name: "Bet", value: `${bet} ${economySettings.currency_name}`, inline: true },
-      { name: "Result", value: won ? `+${bet * 5} ${economySettings.currency_name}` : `-${bet} ${economySettings.currency_name}`, inline: true },
-      { name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
-    ]
-  };
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-// ==================== ECONOMY: JOBS ====================
-async function cmdJob(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  const subcommand = args[0]?.toLowerCase();
-
-  if (!subcommand || subcommand === "list") {
-    const jobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY min_pay ASC`, [message.guild.id]);
-    if (jobs.length === 0) {
-      await message.reply("❌ No jobs available! Ask an admin to add some.").catch(() => {});
-      return;
-    }
-
-    const embed = {
-      color: 0x3498db,
-      title: "💼 Available Jobs",
-      description: jobs.map(j => 
-        `**${j.name}**\n💰 Pay: ${j.min_pay}-${j.max_pay} ${economySettings.currency_name}\n📊 Requires: ${j.required_shifts} total shifts\n⏰ Weekly: ${j.weekly_shifts_required} shifts/week`
-      ).join("\n\n"),
-      footer: { text: `Use job apply <jobname> to apply!` }
-    };
-
-    await message.reply({ embeds: [embed] }).catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (subcommand === "apply") {
-    const jobName = args.slice(1).join(" ");
-    if (!jobName) {
-      await message.reply("❌ Please specify a job name.").catch(() => {});
-      return;
-    }
-
-    const job = await get(`SELECT * FROM economy_jobs WHERE guild_id=? AND LOWER(name)=LOWER(?)`, [message.guild.id, jobName]);
-    if (!job) {
-      await message.reply("❌ That job doesn't exist! Use `job list` to see available jobs.").catch(() => {});
-      return;
-    }
-
-    if (economy.job_id) {
-      await message.reply("❌ You already have a job! Use `job quit` first.").catch(() => {});
-      return;
-    }
-
-    if (economy.job_shifts_completed < job.required_shifts) {
-      await message.reply(`❌ You need ${job.required_shifts} total shifts completed to apply for this job! (You have ${economy.job_shifts_completed})`).catch(() => {});
-      return;
-    }
-
-    await run(`UPDATE user_economy SET job_id=?, job_weekly_shifts=0, job_week_reset=? WHERE guild_id=? AND user_id=?`,
-      [job.id, Date.now(), message.guild.id, message.author.id]);
-
-    await message.reply(`✅ Congratulations! You got the job as **${job.name}**! Start working with the \`work\` command.`).catch(() => {});
-    return;
-  }
-
-  if (subcommand === "quit") {
-    if (!economy.job_id) {
-      await message.reply("❌ You don't have a job!").catch(() => {});
-      return;
-    }
-
-    await run(`UPDATE user_economy SET job_id=NULL, job_weekly_shifts=0 WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-    await message.reply("✅ You quit your job.").catch(() => {});
-    return;
-  }
-
-  if (subcommand === "info") {
-    if (!economy.job_id) {
-      await message.reply("❌ You don't have a job! Use `job list` to see available jobs.").catch(() => {});
-      return;
-    }
-
-    const job = await get(`SELECT * FROM economy_jobs WHERE id=?`, [economy.job_id]);
-    const weekInMs = 604800000;
-    const weekProgress = Date.now() - economy.job_week_reset;
-    const daysLeft = Math.max(0, Math.floor((weekInMs - weekProgress) / 86400000));
-
-    const embed = {
-      color: 0x3498db,
-      title: `💼 Your Job: ${job.name}`,
-      fields: [
-        { name: "💰 Pay Range", value: `${job.min_pay}-${job.max_pay} ${economySettings.currency_name}`, inline: true },
-        { name: "📊 Total Shifts", value: `${economy.job_shifts_completed}`, inline: true },
-        { name: "⏰ This Week", value: `${economy.job_weekly_shifts}/${job.weekly_shifts_required}`, inline: true },
-        { name: "📅 Week Resets In", value: `${daysLeft} days`, inline: true }
-      ],
-      footer: { text: `Use the work command to complete a shift!` }
-    };
-
-    await message.reply({ embeds: [embed] }).catch(() => {});
-    return;
-  }
-
-  await message.reply("❌ Usage: `job list`, `job apply <name>`, `job quit`, or `job info`").catch(() => {});
-}
-
-async function cmdWork(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (!economy.job_id) {
-    await message.reply("❌ You don't have a job! Use `job apply <name>` to get one.").catch(() => {});
-    return;
-  }
-
-  const now = Date.now();
-  const shiftCooldown = 3600000; // 1 hour
-  if (economy.job_last_shift && (now - economy.job_last_shift) < shiftCooldown) {
-    const timeLeft = shiftCooldown - (now - economy.job_last_shift);
-    const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`❌ You're tired! Rest for ${minutes} more minutes before your next shift.`).catch(() => {});
-    return;
-  }
-
-  const job = await get(`SELECT * FROM economy_jobs WHERE id=?`, [economy.job_id]);
-
-  // Check weekly requirement and reset
-  const weekInMs = 604800000;
-  if (now - economy.job_week_reset > weekInMs) {
-    if (economy.job_weekly_shifts < job.weekly_shifts_required) {
-      // Fired for not meeting weekly requirement
-      await run(`UPDATE user_economy SET job_id=NULL, job_weekly_shifts=0, job_week_reset=NULL WHERE guild_id=? AND user_id=?`,
-        [message.guild.id, message.author.id]);
-      await message.reply(`❌ You were fired from **${job.name}** for not completing ${job.weekly_shifts_required} shifts last week!`).catch(() => {});
-      return;
-    }
-    // Reset week
-    await run(`UPDATE user_economy SET job_weekly_shifts=0, job_week_reset=? WHERE guild_id=? AND user_id=?`,
-      [now, message.guild.id, message.author.id]);
-  }
-
-  // Mini-game selection
-  const games = ["typing", "emoji", "math"];
-  const game = games[Math.floor(Math.random() * games.length)];
-
-  if (game === "typing") {
-    const words = ["javascript", "programming", "computer", "keyboard", "algorithm", "database", "function", "variable", "discord", "economy"];
-    const word = words[Math.floor(Math.random() * words.length)];
-    
-    await message.reply(`⌨️ **Typing Challenge!**\nType the following word within 15 seconds:\n\`\`\`${word}\`\`\``).catch(() => {});
-
-    const filter = m => m.author.id === message.author.id && m.content.toLowerCase() === word.toLowerCase();
-    const collected = await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ["time"] }).catch(() => null);
-
-    if (!collected || collected.size === 0) {
-      await message.reply("❌ Time's up! You failed the shift.").catch(() => {});
-      return;
-    }
-  } else if (game === "emoji") {
-    const emojis = ["😀", "😎", "🚀", "💎", "🔥", "⚡", "🎯", "🎮", "🎨", "🎭"];
-    const target = emojis[Math.floor(Math.random() * emojis.length)];
-    const options = [target];
-    while (options.length < 5) {
-      const random = emojis[Math.floor(Math.random() * emojis.length)];
-      if (!options.includes(random)) options.push(random);
-    }
-    options.sort(() => Math.random() - 0.5);
-
-    await message.reply(`🎯 **Emoji Challenge!**\nFind and type the **${target}** emoji within 15 seconds:\n${options.join(" ")}`).catch(() => {});
-
-    const filter = m => m.author.id === message.author.id && m.content.includes(target);
-    const collected = await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ["time"] }).catch(() => null);
-
-    if (!collected || collected.size === 0) {
-      await message.reply("❌ Time's up! You failed the shift.").catch(() => {});
-      return;
-    }
-  } else if (game === "math") {
-    const num1 = Math.floor(Math.random() * 20) + 1;
-    const num2 = Math.floor(Math.random() * 20) + 1;
-    const operations = ["+", "-", "*"];
-    const op = operations[Math.floor(Math.random() * operations.length)];
-    let answer;
-    if (op === "+") answer = num1 + num2;
-    else if (op === "-") answer = num1 - num2;
-    else answer = num1 * num2;
-
-    await message.reply(`🔢 **Math Challenge!**\nSolve within 15 seconds:\n\`\`\`${num1} ${op} ${num2} = ?\`\`\``).catch(() => {});
-
-    const filter = m => m.author.id === message.author.id && parseInt(m.content) === answer;
-    const collected = await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ["time"] }).catch(() => null);
-
-    if (!collected || collected.size === 0) {
-      await message.reply("❌ Time's up! You failed the shift.").catch(() => {});
-      return;
-    }
-  }
-
-  // Success!
-  const pay = Math.floor(job.min_pay + Math.random() * (job.max_pay - job.min_pay));
-  await run(`UPDATE user_economy SET balance=?, job_last_shift=?, job_shifts_completed=?, job_weekly_shifts=? WHERE guild_id=? AND user_id=?`,
-    [economy.balance + pay, now, economy.job_shifts_completed + 1, economy.job_weekly_shifts + 1, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "work", pay, `Worked as ${job.name}`]);
-
-  await message.reply(`✅ Shift complete! You earned ${pay} ${economySettings.currency_name}. (${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} this week)`).catch(() => {});
-}
-
-// ==================== ECONOMY: SHOP ====================
-async function cmdShop(message) {
-  const { EmbedBuilder } = require("discord.js");
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [message.guild.id]);
-  if (items.length === 0) {
-    await message.reply("❌ The shop is empty! Ask an admin to add items.").catch(() => {});
-    return;
-  }
-
-  const grouped = new Map();
-  for (const item of items) {
-    const key = item.item_type || "misc";
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key).push(item);
-  }
-
-  const typeEmoji = {
-    tool: "🛠️",
-    consumable: "🧪",
-    material: "🧱",
-    collectible: "🏆",
-    single: "👑",
-    misc: "📦"
-  };
-
-  const lines = [];
-  let idx = 1;
-  for (const [type, list] of grouped.entries()) {
-    lines.push(`\n**${typeEmoji[type] || "📦"} ${type.toUpperCase()}**`);
-    for (const item of list) {
-      const usable = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
-        ? ` | Use: \`use ${item.item_id}\``
-        : "";
-      lines.push(`**${idx}. ${item.name}** - ${item.price} ${economySettings.currency_name}${usable}`);
-      lines.push(`${item.description}`);
-      idx += 1;
-    }
-  }
-
-  const previewItem = items.find((i) => i.item_image_url) || items[0];
-  const embed = new EmbedBuilder()
-    .setColor(0x1f8b4c)
-    .setTitle("🛒 The Murk Grand Bazaar")
-    .setDescription(lines.join("\n"))
-    .setThumbnail(previewItem?.item_image_url || null)
-    .setFooter({ text: `Use buy <item number> to purchase | inspect with item <name>` });
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-async function cmdBuy(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  if (!args[0]) {
-    // Show shop instead
-    await cmdShop(message);
-    return;
-  }
-
-  const itemIndex = parseInt(args[0]) - 1;
-  if (isNaN(itemIndex)) {
-    await message.reply("❌ Please specify an item number from the shop.").catch(() => {});
-    return;
-  }
-
-  const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [message.guild.id]);
-  const item = items[itemIndex];
-  if (!item) {
-    await message.reply("❌ Invalid item number!").catch(() => {});
-    return;
-  }
-
-  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
-  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-
-  if (economy.balance < item.price) {
-    await message.reply(`❌ You need ${item.price} ${economySettings.currency_name} to buy this! You have ${economy.balance}.`).catch(() => {});
-    return;
-  }
-
-  // Check if already owned (for single-use items)
-  if (item.item_type === "single") {
-    const owned = await get(`SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
-      [message.guild.id, message.author.id, item.item_id]);
-    if (owned && owned.quantity > 0) {
-      await message.reply("❌ You already own this item!").catch(() => {});
-      return;
-    }
-  }
-
-  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [economy.balance - item.price, message.guild.id, message.author.id]);
-  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "shop_purchase", -item.price, `Bought ${item.name}`]);
-  
-  await run(`
-    INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
-    VALUES (?, ?, ?, 1)
-    ON CONFLICT (guild_id, user_id, item_id)
-    DO UPDATE SET quantity = user_inventory.quantity + 1
-  `, [message.guild.id, message.author.id, item.item_id]);
-
-  await message.reply(`✅ You bought **${item.name}** for ${item.price} ${economySettings.currency_name}!`).catch(() => {});
-}
-
-async function cmdInventory(message) {
-  const { EmbedBuilder } = require("discord.js");
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
-  if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
-    return;
-  }
-
-  const items = await all(`
-    SELECT ui.item_id, ui.quantity, si.name, si.description, si.item_type, si.use_effect, si.item_image_url
-    FROM user_inventory ui
-    JOIN economy_shop_items si ON ui.item_id = si.item_id AND ui.guild_id = si.guild_id
-    WHERE ui.guild_id=? AND ui.user_id=? AND ui.quantity > 0
-  `, [message.guild.id, message.author.id]);
-
-  if (items.length === 0) {
-    await message.reply("🎒 Your inventory is empty!").catch(() => {});
-    return;
-  }
-
-  const previewItem = items.find((i) => i.item_image_url) || items[0];
-  const embed = new EmbedBuilder()
-    .setColor(0x2e4053)
-    .setTitle("🎒 Your Inventory")
-    .setDescription(items.map(item => {
-      const useHint = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
-        ? `\nUse: \`use ${item.item_id}\``
-        : "";
-      return `**${item.name}** x${item.quantity} (${item.item_type || "misc"})\n${item.description}${useHint}`;
-    }).join("\n\n"))
-    .setThumbnail(previewItem?.item_image_url || null)
-    .setFooter({ text: "Tip: use item <name> for lore + stats" });
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
-}
-
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Economy Commands (see src/economyCommands.js)
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+const {
+  cmdBalance, cmdDaily, cmdWeekly, cmdPay, cmdEcoLeaderboard,
+  cmdDeposit, cmdWithdraw, cmdRob, cmdSlots, cmdCoinflip, cmdDice,
+  cmdJob, cmdWork, cmdShop, cmdBuy, cmdInventory,
+} = require("./economyCommands");
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Reminder Commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdRemindMe(message, args) {
   if (args.length < 2) {
@@ -4112,7 +3203,7 @@ async function cmdRemindMe(message, args) {
 
   const durationMs = parseDurationMs(args[0]);
   if (!durationMs) {
-    await message.reply("❌ Invalid duration. Use format like: 1m, 1h, 1d").catch(() => {});
+    await message.reply("âŒ Invalid duration. Use format like: 1m, 1h, 1d").catch(() => {});
     return;
   }
 
@@ -4124,7 +3215,7 @@ async function cmdRemindMe(message, args) {
     VALUES (?, ?, ?, ?, ?)
   `, [message.author.id, message.guild.id, message.channel.id, reminderText, remindAt]);
 
-  await message.reply(`✅ I'll remind you in ${args[0]}: "${reminderText}"`).catch(() => {});
+  await message.reply(`âœ… I'll remind you in ${args[0]}: "${reminderText}"`).catch(() => {});
 }
 
 async function cmdReminders(message, args) {
@@ -4156,12 +3247,12 @@ async function cmdReminders(message, args) {
     const createdTs = createdAt > 0 ? Math.floor(createdAt / 1000) : null;
     const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
     const text = String(reminder.reminder_text || "").replace(/\n+/g, " ").slice(0, 120);
-    return `**#${reminder.id}** • ${status} • created ${createdText}\n${text || "(no text)"}`;
+    return `**#${reminder.id}** â€¢ ${status} â€¢ created ${createdText}\n${text || "(no text)"}`;
   });
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
-    .setTitle("⏰ Your Pending Reminders")
+    .setTitle("â° Your Pending Reminders")
     .setDescription(lines.join("\n\n"))
     .setFooter({ text: `Use !remindcancel <id> to cancel one.` })
     .setTimestamp();
@@ -4185,7 +3276,7 @@ async function cmdRemindCancel(message, args) {
   );
 
   if (!reminder) {
-    await message.reply("❌ Reminder not found (or already completed/canceled). Use `!reminders` to check active IDs.").catch(() => {});
+    await message.reply("âŒ Reminder not found (or already completed/canceled). Use `!reminders` to check active IDs.").catch(() => {});
     return;
   }
 
@@ -4197,7 +3288,7 @@ async function cmdRemindCancel(message, args) {
   );
 
   const preview = String(reminder.reminder_text || "").replace(/\n+/g, " ").slice(0, 140);
-  await message.reply(`✅ Canceled reminder #${reminderId}${preview ? `: "${preview}"` : ""}`).catch(() => {});
+  await message.reply(`âœ… Canceled reminder #${reminderId}${preview ? `: "${preview}"` : ""}`).catch(() => {});
 }
 
 async function cmdRemindClear(message) {
@@ -4221,7 +3312,7 @@ async function cmdRemindClear(message) {
     [message.author.id, message.guild.id]
   );
 
-  await message.reply(`✅ Cleared ${count} pending reminder${count === 1 ? "" : "s"}.`).catch(() => {});
+  await message.reply(`âœ… Cleared ${count} pending reminder${count === 1 ? "" : "s"}.`).catch(() => {});
 }
 
 async function cmdRemindSnooze(message, args) {
@@ -4234,7 +3325,7 @@ async function cmdRemindSnooze(message, args) {
 
   const durationMs = parseDurationMs(durationText);
   if (!durationMs) {
-    await message.reply("❌ Invalid duration. Use format like: 10m, 1h, 1d").catch(() => {});
+    await message.reply("âŒ Invalid duration. Use format like: 10m, 1h, 1d").catch(() => {});
     return;
   }
 
@@ -4246,7 +3337,7 @@ async function cmdRemindSnooze(message, args) {
   );
 
   if (!reminder) {
-    await message.reply("❌ Active reminder not found for that ID.").catch(() => {});
+    await message.reply("âŒ Active reminder not found for that ID.").catch(() => {});
     return;
   }
 
@@ -4259,12 +3350,12 @@ async function cmdRemindSnooze(message, args) {
   );
 
   const ts = Math.floor(newTime / 1000);
-  await message.reply(`✅ Snoozed reminder #${reminderId} to <t:${ts}:R>.`).catch(() => {});
+  await message.reply(`âœ… Snoozed reminder #${reminderId} to <t:${ts}:R>.`).catch(() => {});
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Birthday Commands
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function cmdBirthday(message, args) {
   const subcommand = args[0]?.toLowerCase();
@@ -4278,7 +3369,7 @@ async function cmdBirthday(message, args) {
 
     const parts = args[1].split("/");
     if (parts.length < 2 || parts.length > 3) {
-      await message.reply("❌ Invalid date format. Use MM/DD or MM/DD/YYYY").catch(() => {});
+      await message.reply("âŒ Invalid date format. Use MM/DD or MM/DD/YYYY").catch(() => {});
       return;
     }
 
@@ -4287,7 +3378,7 @@ async function cmdBirthday(message, args) {
     const year = parts[2] ? Number.parseInt(parts[2], 10) : null;
 
     if (!Number.isFinite(month) || month < 1 || month > 12 || !Number.isFinite(day) || day < 1 || day > 31) {
-      await message.reply("❌ Invalid date.").catch(() => {});
+      await message.reply("âŒ Invalid date.").catch(() => {});
       return;
     }
 
@@ -4297,10 +3388,10 @@ async function cmdBirthday(message, args) {
       ON CONFLICT (guild_id, user_id) DO UPDATE SET birth_month=EXCLUDED.birth_month, birth_day=EXCLUDED.birth_day, birth_year=EXCLUDED.birth_year
     `, [message.guild.id, message.author.id, month, day, year]);
 
-    await message.reply(`🎂 Your birthday has been set to ${month}/${day}${year ? `/${year}` : ""}!`).catch(() => {});
+    await message.reply(`ðŸŽ‚ Your birthday has been set to ${month}/${day}${year ? `/${year}` : ""}!`).catch(() => {});
   } else if (subcommand === "remove") {
     await run(`DELETE FROM birthdays WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-    await message.reply("✅ Your birthday has been removed.").catch(() => {});
+    await message.reply("âœ… Your birthday has been removed.").catch(() => {});
   } else if (subcommand === "list") {
     const birthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day`, [message.guild.id]);
     
@@ -4311,7 +3402,7 @@ async function cmdBirthday(message, args) {
 
     const embed = {
       color: 0xe91e63,
-      title: "🎂 Birthday List",
+      title: "ðŸŽ‚ Birthday List",
       description: birthdays.map(b => `<@${b.user_id}>: ${b.birth_month}/${b.birth_day}${b.birth_year ? `/${b.birth_year}` : ""}`).join("\n"),
       footer: { text: `${birthdays.length} birthday${birthdays.length !== 1 ? "s" : ""} registered` }
     };
@@ -4322,9 +3413,9 @@ async function cmdBirthday(message, args) {
   }
 }
 
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Main handler
-// ─────────────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 async function handleCommands(message) {
   if (!message || !message.content) return false;
@@ -4379,7 +3470,7 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "moist-lieutenant") {
     const publicUrl = process.env.BOT_PUBLIC_URL || process.env.DISCORD_CALLBACK_URL?.replace('/auth/discord/callback', '') || "http://localhost:8080";
-    await message.reply(`🐸 **Moist Lieutenant Dashboard**\n\nView the leaderboard and customize your rank card: ${publicUrl}`).catch(() => {});
+    await message.reply(`ðŸ¸ **Moist Lieutenant Dashboard**\n\nView the leaderboard and customize your rank card: ${publicUrl}`).catch(() => {});
     return true;
   }
 
@@ -4707,6 +3798,16 @@ async function executeCommand(message, cmd, args, prefix) {
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdGift(message, args, util);
+    return true;
+  }
+
+  if (cmd === "guide" || cmd === "howtoplay" || cmd === "help-guide") {
+    await cmdGuide(message, args);
+    return true;
+  }
+
+  if (cmd === "postguide" || cmd === "post-guide") {
+    await cmdPostGuide(message, isAdminOrManager(message.member));
     return true;
   }
 
@@ -5145,7 +4246,7 @@ async function handleSlashCommand(interaction) {
 
       const targetMessage = interaction.targetMessage;
       if (!targetMessage) {
-        await interaction.reply({ content: "❌ Could not find the target message.", ephemeral: true });
+        await interaction.reply({ content: "âŒ Could not find the target message.", ephemeral: true });
         return true;
       }
 
@@ -5159,7 +4260,7 @@ async function handleSlashCommand(interaction) {
         });
 
         if (messages.size === 0) {
-          await interaction.editReply({ content: "⚠️ No messages found after the selected message." });
+          await interaction.editReply({ content: "âš ï¸ No messages found after the selected message." });
           return true;
         }
 
@@ -5168,7 +4269,7 @@ async function handleSlashCommand(interaction) {
         const deletableMessages = messages.filter(msg => msg.createdTimestamp > twoWeeksAgo);
 
         if (deletableMessages.size === 0) {
-          await interaction.editReply({ content: "⚠️ All messages are older than 14 days and cannot be bulk deleted." });
+          await interaction.editReply({ content: "âš ï¸ All messages are older than 14 days and cannot be bulk deleted." });
           return true;
         }
 
@@ -5188,12 +4289,12 @@ async function handleSlashCommand(interaction) {
         );
 
         await interaction.editReply({ 
-          content: `✅ Purged ${deleted.size} message(s) from after the selected message.` 
+          content: `âœ… Purged ${deleted.size} message(s) from after the selected message.` 
         });
       } catch (err) {
         console.error("Purge Until Here error:", err);
         await interaction.editReply({ 
-          content: "❌ An error occurred while purging messages. Some messages may be too old or I may lack permissions." 
+          content: "âŒ An error occurred while purging messages. Some messages may be too old or I may lack permissions." 
         });
       }
 
@@ -5467,18 +4568,18 @@ async function ensureDefaultShopItems(guildId) {
   // Setup default economy shop items for minigames and features
   const defaultItems = [
     // Tools (durable, single equipment pieces)
-    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'Essential tool for fishing. Use /fish to catch treasure from the sea!', price: 200, type: 'tool' },
-    { id: 'shovel', name: '⛏️ Shovel', description: 'Dig for treasures underground. Use /dig to start digging!', price: 200, type: 'tool' },
-    { id: 'padlock', name: '🔒 Padlock', description: 'Protects your wallet from robberies (single use)', price: 100, type: 'single' },
-    { id: 'phone', name: '📱 Phone', description: 'Call services - police (protection), taxi (explore), takeout (food)', price: 150, type: 'single' },
+    { id: 'fishing_rod', name: 'ðŸŽ£ Fishing Rod', description: 'Essential tool for fishing. Use /fish to catch treasure from the sea!', price: 200, type: 'tool' },
+    { id: 'shovel', name: 'â›ï¸ Shovel', description: 'Dig for treasures underground. Use /dig to start digging!', price: 200, type: 'tool' },
+    { id: 'padlock', name: 'ðŸ”’ Padlock', description: 'Protects your wallet from robberies (single use)', price: 100, type: 'single' },
+    { id: 'phone', name: 'ðŸ“± Phone', description: 'Call services - police (protection), taxi (explore), takeout (food)', price: 150, type: 'single' },
     
     // Consumables
-    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next /dig or increases /fish success!', price: 80, type: 'consumable' },
-    { id: 'food', name: '🍔 Food Item', description: 'A basic food item. Collect different types from takeout!', price: 25, type: 'consumable' },
+    { id: 'treasure_map', name: 'ðŸ—ºï¸ Treasure Map', description: 'Doubles rewards for your next /dig or increases /fish success!', price: 80, type: 'consumable' },
+    { id: 'food', name: 'ðŸ” Food Item', description: 'A basic food item. Collect different types from takeout!', price: 25, type: 'consumable' },
     
     // Special Items
-    { id: 'lucky_charm', name: '✨ Lucky Charm', description: 'Increases luck in minigames by 10%', price: 300, type: 'cosmetic' },
-    { id: 'vip_pass', name: '🎫 VIP Pass', description: 'Unlock exclusive minigames and higher rewards', price: 500, type: 'single' }
+    { id: 'lucky_charm', name: 'âœ¨ Lucky Charm', description: 'Increases luck in minigames by 10%', price: 300, type: 'cosmetic' },
+    { id: 'vip_pass', name: 'ðŸŽ« VIP Pass', description: 'Unlock exclusive minigames and higher rewards', price: 500, type: 'single' }
   ];
 
   for (const item of defaultItems) {

@@ -1104,6 +1104,11 @@ async function initDb() {
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_normal_rob BIGINT DEFAULT 0`);
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_bank_rob BIGINT DEFAULT 0`);
     await run(`ALTER TABLE user_inventory ADD COLUMN IF NOT EXISTS equipped INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE economy_shop_items ADD COLUMN IF NOT EXISTS item_id TEXT`);
+    await run(`ALTER TABLE economy_shop_items ADD COLUMN IF NOT EXISTS use_effect TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE economy_shop_items ADD COLUMN IF NOT EXISTS item_image_url TEXT DEFAULT NULL`);
+    await run(`UPDATE economy_shop_items SET item_id=id WHERE item_id IS NULL`);
+    await run(`CREATE UNIQUE INDEX IF NOT EXISTS idx_economy_shop_items_guild_item_id ON economy_shop_items (guild_id, item_id)`);
 
     // Minigames stats table
     await run(`
@@ -1213,6 +1218,72 @@ async function initDb() {
       completed_at BIGINT DEFAULT NULL,
       UNIQUE (guild_id, user_id, unban_at)
     )`);
+
+    // ── Lore Economy Upgrade ───────────────────────────────────────────────────
+
+    // Player class selection (Murk Classes)
+    await run(`
+      CREATE TABLE IF NOT EXISTS user_class (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        class_id TEXT NOT NULL,
+        chosen_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+
+    // Dark Bazaar daily stock (per guild, refreshes daily)
+    await run(`
+      CREATE TABLE IF NOT EXISTS dark_bazaar_stock (
+        guild_id TEXT NOT NULL,
+        date_key TEXT NOT NULL,
+        items_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (guild_id, date_key)
+      )
+    `);
+
+    // Bounty board
+    await run(`
+      CREATE TABLE IF NOT EXISTS bounties (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        poster_id TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        amount BIGINT NOT NULL,
+        posted_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        expires_at BIGINT NOT NULL,
+        claimed_by TEXT DEFAULT NULL,
+        claimed_at BIGINT DEFAULT NULL,=
+        status TEXT NOT NULL DEFAULT 'active'
+      )
+    `);
+
+    // Prestige log
+    await run(`
+      CREATE TABLE IF NOT EXISTS prestige_log (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        prestige_level INTEGER NOT NULL,
+        prestiged_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+      )
+    `);
+
+    // Prestige level and lifetime earnings on user_economy
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS prestige_level INTEGER DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS total_earned BIGINT DEFAULT 0`);
+
+    // Active timed buffs (from crafted items like swamp_tonic)
+    await run(`
+      CREATE TABLE IF NOT EXISTS user_buffs (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        buff_id TEXT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        PRIMARY KEY (guild_id, user_id, buff_id)
+      )
+    `);
+
   } catch (e) {
     // Columns might already exist, ignore error
   }

@@ -1,5 +1,408 @@
 const { all, get, run } = require("./db");
 
+/**
+ * ============ MURK ECONOMY: LORE-DRIVEN DEEP ECONOMY ============
+ * 
+ * THE MURK LORE:
+ * ───────────────────────────────────────────────────────────────
+ * Deep beneath the fetid swamp lies THE MURK—a sunken civilization built by
+ * ancient traders and alchemists. Once it thrived, but a great catastrophe
+ * sealed it underwater. Now YOU are a Murk Adept, scrounging through its ruins
+ * for wealth, forbidden knowledge, and power.
+ * 
+ * CLASS SYSTEM (Murk Archetypes):
+ *   • BRIGAND: Stealth, theft, high-risk robberies (25% faster cooldowns)
+ *   • ARTIFICER: Crafting, item creation, dark bazaar discount (20% shop discount)
+ *   • SCHOLAR: Lore collection, expedition bonuses (25% more loot from explore/fish)
+ *   • MERCHANT: Trading, bounty posting, profit margins (10% bank interest daily)
+ * 
+ * KEY MECHANICS:
+ *   1. Daily Stock → Dark Bazaar refreshes daily with new items
+ *   2. Bounty Board → Post & claim bounties for coins
+ *   3. Crafting → Combine items into powerful artifacts & buffs
+ *   4. Prestige System → Ascend to godhood, reset for multiplicative power
+ *   5. Lore Collection → Unlock story & secrets
+ */
+
+// ==================== MURK CLASSES ==================
+
+const MURK_CLASSES = {
+  brigand: {
+    name: "🗡️ Brigand",
+    icon: "🗡️",
+    description: "Master of stealth and high-risk crimes. 25% faster robbery cooldowns.",
+    passive: "robbery_speedup",
+    passive_value: 0.75  // multiply cooldown by 0.75
+  },
+  artificer: {
+    name: "⚙️ Artificer",
+    icon: "⚙️",
+    description: "Craftsperson of the Murk. 20% discount at Dark Bazaar.",
+    passive: "bazaar_discount",
+    passive_value: 0.8
+  },
+  scholar: {
+    name: "📖 Scholar",
+    icon: "📖",
+    description: "Collector of forbidden knowledge. 25% more loot from expeditions.",
+    passive: "expedition_bonus",
+    passive_value: 1.25
+  },
+  merchant: {
+    name: "💼 Merchant",
+    icon: "💼",
+    description: "Trader extraordinaire. 10% daily bank interest.",
+    passive: "daily_interest",
+    passive_value: 0.1
+  }
+};
+
+// ==================== DARK BAZAAR (Daily Shop) ==================
+
+const BAZAAR_POOL = [
+  { id: "murk_shard", name: "🔮 Murk Shard", price: 150, description: "Fragment of Murk power. Sell for +50%." },
+  { id: "swamp_tonic", name: "🧪 Swamp Tonic", price: 200, description: "Grants +25% earnings for 1 hour." },
+  { id: "ancient_coin", name: "💎 Ancient Coin", price: 100, description: "Worth 1.5x normal coins at bank." },
+  { id: "trap_kit", name: "🪤 Trap Kit", price: 250, description: "Defend against robberies—one-time use." },
+  { id: "fortune_scroll", name: "📜 Fortune Scroll", price: 300, description: "Reroll next dig/fish for better loot." },
+  { id: "murk_map", name: "🗺️ Murk Map", price: 500, description: "Find hidden Murk zones for 24hrs." },
+  { id: "void_essence", name: "✨ Void Essence", price: 800, description: "Increases max wallet capacity +500." }
+];
+
+function generateDailyBazaar() {
+  const picked = [];
+  const shuffled = [...BAZAAR_POOL].sort(() => Math.random() - 0.5);
+  for (let i = 0; i < 5; i++) {
+    picked.push(shuffled[i]);
+  }
+  return picked;
+}
+
+// ==================== CRAFTING RECIPES ==================
+
+const RECIPES = {
+  // Simple combos
+  "murk_elixir": {
+    name: "🔮 Murk Elixir (Master)",
+    inputs: [
+      { item: "swamp_tonic", qty: 2 },
+      { item: "murk_shard", qty: 1 },
+      { item: "ancient_coin", qty: 3 }
+    ],
+    output: { item: "murk_elixir", qty: 1 },
+    reward_coins: 500,
+    buff: { buff_id: "super_luck", duration: 7200000 }  // 2 hours: +30% rewards
+  },
+  "prestige_token": {
+    name: "👑 Prestige Token",
+    inputs: [
+      { item: "void_essence", qty: 2 },
+      { item: "murk_elixir", qty: 1 },
+      { item: "fortune_scroll", qty: 5 }
+    ],
+    output: null,
+    reward_coins: 0,
+    effect: "prestige_unlock"  // unlocks prestige mode
+  }
+};
+
+// ==================== BOUNTY SYSTEM ==================
+
+async function cmdBounty(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  const subcommand = (args[0] || "").toLowerCase();
+
+  if (subcommand === "list") {
+    const bounties = await all(
+      `SELECT * FROM bounties WHERE guild_id=? AND status='active' ORDER BY amount DESC LIMIT 10`,
+      [message.guild.id]
+    );
+
+    if (bounties.length === 0) {
+      await message.reply("📋 No active bounties. Use `bounty post @user <amount>` to create one!").catch(() => {});
+      return;
+    }
+
+    const list = bounties.map((b, i) => 
+      `**${i + 1}.** <@${b.target_id}> — **${b.amount}** ${economySettings.currency_name}\nPosted by <@${b.poster_id}>`
+    ).join("\n\n");
+
+    await message.reply({ embeds: [{
+      color: 0xff6b6b,
+      title: "💀 Bounty Board",
+      description: list,
+      footer: { text: "Use 'bounty claim <number>' to accept a bounty!" }
+    }] }).catch(() => {});
+    return;
+  }
+
+  if (subcommand === "post") {
+    if (args.length < 2) {
+      await message.reply(`\`${ecoPrefix}bounty post @user <amount>\`\n\n💀 Post a bounty on someone for coins!`).catch(() => {});
+      return;
+    }
+
+    const target = message.mentions.users.first();
+    if (!target) {
+      await message.reply("❌ Please mention a user to bounty.").catch(() => {});
+      return;
+    }
+
+    const amount = parseInt(args[2]);
+    if (isNaN(amount) || amount < 50) {
+      await message.reply("❌ Minimum bounty is 50 coins.").catch(() => {});
+      return;
+    }
+
+    const poster = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
+      [message.guild.id, message.author.id]);
+
+    if (!poster || poster.balance < amount) {
+      await message.reply(`❌ You need ${amount} coins!`).catch(() => {});
+      return;
+    }
+
+    // Deduct immediately
+    await runCmd(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`,
+      [amount, message.guild.id, message.author.id]);
+
+    // Create bounty
+    const expiresAt = Date.now() + 604800000; // 7 days
+    await runCmd(
+      `INSERT INTO bounties (guild_id, poster_id, target_id, amount, expires_at) VALUES (?, ?, ?, ?, ?)`,
+      [message.guild.id, message.author.id, target.id, amount, expiresAt]
+    );
+
+    await message.reply(`💀 **Bounty Posted!**\n\nTarget: ${target}\nAmount: ${amount} ${economySettings.currency_name}\nExpires: <t:${Math.floor(expiresAt/1000)}:R>`).catch(() => {});
+    return;
+  }
+
+  if (subcommand === "claim") {
+    const bountyId = parseInt(args[1]);
+    if (isNaN(bountyId)) {
+      await message.reply("❌ Invalid bounty ID.").catch(() => {});
+      return;
+    }
+
+    const bounty = await getCmd(`SELECT * FROM bounties WHERE id=? AND status='active' AND guild_id=?`,
+      [bountyId, message.guild.id]);
+
+    if (!bounty) {
+      await message.reply("❌ Bounty not found.").catch(() => {});
+      return;
+    }
+
+    if (message.author.id === bounty.target_id) {
+      await message.reply("❌ You can't claim a bounty on yourself!").catch(() => {});
+      return;
+    }
+
+    // Mark claimed, give reward
+    await runCmd(
+      `UPDATE bounties SET claimed_by=?, claimed_at=?, status='claimed' WHERE id=?`,
+      [message.author.id, Date.now(), bountyId]
+    );
+
+    await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+      [bounty.amount, message.guild.id, message.author.id]);
+
+    await message.reply(`💀 **Bounty Claimed!**\n\nYou earned **${bounty.amount}** ${economySettings.currency_name}!\nTarget: <@${bounty.target_id}>`).catch(() => {});
+    return;
+  }
+
+  await message.reply(`📋 **Bounty Commands:**\n\`bounty list\` - See all bounties\n\`bounty post @user <amount>\` - Post a bounty\n\`bounty claim <id>\` - Claim reward`).catch(() => {});
+}
+
+// ==================== CRAFTING SYSTEM ==================
+
+async function cmdCraft(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  if (!args[0]) {
+    const recipes = Object.entries(RECIPES).map(([key, recipe]) =>
+      `**${recipe.name}**\nInputs: ${recipe.inputs.map(i => `${i.qty}x ${i.item}`).join(", ")}`
+    ).join("\n\n");
+
+    await message.reply({ embeds: [{
+      color: 0x7b68ee,
+      title: "⚙️ Crafting Recipes",
+      description: recipes,
+      footer: { text: `Use craft <recipe> to craft!` }
+    }] }).catch(() => {});
+    return;
+  }
+
+  const recipeName = args[0].toLowerCase();
+  const recipe = RECIPES[recipeName];
+
+  if (!recipe) {
+    await message.reply("❌ Recipe not found.").catch(() => {});
+    return;
+  }
+
+  // Check inputs
+  for (const input of recipe.inputs) {
+    const inv = await getCmd(
+      `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
+      [message.guild.id, message.author.id, input.item]
+    );
+
+    if (!inv || inv.quantity < input.qty) {
+      await message.reply(`❌ You need ${input.qty}x ${input.item}!`).catch(() => {});
+      return;
+    }
+  }
+
+  // Consume inputs
+  for (const input of recipe.inputs) {
+    await runCmd(
+      `UPDATE user_inventory SET quantity=quantity-? WHERE guild_id=? AND user_id=? AND item_id=?`,
+      [input.qty, message.guild.id, message.author.id, input.item]
+    );
+  }
+
+  // Give output
+  if (recipe.output) {
+    await runCmd(
+      `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)
+       ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + ?`,
+      [message.guild.id, message.author.id, recipe.output.item, recipe.output.qty, recipe.output.qty]
+    );
+  }
+
+  // Apply buff if present
+  if (recipe.buff) {
+    await runCmd(
+      `INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?)`,
+      [message.guild.id, message.author.id, recipe.buff.buff_id, Date.now() + recipe.buff.duration]
+    );
+  }
+
+  // Give coins
+  if (recipe.reward_coins > 0) {
+    await runCmd(
+      `UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+      [recipe.reward_coins, message.guild.id, message.author.id]
+    );
+  }
+
+  // Special: prestige unlock
+  if (recipe.effect === "prestige_unlock") {
+    await runCmd(
+      `UPDATE user_economy SET prestige_level=prestige_level+1 WHERE guild_id=? AND user_id=?`,
+      [message.guild.id, message.author.id]
+    );
+
+    await runCmd(
+      `INSERT INTO prestige_log (guild_id, user_id, prestige_level) VALUES (?, ?, ?)`,
+      [message.guild.id, message.author.id, await getCmd(`SELECT prestige_level FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id])]
+    );
+  }
+
+  await message.reply(`✨ **Crafted:** ${recipe.name}!`).catch(() => {});
+}
+
+// ==================== PRESTIGE SYSTEM ==================
+
+async function cmdPrestige(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+    [message.guild.id, message.author.id]);
+
+  const econ = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
+    [message.guild.id, message.author.id]);
+
+  if (args[0]?.toLowerCase() === "ascend") {
+    if (econ.prestige_level === 0) {
+      await message.reply("❌ You must craft a **Prestige Token** first!").catch(() => {});
+      return;
+    }
+
+    const multiplier = 1 + (econ.prestige_level * 0.2); // 20% per prestige level
+    const awardedBalance = Math.floor(econ.total_earned * multiplier);
+
+    await runCmd(
+      `UPDATE user_economy SET balance=?, total_earned=0, prestige_level=0 WHERE guild_id=? AND user_id=?`,
+      [awardedBalance, message.guild.id, message.author.id]
+    );
+
+    await message.reply(`👑 **ASCENDED!**\n\nYou've become a Murk God!\n\n💰 Prestige Reward: ${awardedBalance} ${economySettings.currency_name}\n📊 Multiplier: **${multiplier}x** your lifetime earnings`).catch(() => {});
+    return;
+  }
+
+  const embed = {
+    color: 0xffd700,
+    title: "👑 Prestige Status",
+    fields: [
+      { name: "Level", value: `${econ.prestige_level}`, inline: true },
+      { name: "Lifetime Earnings", value: `${econ.total_earned}`, inline: true },
+      { name: "Current Balance", value: `${econ.balance} ${economySettings.currency_name}`, inline: true },
+      { name: "Ascend Multiplier", value: `${1 + (econ.prestige_level * 0.2)}x`, inline: true }
+    ],
+    footer: { text: "Craft Prestige Tokens to increase your prestige level!" }
+  };
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ==================== CLASS SELECTION ==================
+
+async function cmdClass(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  if (!args[0]) {
+    const classList = Object.entries(MURK_CLASSES).map(([key, cls]) =>
+      `**${cls.name}**\n${cls.description}`
+    ).join("\n\n");
+
+    await message.reply({ embeds: [{
+      color: 0x00d4ff,
+      title: "⚔️ Murk Archetypes",
+      description: classList,
+      footer: { text: `Choose: class select <brigand|artificer|scholar|merchant>` }
+    }] }).catch(() => {});
+    return;
+  }
+
+  const classKey = args[0].toLowerCase();
+  const murk_class = MURK_CLASSES[classKey];
+
+  if (!murk_class) {
+    await message.reply("❌ Invalid class!").catch(() => {});
+    return;
+  }
+
+  await runCmd(
+    `INSERT INTO user_class (guild_id, user_id, class_id) VALUES (?, ?, ?)
+     ON CONFLICT (guild_id, user_id) DO UPDATE SET class_id = ?`,
+    [message.guild.id, message.author.id, classKey, classKey]
+  );
+
+  await message.reply(`⚔️ **You've chosen:** ${murk_class.name}\n\n${murk_class.description}`).catch(() => {});
+}
+
 // ==================== SWAMP STORY SYSTEM ====================
 
 const SWAMP_STORIES = {
@@ -362,19 +765,6 @@ async function giveReward(message, rewardType, util) {
   }
 }
 
-// ==================== EXPORTS ====================
-
-module.exports = {
-  cmdFish,
-  cmdDig,
-  cmdRobBank,
-  cmdPhone,
-  cmdAdventure,
-  cmdExplore,
-  handleDeath,
-  giveReward
-};
-
 // ==================== SWAMP ADVENTURE SYSTEM ====================
 
 async function cmdAdventure(message, args, util) {
@@ -634,6 +1024,261 @@ async function giveReward(message, rewardType, util) {
   }
 }
 
+// ==================== MURK SHOP CATALOG ====================
+
+const MURK_CATALOG = [
+  {
+    item_id: "fishing_rod",
+    name: "🎣 Fishing Rod",
+    price: 300,
+    item_type: "tool",
+    description: "A gnarled rod carved from swamp oak. Required to fish in the murky waters.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3a3.png",
+    use_effect: "fishing_rod",
+    lore: "The Murk fishermen say the rod chooses the catch. A crooked rod catches crooked fish."
+  },
+  {
+    item_id: "shovel",
+    name: "⛏️ Rusty Shovel",
+    price: 250,
+    item_type: "tool",
+    description: "A well-worn shovel caked with dried mud. Required for digging in the swamp.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/26cf.png",
+    use_effect: "shovel",
+    lore: "What lies beneath the swamp floor? Gold, bones, or something far worse?"
+  },
+  {
+    item_id: "swamp_tonic",
+    name: "🧪 Swamp Tonic",
+    price: 200,
+    item_type: "consumable",
+    description: "A bubbling green brew. Boosts all earnings by 20% for 1 hour.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ea.png",
+    use_effect: "swamp_tonic",
+    lore: "Brewed by Mama Gretch, who hasn't been seen since the last bog incident."
+  },
+  {
+    item_id: "revival_potion",
+    name: "💜 Revival Potion",
+    price: 500,
+    item_type: "consumable",
+    description: "A violet vial that revives you from near-death. Fully restores lost coins on death.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f49c.png",
+    use_effect: "revival_potion",
+    lore: "The taste is indescribable. Most survivors refuse to describe it anyway."
+  },
+  {
+    item_id: "padlock",
+    name: "🔒 Padlock",
+    price: 250,
+    item_type: "consumable",
+    description: "Secures your wallet from thieves. Grants 4-hour robbery immunity when used.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f512.png",
+    use_effect: "padlock",
+    lore: "The lock doesn't keep them out. It just makes them choose someone easier."
+  },
+  {
+    item_id: "trap_kit",
+    name: "🪤 Trap Kit",
+    price: 350,
+    item_type: "consumable",
+    description: "Sets an invisible trap. The next person to rob you loses 20% of their wallet instead.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa64.png",
+    use_effect: "trap_kit",
+    lore: "Snap. Found it."
+  },
+  {
+    item_id: "fortune_scroll",
+    name: "📜 Fortune Scroll",
+    price: 400,
+    item_type: "consumable",
+    description: "An ancient parchment. Reading it grants a random coin bonus of 50–500.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f4dc.png",
+    use_effect: "fortune_scroll",
+    lore: "The ink moves on its own. The scholars say it's just the humidity."
+  },
+  {
+    item_id: "murk_map",
+    name: "🗺️ Murk Map",
+    price: 600,
+    item_type: "consumable",
+    description: "A hand-drawn map of the deep swamp. Doubles your explore loot for 2 hours.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f5fa.png",
+    use_effect: "murk_map",
+    lore: "Drawn by someone who probably didn't survive the trip back."
+  },
+  {
+    item_id: "void_essence",
+    name: "🌑 Void Essence",
+    price: 750,
+    item_type: "consumable",
+    description: "A vial of pure void energy. Use it to crystallize 3–8 free Murk Shards.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f311.png",
+    use_effect: "void_essence",
+    lore: "It hums with a frequency that makes animals flee. Most animals."
+  },
+  {
+    item_id: "ancient_coin",
+    name: "🪙 Ancient Coin",
+    price: 450,
+    item_type: "consumable",
+    description: "A pre-Murk currency. Sell it to a merchant for 1.5x its purchase value.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa99.png",
+    use_effect: "ancient_coin",
+    lore: "The face on the coin blinks if you look at it long enough."
+  },
+  {
+    item_id: "murk_shard",
+    name: "🔷 Murk Shard",
+    price: 150,
+    item_type: "material",
+    description: "A crystallized fragment of the Murk's dark energy. Core crafting material.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f537.png",
+    use_effect: null,
+    lore: "Found in the deepest bog pools, glowing faintly blue. Do not taste it."
+  },
+  {
+    item_id: "shadow_cloak",
+    name: "🌑 Shadow Cloak",
+    price: 900,
+    item_type: "consumable",
+    description: "A cloak woven from Murk shadows. Makes you completely unrobbable for 2 hours.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9e5.png",
+    use_effect: "shadow_cloak",
+    lore: "You don't hide in shadows. You ARE shadows."
+  },
+  {
+    item_id: "lucky_charm",
+    name: "🍀 Lucky Charm",
+    price: 700,
+    item_type: "consumable",
+    description: "A four-leaf clover in swamp resin. +20% earnings boost for 6 hours.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f340.png",
+    use_effect: "lucky_charm",
+    lore: "Lucky in coins, unlucky in everything else. Ask the previous owner."
+  },
+  {
+    item_id: "gamblers_dice",
+    name: "🎲 Gambler's Dice",
+    price: 800,
+    item_type: "consumable",
+    description: "Cursed dice from a lost game. 40% chance to triple your wallet — or lose 40%.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3b2.png",
+    use_effect: "gamblers_dice",
+    lore: "The losing player is never seen again. The winning player wishes they weren't."
+  },
+  {
+    item_id: "merchants_lens",
+    name: "🔍 Merchant's Lens",
+    price: 550,
+    item_type: "consumable",
+    description: "A magnifying glass that reveals another user's exact wallet & bank balance.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f50d.png",
+    use_effect: "merchants_lens",
+    lore: "Knowledge is power. Knowing someone's balance is dangerous power."
+  },
+  {
+    item_id: "frog_amulet",
+    name: "🐸 Frog Amulet",
+    price: 650,
+    item_type: "single",
+    description: "A carved frog totem from the Murk. Permanently boosts daily rewards by 15%.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f438.png",
+    use_effect: "frog_amulet",
+    lore: "The Murk frogs don't blink. They just wait. Wearing this makes you wait with them."
+  },
+  {
+    item_id: "lizard_totem",
+    name: "🦎 Lizard Totem",
+    price: 850,
+    item_type: "single",
+    description: "An ancient carved totem. Passively regenerates +50 coins per hour forever.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f98e.png",
+    use_effect: "lizard_totem",
+    lore: "The lizards built something once. Then the Murk came. The totems remember."
+  },
+  {
+    item_id: "witch_brew",
+    name: "🫖 Witch's Brew",
+    price: 650,
+    item_type: "consumable",
+    description: "Unstable brew from Baba Murk. 50/50: DOUBLES your wallet or halves it.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fad6.png",
+    use_effect: "witch_brew",
+    lore: "She cackled when she handed it over. That's either a good sign or a very bad one."
+  },
+  {
+    item_id: "prestige_token",
+    name: "⭐ Prestige Token",
+    price: 2000,
+    item_type: "single",
+    description: "A glowing token of exceptional status. Required for the Prestige Ascension ritual.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/2b50.png",
+    use_effect: "prestige_use",
+    lore: "It whispers your name. It knows what you've sacrificed to get here."
+  },
+  {
+    item_id: "dragon_scale",
+    name: "🐉 Dragon Scale",
+    price: 1200,
+    item_type: "consumable",
+    description: "A mythical scale from the Murk Serpent. 2x ALL earnings for 3 hours.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f409.png",
+    use_effect: "dragon_scale",
+    lore: "The Murk Serpent doesn't shed scales. Someone took this. We don't ask how."
+  },
+  {
+    item_id: "trophy",
+    name: "🏆 Swamp Trophy",
+    price: 1000,
+    item_type: "collectible",
+    description: "A prestigious collectible awarded to Murk survivors. Pure bragging rights.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3c6.png",
+    use_effect: null,
+    lore: "The inscription reads: 'They survived. Somehow. We're still confused.'"
+  },
+  {
+    item_id: "frog_crown",
+    name: "👑 Frog Crown",
+    price: 1500,
+    item_type: "single",
+    description: "The legendary crown of the Murk Frog King. +25% daily & weekly bonus permanently.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f451.png",
+    use_effect: "frog_crown",
+    lore: "The Frog King didn't surrender it willingly. No one talks about what happened."
+  },
+  {
+    item_id: "black_market_pass",
+    name: "🎭 Black Market Pass",
+    price: 1800,
+    item_type: "single",
+    description: "A forged pass to The Dark Bazaar. Permanently unlocks dark market trades.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ad.png",
+    use_effect: "black_market_pass",
+    lore: "Don't ask where it came from. Don't ask what the stamp means."
+  },
+  {
+    item_id: "murk_lantern",
+    name: "🏮 Murk Lantern",
+    price: 500,
+    item_type: "consumable",
+    description: "A lantern burning swamp gas. Doubles explore loot for 2 hours when lit.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ee.png",
+    use_effect: "murk_lantern",
+    lore: "Burns green. Smells worse. Finds treasure though."
+  },
+  {
+    item_id: "cursed_compass",
+    name: "🧭 Cursed Compass",
+    price: 750,
+    item_type: "consumable",
+    description: "Points to buried treasure... or danger. 65% chance for a 200–1000 coin jackpot.",
+    item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ed.png",
+    use_effect: "cursed_compass",
+    lore: "It always points north. Unfortunately, north is where the screaming comes from."
+  }
+];
+
 // ==================== EXPORTS ====================
 
 module.exports = {
@@ -643,8 +1288,18 @@ module.exports = {
   cmdPhone,
   cmdAdventure,
   cmdExplore,
+  cmdBounty,
+  cmdCraft,
+  cmdPrestige,
+  cmdClass,
+  cmdUse,
+  cmdItemInfo,
+  cmdGift,
   handleDeath,
-  giveReward
+  giveReward,
+  MURK_CLASSES,
+  MURK_CATALOG,
+  generateDailyBazaar
 };
 
 const FISH_TYPES = [
@@ -985,11 +1640,375 @@ async function cmdPhone(message, args, util) {
   await message.reply(`📱 **Phone Services**\n\n\`${ecoPrefix}phone police\` - Call the police (1h protection)\n\`${ecoPrefix}phone taxi\` - Order a taxi (funny stories)\n\`${ecoPrefix}phone takeout\` - Order food (${50} ${economySettings.currency_name})`).catch(() => {});
 }
 
-// ==================== EXPORTS ====================
+// ==================== ITEM USE SYSTEM ====================
 
-module.exports = {
-  cmdFish,
-  cmdDig,
-  cmdRobBank,
-  cmdPhone
-};
+async function cmdUse(message, args, util) {
+  const { EmbedBuilder } = require("discord.js");
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  if (!args[0]) {
+    await message.reply(`📦 **Usage:** \`${ecoPrefix}use <item_name>\`\nCheck your inventory with \`${ecoPrefix}inventory\``).catch(() => {});
+    return;
+  }
+
+  const itemName = args.filter(a => !a.startsWith("<@")).join(" ").toLowerCase();
+  const guildId = message.guild.id;
+  const userId = message.author.id;
+
+  const inventoryItem = await getCmd(`
+    SELECT ui.quantity, si.name, si.description, si.item_type, si.use_effect, si.item_image_url, si.item_id
+    FROM user_inventory ui
+    JOIN economy_shop_items si ON si.item_id = ui.item_id AND si.guild_id = ui.guild_id
+    WHERE ui.guild_id=? AND ui.user_id=?
+      AND (LOWER(si.name) LIKE ? OR si.item_id LIKE ?)
+      AND ui.quantity > 0
+  `, [guildId, userId, `%${itemName}%`, `%${itemName}%`]);
+
+  if (!inventoryItem) {
+    await message.reply(`❌ You don't have **${args.filter(a => !a.startsWith("<@")).join(" ")}** in your inventory!`).catch(() => {});
+    return;
+  }
+
+  if (!inventoryItem.use_effect) {
+    await message.reply(`❌ **${inventoryItem.name}** cannot be used — it's a ${inventoryItem.item_type}.`).catch(() => {});
+    return;
+  }
+
+  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [guildId, userId]);
+  const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+  const balance = economy?.balance || 0;
+  const now = Date.now();
+  const effect = inventoryItem.use_effect;
+
+  let embedTitle, embedDesc, embedColor;
+  let consumed = true;
+
+  if (effect === "fishing_rod" || effect === "shovel") {
+    consumed = false;
+    const cmd = effect === "fishing_rod" ? "fish" : "dig";
+    await message.reply(`🔧 **${inventoryItem.name}** is a tool — having it in your inventory is enough! Try \`${ecoPrefix}${cmd}\`.`).catch(() => {});
+    return;
+
+  } else if (effect === "prestige_use") {
+    consumed = false;
+    await message.reply(`⭐ The Prestige Token is used during \`${ecoPrefix}prestige ascend\` — keep it in your inventory!`).catch(() => {});
+    return;
+
+  } else if (effect === "swamp_tonic") {
+    const expires = now + 3600000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "earnings_boost_20", expires, expires]);
+    embedTitle = "🧪 Swamp Tonic — CONSUMED";
+    embedDesc = "The green liquid burns going down. Your vision goes swampy for a moment, then clears.\n\n✅ **+20% earnings boost** for the next **1 hour**!";
+    embedColor = 0x00ff88;
+
+  } else if (effect === "padlock") {
+    const expires = now + 14400000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "robbery_immune", expires, expires]);
+    embedTitle = "🔒 Padlock — ACTIVATED";
+    embedDesc = "You snap the padlock shut on your wallet.\n\n✅ **Robbery immunity** for **4 hours**!";
+    embedColor = 0xffd700;
+
+  } else if (effect === "trap_kit") {
+    const expires = now + 86400000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "trap_set", expires, expires]);
+    embedTitle = "🪤 Trap Kit — SET";
+    embedDesc = "You carefully set the trap around your coin pouch. The next person to attempt a robbery will trigger it and *lose* 20% of their wallet.\n\n✅ **Robbery trap** active for **24 hours**!";
+    embedColor = 0xff6600;
+
+  } else if (effect === "fortune_scroll") {
+    const bonus = Math.floor(Math.random() * 450) + 50;
+    await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
+    const fortunes = [
+      "The scroll speaks of rivers of gold flowing from the east swamp.",
+      "Ancient text warns of danger but promises great reward to the bold.",
+      "The Murk's voice echoes: *'What is buried shall be found by those who seek.'*",
+      "A crude map appears then fades. But the coins remain.",
+      "The runes spell out a number. That number is your blessing."
+    ];
+    embedTitle = "📜 Fortune Scroll — READ";
+    embedDesc = `${fortunes[Math.floor(Math.random() * fortunes.length)]}\n\n✅ You received **+${bonus}** ${economySettings.currency_name}!`;
+    embedColor = 0xffeedd;
+
+  } else if (effect === "murk_map" || effect === "murk_lantern") {
+    const expires = now + 7200000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "explore_double", expires, expires]);
+    if (effect === "murk_map") {
+      embedTitle = "🗺️ Murk Map — ACTIVATED";
+      embedDesc = "You trace the hand-drawn paths to a hidden clearing deep in the swamp.\n\n✅ **Explore loot doubled** for **2 hours**!";
+      embedColor = 0x6699ff;
+    } else {
+      embedTitle = "🏮 Murk Lantern — LIT";
+      embedDesc = "The lantern flickers green. Hidden paths glow before you.\n\n✅ **Explore loot doubled** for **2 hours**!";
+      embedColor = 0x99ff66;
+    }
+
+  } else if (effect === "shadow_cloak") {
+    const expires = now + 7200000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "robbery_immune", expires, expires]);
+    embedTitle = "🌑 Shadow Cloak — WORN";
+    embedDesc = "Your form flickers and becomes indistinct. No one can rob what they can't see.\n\n✅ **Unrobbable** for **2 hours**!";
+    embedColor = 0x222244;
+
+  } else if (effect === "lucky_charm") {
+    const expires = now + 21600000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "earnings_boost_20", expires, expires]);
+    embedTitle = "🍀 Lucky Charm — ACTIVATED";
+    embedDesc = "The four-leaf clover glows with a soft golden light as you hold it.\n\n✅ **+20% earnings boost** for **6 hours**!";
+    embedColor = 0x33cc66;
+
+  } else if (effect === "gamblers_dice") {
+    const win = Math.random() < 0.4;
+    if (win) {
+      const gain = balance * 2;
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + gain, guildId, userId]);
+      embedTitle = "🎲 Gambler's Dice — JACKPOT!";
+      embedDesc = `The dice clatter and land on **TRIPLE**. The table erupts in disbelief.\n\n🎉 You **TRIPLED** your wallet! **+${gain}** ${economySettings.currency_name}!`;
+      embedColor = 0xffdd00;
+    } else {
+      const loss = Math.floor(balance * 0.4);
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [Math.max(0, balance - loss), guildId, userId]);
+      embedTitle = "🎲 Gambler's Dice — BUST";
+      embedDesc = `The dice clatter. The room goes quiet. You lose.\n\n💸 Lost **${loss}** ${economySettings.currency_name}. The dice roll away into the dark.`;
+      embedColor = 0xff3333;
+    }
+
+  } else if (effect === "merchants_lens") {
+    const target = message.mentions.users.first();
+    if (!target) {
+      await message.reply(`❌ You need to mention a user: \`${ecoPrefix}use lens @user\``).catch(() => {});
+      return;
+    }
+    const targetEconomy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, target.id]);
+    const tBal = targetEconomy?.balance || 0;
+    const tBank = targetEconomy?.bank || 0;
+    embedTitle = "🔍 Merchant's Lens — USED";
+    embedDesc = `You peer through the lens at **${target.username}**.\n\n👛 **Wallet:** ${tBal} ${economySettings.currency_name}\n🏦 **Bank:** ${tBank} ${economySettings.currency_name}\n💰 **Total:** ${tBal + tBank} ${economySettings.currency_name}\n\n*The lens shatters after revealing this truth.*`;
+    embedColor = 0xaaddff;
+
+  } else if (effect === "witch_brew") {
+    const win = Math.random() < 0.5;
+    if (win) {
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance * 2, guildId, userId]);
+      embedTitle = "🫖 Witch's Brew — BLESSED!";
+      embedDesc = `The brew tastes like copper and nightmares. Then the room spins...\n\n✨ **DOUBLED!** You gained **+${balance}** ${economySettings.currency_name}!`;
+      embedColor = 0xff88ff;
+    } else {
+      const loss = Math.floor(balance / 2);
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [loss, guildId, userId]);
+      embedTitle = "🫖 Witch's Brew — CURSED!";
+      embedDesc = `The brew tastes like copper and nightmares. Your coins vanish...\n\n💀 **HALVED!** Lost **${balance - loss}** ${economySettings.currency_name}.`;
+      embedColor = 0x660066;
+    }
+
+  } else if (effect === "dragon_scale") {
+    const expires = now + 10800000;
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "earnings_boost_100", expires, expires]);
+    embedTitle = "🐉 Dragon Scale — INFUSED";
+    embedDesc = "You hold the scale and feel ancient power surge through you. The air crackles.\n\n⚡ **2x ALL earnings** for **3 hours**!";
+    embedColor = 0xff4400;
+
+  } else if (effect === "cursed_compass") {
+    const success = Math.random() < 0.65;
+    if (success) {
+      const bonus = Math.floor(Math.random() * 800) + 200;
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
+      embedTitle = "🧭 Cursed Compass — TREASURE FOUND!";
+      embedDesc = `The compass needle spins wildly then locks. You dig exactly where it points.\n\n💎 **Treasure found! +${bonus}** ${economySettings.currency_name}!`;
+      embedColor = 0xffd700;
+    } else {
+      const loss = Math.min(balance, Math.floor(Math.random() * 200) + 50);
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance - loss, guildId, userId]);
+      embedTitle = "🧭 Cursed Compass — DANGER!";
+      embedDesc = `The compass leads you straight into a bog trap.\n\n💸 Lost **${loss}** ${economySettings.currency_name} in the chaos.`;
+      embedColor = 0x994400;
+    }
+
+  } else if (effect === "ancient_coin") {
+    const value = Math.floor(450 * 1.5);
+    await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + value, guildId, userId]);
+    embedTitle = "🪙 Ancient Coin — SOLD";
+    embedDesc = `A shady merchant materialized from the shadows. "Ah, a Pre-Murk sovereign!"\n\n💰 Sold for **${value}** ${economySettings.currency_name} (1.5x value)!`;
+    embedColor = 0xddaa00;
+
+  } else if (effect === "void_essence") {
+    const shards = Math.floor(Math.random() * 6) + 3;
+    await runCmd(`INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + ?`,
+      [guildId, userId, "murk_shard", shards, shards]);
+    embedTitle = "🌑 Void Essence — CONSUMED";
+    embedDesc = `You uncork the vial. The void energy swirls out and crystallizes.\n\n⚫ The essence became **${shards} Murk Shards** in your inventory!`;
+    embedColor = 0x110022;
+
+  } else if (effect === "frog_amulet") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "daily_boost_15", expires, expires]);
+    embedTitle = "🐸 Frog Amulet — ATTUNED";
+    embedDesc = "You slip the amulet over your neck. One of the carvings blinks.\n\n✅ **+15% daily rewards** — permanent while owned!";
+    embedColor = 0x33ff33;
+    consumed = false; // single-use item persists in inventory
+
+  } else if (effect === "lizard_totem") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "passive_regen_50", expires, expires]);
+    embedTitle = "🦎 Lizard Totem — ACTIVATED";
+    embedDesc = "The totem vibrates in your palm. The lizard carving opens its eyes.\n\n✅ **+50 coin passive regen** every hour — permanent!";
+    embedColor = 0x55aaff;
+    consumed = false;
+
+  } else if (effect === "frog_crown") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "royal_boost", expires, expires]);
+    embedTitle = "👑 Frog Crown — CROWNED";
+    embedDesc = "You place the crown upon your head. The swamp falls silent.\n\n✅ **+25% daily & weekly bonus** — permanently bestowed!";
+    embedColor = 0xffcc00;
+    consumed = false;
+
+  } else if (effect === "black_market_pass") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "bazaar_access", expires, expires]);
+    embedTitle = "🎭 Black Market Pass — ACTIVATED";
+    embedDesc = "The pass glows with a dim red light. Somewhere in the Murk, a door unlocks.\n\n✅ **Dark Bazaar access** unlocked permanently!";
+    embedColor = 0x880000;
+    consumed = false;
+
+  } else if (effect === "revival_potion") {
+    consumed = false;
+    await message.reply(`💜 **${inventoryItem.name}** is held in reserve — it automatically activates when you would die in an adventure or explore event!`).catch(() => {});
+    return;
+
+  } else {
+    consumed = false;
+    await message.reply(`❓ This item doesn't have a defined interaction yet. Contact a server admin.`).catch(() => {});
+    return;
+  }
+
+  if (consumed) {
+    await runCmd(`UPDATE user_inventory SET quantity = quantity - 1 WHERE guild_id=? AND user_id=? AND item_id=?`,
+      [guildId, userId, inventoryItem.item_id]);
+    await runCmd(`DELETE FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity <= 0`,
+      [guildId, userId, inventoryItem.item_id]);
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle(embedTitle)
+    .setDescription(embedDesc)
+    .setColor(embedColor || 0x9966cc)
+    .setThumbnail(inventoryItem.item_image_url || null)
+    .setFooter({ text: "THE MURK | Item System" });
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ==================== ITEM INFO ====================
+
+async function cmdItemInfo(message, args, util) {
+  const { EmbedBuilder } = require("discord.js");
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  if (!args[0]) {
+    await message.reply(`📦 Usage: \`${ecoPrefix}item <item_name>\``).catch(() => {});
+    return;
+  }
+
+  const itemName = args.join(" ").toLowerCase();
+  const item = await getCmd(`SELECT * FROM economy_shop_items WHERE guild_id=? AND (LOWER(name) LIKE ? OR item_id LIKE ?)`,
+    [message.guild.id, `%${itemName}%`, `%${itemName}%`]);
+
+  if (!item) {
+    await message.reply(`❌ Item not found: **${args.join(" ")}**\nCheck the shop with \`${ecoPrefix}shop\``).catch(() => {});
+    return;
+  }
+
+  const catalogEntry = MURK_CATALOG.find(c => c.item_id === item.item_id);
+  const lore = catalogEntry?.lore || "No lore recorded in the Murk archives.";
+
+  const owned = await getCmd(`SELECT quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
+    [message.guild.id, message.author.id, item.item_id]);
+
+  const typeColors = { tool: 0x3399ff, consumable: 0xff6633, material: 0x99aa33, collectible: 0xffcc00, single: 0xcc44ff, misc: 0x888888 };
+
+  const embed = new EmbedBuilder()
+    .setTitle(item.name)
+    .setDescription(`${item.description}\n\n> *"${lore}"*`)
+    .setColor(typeColors[item.item_type] || 0x888888)
+    .setThumbnail(item.item_image_url || null)
+    .addFields(
+      { name: "💰 Price", value: `${item.price} ${economySettings.currency_name}`, inline: true },
+      { name: "🏷️ Type", value: item.item_type.charAt(0).toUpperCase() + item.item_type.slice(1), inline: true },
+      { name: "🎒 You Own", value: owned ? `${owned.quantity}x` : "None", inline: true }
+    );
+
+  if (item.use_effect && item.use_effect !== "fishing_rod" && item.use_effect !== "shovel" && item.use_effect !== "prestige_use" && item.use_effect !== "revival_potion") {
+    embed.addFields({ name: "⚡ Use Command", value: `\`${ecoPrefix}use ${item.item_id}\``, inline: true });
+  }
+  embed.setFooter({ text: "THE MURK | Item Compendium" });
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ==================== GIFT SYSTEM ====================
+
+async function cmdGift(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+
+  if (!economySettings?.enabled) {
+    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    return;
+  }
+
+  const target = message.mentions.users.first();
+  if (!target || args.length < 2) {
+    await message.reply(`❌ Usage: \`${ecoPrefix}gift @user <item_name>\``).catch(() => {});
+    return;
+  }
+
+  if (target.id === message.author.id) {
+    await message.reply("❌ You can't gift items to yourself.").catch(() => {});
+    return;
+  }
+
+  const itemName = args.slice(1).filter(a => !a.startsWith("<@")).join(" ").toLowerCase();
+
+  const inventoryItem = await getCmd(`
+    SELECT ui.quantity, si.name, si.item_type, si.item_image_url, si.item_id
+    FROM user_inventory ui
+    JOIN economy_shop_items si ON si.item_id = ui.item_id AND si.guild_id = ui.guild_id
+    WHERE ui.guild_id=? AND ui.user_id=?
+      AND (LOWER(si.name) LIKE ? OR si.item_id LIKE ?)
+      AND ui.quantity > 0
+  `, [message.guild.id, message.author.id, `%${itemName}%`, `%${itemName}%`]);
+
+  if (!inventoryItem) {
+    await message.reply(`❌ You don't have **${args.slice(1).filter(a => !a.startsWith("<@")).join(" ")}** in your inventory!`).catch(() => {});
+    return;
+  }
+
+  await runCmd(`UPDATE user_inventory SET quantity = quantity - 1 WHERE guild_id=? AND user_id=? AND item_id=?`,
+    [message.guild.id, message.author.id, inventoryItem.item_id]);
+  await runCmd(`DELETE FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity <= 0`,
+    [message.guild.id, message.author.id, inventoryItem.item_id]);
+  await runCmd(`INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, 1) ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + 1`,
+    [message.guild.id, target.id, inventoryItem.item_id]);
+
+  await message.reply(`🎁 You gifted **${inventoryItem.name}** to **${target.username}**! They'll find it in their inventory.`).catch(() => {});
+}

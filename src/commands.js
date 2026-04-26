@@ -7,7 +7,7 @@ const { createCanvas, loadImage, registerFont } = require("canvas");
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
 const { getLevelRoles, getGuildSettings, upsertReactionRoleBinding, removeReactionRoleBinding, getReactionRoleBindings } = require("./settings");
 const { normalizeEmojiKey } = require("./reactionRoles");
-const { cmdFish, cmdDig, cmdRobBank, cmdPhone } = require("./economy");
+const { cmdFish, cmdDig, cmdRobBank, cmdPhone, cmdAdventure, cmdExplore, cmdBounty, cmdCraft, cmdPrestige, cmdClass, cmdUse, cmdItemInfo, cmdGift } = require("./economy");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
 const path = require("path");
@@ -3952,6 +3952,7 @@ async function cmdWork(message) {
 
 // ==================== ECONOMY: SHOP ====================
 async function cmdShop(message) {
+  const { EmbedBuilder } = require("discord.js");
   const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
@@ -3964,14 +3965,43 @@ async function cmdShop(message) {
     return;
   }
 
-  const embed = {
-    color: 0x9b59b6,
-    title: "🛒 Shop",
-    description: items.map((item, i) => 
-      `**${i + 1}. ${item.name}** - ${item.price} ${economySettings.currency_name}\n${item.description}`
-    ).join("\n\n"),
-    footer: { text: `Use buy <item number> to purchase!` }
+  const grouped = new Map();
+  for (const item of items) {
+    const key = item.item_type || "misc";
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(item);
+  }
+
+  const typeEmoji = {
+    tool: "🛠️",
+    consumable: "🧪",
+    material: "🧱",
+    collectible: "🏆",
+    single: "👑",
+    misc: "📦"
   };
+
+  const lines = [];
+  let idx = 1;
+  for (const [type, list] of grouped.entries()) {
+    lines.push(`\n**${typeEmoji[type] || "📦"} ${type.toUpperCase()}**`);
+    for (const item of list) {
+      const usable = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
+        ? ` | Use: \`use ${item.item_id}\``
+        : "";
+      lines.push(`**${idx}. ${item.name}** - ${item.price} ${economySettings.currency_name}${usable}`);
+      lines.push(`${item.description}`);
+      idx += 1;
+    }
+  }
+
+  const previewItem = items.find((i) => i.item_image_url) || items[0];
+  const embed = new EmbedBuilder()
+    .setColor(0x1f8b4c)
+    .setTitle("🛒 The Murk Grand Bazaar")
+    .setDescription(lines.join("\n"))
+    .setThumbnail(previewItem?.item_image_url || null)
+    .setFooter({ text: `Use buy <item number> to purchase | inspect with item <name>` });
 
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -4035,6 +4065,7 @@ async function cmdBuy(message, args) {
 }
 
 async function cmdInventory(message) {
+  const { EmbedBuilder } = require("discord.js");
   const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
@@ -4042,7 +4073,7 @@ async function cmdInventory(message) {
   }
 
   const items = await all(`
-    SELECT ui.item_id, ui.quantity, si.name, si.description
+    SELECT ui.item_id, ui.quantity, si.name, si.description, si.item_type, si.use_effect, si.item_image_url
     FROM user_inventory ui
     JOIN economy_shop_items si ON ui.item_id = si.item_id AND ui.guild_id = si.guild_id
     WHERE ui.guild_id=? AND ui.user_id=? AND ui.quantity > 0
@@ -4053,13 +4084,18 @@ async function cmdInventory(message) {
     return;
   }
 
-  const embed = {
-    color: 0x9b59b6,
-    title: "🎒 Your Inventory",
-    description: items.map(item => 
-      `**${item.name}** x${item.quantity}\n${item.description}`
-    ).join("\n\n")
-  };
+  const previewItem = items.find((i) => i.item_image_url) || items[0];
+  const embed = new EmbedBuilder()
+    .setColor(0x2e4053)
+    .setTitle("🎒 Your Inventory")
+    .setDescription(items.map(item => {
+      const useHint = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
+        ? `\nUse: \`use ${item.item_id}\``
+        : "";
+      return `**${item.name}** x${item.quantity} (${item.item_type || "misc"})\n${item.description}${useHint}`;
+    }).join("\n\n"))
+    .setThumbnail(previewItem?.item_image_url || null)
+    .setFooter({ text: "Tip: use item <name> for lore + stats" });
 
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -4615,6 +4651,62 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "inventory" || cmd === "inv") {
     await cmdInventory(message);
+    return true;
+  }
+
+  if (cmd === "bounty" || cmd === "bounties") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdBounty(message, args, util);
+    return true;
+  }
+
+  if (cmd === "craft" || cmd === "crafting") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdCraft(message, args, util);
+    return true;
+  }
+
+  if (cmd === "prestige") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdPrestige(message, args, util);
+    return true;
+  }
+
+  if (cmd === "class") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdClass(message, args, util);
+    return true;
+  }
+
+  if (cmd === "use" || cmd === "consume") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdUse(message, args, util);
+    return true;
+  }
+
+  if (cmd === "item" || cmd === "inspect") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdItemInfo(message, args, util);
+    return true;
+  }
+
+  if (cmd === "gift" || cmd === "giftitem") {
+    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdGift(message, args, util);
     return true;
   }
 

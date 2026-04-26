@@ -128,8 +128,12 @@ function parseCommand(content, prefixes) {
 }
 
 async function getActivePrefixes(message) {
-  const prefix = DEFAULT_PREFIX;
-  return [prefix];
+  const configured = (await getGuildSettings(message.guild.id).catch(() => null))?.command_prefix || DEFAULT_PREFIX;
+  const prefix = String(configured || DEFAULT_PREFIX).trim() || DEFAULT_PREFIX;
+  const prefixes = [prefix];
+  if (prefix !== DEFAULT_PREFIX) prefixes.push(DEFAULT_PREFIX);
+  if (prefix !== LEGACY_PREFIX && DEFAULT_PREFIX !== LEGACY_PREFIX) prefixes.push(LEGACY_PREFIX);
+  return prefixes;
 }
 
 async function getModPrefixes(message) {

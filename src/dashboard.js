@@ -4234,7 +4234,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
     const topEconomy = await all(`SELECT user_id, balance, bank, (balance + bank) as total FROM user_economy WHERE guild_id=? ORDER BY total DESC LIMIT 10`, [guildId]);
     const economyShopItems = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [guildId]);
-    const economyJobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY min_pay ASC`, [guildId]);
+    const economyJobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY pay_min ASC`, [guildId]);
     const recentTransactions = await all(`SELECT * FROM economy_transactions WHERE guild_id=? ORDER BY id DESC LIMIT 20`, [guildId]);
     const reactionRolesConfig = await all(`SELECT * FROM reaction_roles WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
@@ -5945,7 +5945,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           <div class="job-card">
             <div>
               <div class="job-name">💼 ${escapeHtml(job.name)}</div>
-              <div class="job-meta">Pay: ${job.min_pay}–${job.max_pay} ${escapeHtml(economySettings?.currency_name || "coins")} per shift</div>
+              <div class="job-meta">Pay: ${job.pay_min}–${job.pay_max} ${escapeHtml(economySettings?.currency_name || "coins")} per shift</div>
               <div class="job-meta">Requires ${job.required_shifts} total shifts to apply · ${job.weekly_shifts_required} shifts/week to keep</div>
             </div>
           </div>
@@ -7718,13 +7718,13 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       // Add default jobs and shop items if this is the first time enabling economy
       if (!existing && enabled) {
         // Add default jobs
-        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+        await run(`INSERT INTO economy_jobs (guild_id, name, pay_min, pay_max, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
           [guildId, "Street Cleaner", 50, 100, 0, 3]);
-        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+        await run(`INSERT INTO economy_jobs (guild_id, name, pay_min, pay_max, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
           [guildId, "Cashier", 100, 200, 10, 4]);
-        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+        await run(`INSERT INTO economy_jobs (guild_id, name, pay_min, pay_max, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
           [guildId, "Manager", 200, 400, 30, 5]);
-        await run(`INSERT INTO economy_jobs (guild_id, name, min_pay, max_pay, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
+        await run(`INSERT INTO economy_jobs (guild_id, name, pay_min, pay_max, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
           [guildId, "Developer", 400, 800, 60, 5]);
 
         // Add default Murk shop items

@@ -627,7 +627,7 @@ async function cmdJob(message, args) {
   const subcommand = args[0]?.toLowerCase();
 
   if (!subcommand || subcommand === "list") {
-    const jobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY min_pay ASC`, [message.guild.id]);
+    const jobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY pay_min ASC`, [message.guild.id]);
     if (jobs.length === 0) {
       await message.reply("❌ No jobs available! Ask an admin to add some.").catch(() => {});
       return;
@@ -637,7 +637,7 @@ async function cmdJob(message, args) {
       color: 0x3498db,
       title: "💼 Available Jobs",
       description: jobs.map(j =>
-        `**${j.name}**\n💰 Pay: ${j.min_pay}-${j.max_pay} ${economySettings.currency_name}\n📊 Requires: ${j.required_shifts} total shifts\n⏰ Weekly: ${j.weekly_shifts_required} shifts/week`
+        `**${j.name}**\n💰 Pay: ${j.pay_min}-${j.pay_max} ${economySettings.currency_name}\n📊 Requires: ${j.required_shifts} total shifts\n⏰ Weekly: ${j.weekly_shifts_required} shifts/week`
       ).join("\n\n"),
       footer: { text: `Use job apply <jobname> to apply!` }
     };
@@ -704,7 +704,7 @@ async function cmdJob(message, args) {
       color: 0x3498db,
       title: `💼 Your Job: ${job.name}`,
       fields: [
-        { name: "💰 Pay Range", value: `${job.min_pay}-${job.max_pay} ${economySettings.currency_name}`, inline: true },
+        { name: "💰 Pay Range", value: `${job.pay_min}-${job.pay_max} ${economySettings.currency_name}`, inline: true },
         { name: "📊 Total Shifts", value: `${economy.job_shifts_completed}`, inline: true },
         { name: "⏰ This Week", value: `${economy.job_weekly_shifts}/${job.weekly_shifts_required}`, inline: true },
         { name: "📅 Week Resets In", value: `${daysLeft} days`, inline: true }
@@ -804,7 +804,7 @@ async function cmdWork(message) {
     }
   }
 
-  const pay = Math.floor(job.min_pay + Math.random() * (job.max_pay - job.min_pay));
+  const pay = Math.floor(job.pay_min + Math.random() * (job.pay_max - job.pay_min));
   await run(`UPDATE user_economy SET balance=?, job_last_shift=?, job_shifts_completed=?, job_weekly_shifts=? WHERE guild_id=? AND user_id=?`,
     [economy.balance + pay, now, economy.job_shifts_completed + 1, economy.job_weekly_shifts + 1, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,

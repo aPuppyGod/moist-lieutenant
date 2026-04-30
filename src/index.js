@@ -1863,6 +1863,31 @@ client.once(Events.ClientReady, async () => {
         console.error("Member count update interval failed:", err);
       }
     }, 300000); // 5 minutes
+
+    // ─── Scheduled Messages ───
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const due = await all(
+          `SELECT id, guild_id, channel_id, content, interval_minutes
+           FROM scheduled_messages
+           WHERE enabled=1 AND next_run_at <= ?`,
+          [now]
+        );
+        for (const row of due) {
+          const guild = client.guilds.cache.get(row.guild_id) || await client.guilds.fetch(row.guild_id).catch(() => null);
+          if (!guild) continue;
+          const channel = guild.channels.cache.get(row.channel_id) || await guild.channels.fetch(row.channel_id).catch(() => null);
+          if (!channel || !channel.isTextBased || !channel.isTextBased()) continue;
+          await channel.send({ content: String(row.content), allowedMentions: { parse: [] } }).catch(() => {});
+          const nextRun = now + Number(row.interval_minutes) * 60_000;
+          await run(`UPDATE scheduled_messages SET next_run_at=? WHERE id=?`, [nextRun, row.id]).catch(() => {});
+        }
+      } catch (err) {
+        console.error("Scheduled messages interval failed:", err);
+      }
+    }, 60_000); // check every minute
+
   } catch (err) {
     console.error("ClientReady startup failed:", err);
   }
@@ -1940,6 +1965,59 @@ client.on(Events.MessageCreate, async (message) => {
   const ignoredChannels = await getIgnoredChannels(message.guild.id);
   const isIgnored = ignoredChannels.some(c => c.channel_id === message.channel.id && c.channel_type === "text");
   if (isIgnored) return;
+
+  // ─── Word Filter ───
+  if (!(await canUseModeratorActions(message.member))) {
+    const wordFilterRows = await all(`SELECT word, action FROM word_filter WHERE guild_id=?`, [message.guild.id]).catch(() => []);
+    if (wordFilterRows.length) {
+      const contentLower = String(message.content || "").toLowerCase();
+      const hit = wordFilterRows.find(r => contentLower.includes(String(r.word || "").toLowerCase()));
+      if (hit) {
+        try {
+          await message.delete().catch(() => {});
+          const actorId = message.client?.user?.id || BOT_MANAGER_ID;
+          const filterAction = hit.action || "delete";
+
+          if (filterAction === "warn") {
+            await run(
+              `INSERT INTO mod_warnings (guild_id, user_id, moderator_id, reason, created_at)
+               VALUES (?, ?, ?, ?, ?)`,
+              [message.guild.id, message.author.id, actorId, `[WordFilter] Filtered word: ${hit.word}`, Date.now()]
+            ).catch(() => {});
+          }
+
+          if (filterAction === "timeout") {
+            const botMember = message.guild.members.me || await message.guild.members.fetchMe().catch(() => null);
+            if (botMember && message.member && canModerateMember(botMember, message.member)) {
+              await message.member.timeout(10 * 60 * 1000, `[WordFilter] Filtered word`).catch(() => {});
+            }
+          }
+
+          await sendGuildLog(message.guild, {
+            eventKey: "message_delete",
+            actorUserId: actorId,
+            color: LOG_THEME.warn,
+            title: "🚫 Word Filter",
+            sourceChannelId: message.channel?.id,
+            description: `Word filter triggered for ${message.author} (action: **${filterAction}**).`,
+            fields: [
+              { name: "Word", value: `\`${hit.word}\``, inline: true },
+              { name: "User", value: `${message.author.tag}`, inline: true },
+              { name: "Channel", value: `<#${message.channel.id}>`, inline: true }
+            ]
+          });
+
+          const warnMsg = await message.channel.send({
+            content: `${message.author}, your message was removed by the word filter.`
+          }).catch(() => null);
+          if (warnMsg) setTimeout(() => warnMsg.delete().catch(() => {}), 5000);
+        } catch (err) {
+          console.error("[WordFilter] enforcement error:", err);
+        }
+        return;
+      }
+    }
+  }
 
   // ─── Auto-Moderation ───
   const automodSettings = await get(`SELECT * FROM automod_settings WHERE guild_id=?`, [message.guild.id]);

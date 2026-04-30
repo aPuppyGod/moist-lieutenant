@@ -4262,6 +4262,10 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
     
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
+
+    const wordFilterRows = await all(`SELECT id, word, action FROM word_filter WHERE guild_id=? ORDER BY word ASC`, [guildId]).catch(() => []);
+    const scheduledMessages = await all(`SELECT * FROM scheduled_messages WHERE guild_id=? ORDER BY id ASC`, [guildId]).catch(() => []);
+
     const requestedModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [
       { key: "overview", label: "Overview" },
@@ -4278,6 +4282,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       { key: "birthdays", label: "Birthdays" },
       { key: "customcommands", label: "Custom Commands" },
       { key: "autoreplies", label: "Auto Replies" },
+      { key: "automod", label: "AutoMod & Filter" },
+      { key: "scheduled", label: "Scheduled Messages" },
       { key: "customization", label: "Customization" }
     ];
     const moderatorModules = new Set(["moderation", "logging"]);
@@ -6398,7 +6404,159 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <button type="submit">Save Customization Unlocks</button>
       </form>
       ` : ""}
+
+      ${activeModule === "automod" ? `
+      <h3>Word / Phrase Filter</h3>
+      <form method="post" action="/guild/${guildId}/wordfilter-add" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <input name="word" placeholder="Word or phrase" required style="width:220px;" />
+        <select name="action">
+          <option value="delete">Delete message</option>
+          <option value="warn">Delete + warn</option>
+          <option value="timeout">Delete + timeout 10m</option>
+        </select>
+        <button type="submit">Add</button>
+      </form>
+      ${wordFilterRows.length ? `
+      <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+        <tr style="background:#1a2a2a;"><th style="text-align:left;padding:6px;">Word</th><th style="text-align:left;padding:6px;">Action</th><th style="padding:6px;"></th></tr>
+        ${wordFilterRows.map(r => `
+          <tr style="border-top:1px solid #2a3a3a;">
+            <td style="padding:6px;font-family:monospace;">${escapeHtml(r.word)}</td>
+            <td style="padding:6px;">${escapeHtml(r.action)}</td>
+            <td style="padding:6px;">
+              <form method="post" action="/guild/${guildId}/wordfilter-delete" style="display:inline;">
+                <input type="hidden" name="id" value="${r.id}" />
+                <button type="submit" style="background:#c0392b;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;">Remove</button>
+              </form>
+            </td>
+          </tr>
+        `).join("")}
+      </table>
+      ` : `<p style="opacity:0.7;">No words in filter list.</p>`}
+      ` : ""}
+
+      ${activeModule === "scheduled" ? `
+      <h3>Scheduled Messages</h3>
+      <form method="post" action="/guild/${guildId}/scheduled-add" style="display:flex;flex-direction:column;gap:8px;max-width:500px;margin-bottom:24px;">
+        <label>Channel:
+          <select name="channel_id" required>
+            <option value="">-- select channel --</option>
+            ${guild.channels.cache.filter(c => c.type === 0).sort((a,b) => a.name.localeCompare(b.name)).map(c =>
+              `<option value="${c.id}">#${escapeHtml(c.name)}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <label>Interval (minutes, min 5): <input type="number" name="interval_minutes" min="5" value="60" style="width:80px;" required /></label>
+        <label>Message: <textarea name="content" rows="3" style="width:100%;" required placeholder="Your scheduled message content..."></textarea></label>
+        <button type="submit">Add Scheduled Message</button>
+      </form>
+      ${scheduledMessages.length ? `
+      <table style="width:100%;border-collapse:collapse;">
+        <tr style="background:#1a2a2a;"><th style="text-align:left;padding:6px;">#</th><th style="text-align:left;padding:6px;">Channel</th><th style="padding:6px;">Interval</th><th style="padding:6px;">Status</th><th style="padding:6px;">Actions</th></tr>
+        ${scheduledMessages.map(r => `
+          <tr style="border-top:1px solid #2a3a3a;">
+            <td style="padding:6px;">${r.id}</td>
+            <td style="padding:6px;"><#${r.channel_id}></td>
+            <td style="padding:6px;">${r.interval_minutes}m</td>
+            <td style="padding:6px;">${r.enabled ? "✅ On" : "⏸️ Off"}</td>
+            <td style="padding:6px;">
+              <form method="post" action="/guild/${guildId}/scheduled-toggle" style="display:inline;">
+                <input type="hidden" name="id" value="${r.id}" />
+                <button type="submit" style="margin-right:4px;">${r.enabled ? "Disable" : "Enable"}</button>
+              </form>
+              <form method="post" action="/guild/${guildId}/scheduled-delete" style="display:inline;">
+                <input type="hidden" name="id" value="${r.id}" />
+                <button type="submit" style="background:#c0392b;color:#fff;border:none;padding:3px 10px;border-radius:4px;cursor:pointer;">Delete</button>
+              </form>
+            </td>
+          </tr>
+        `).join("")}
+      </table>
+      ` : `<p style="opacity:0.7;">No scheduled messages yet.</p>`}
+      ` : ""}
+
     `));
+  });
+
+  // ─── Word Filter POST routes ───────────────────────────────────────────────
+  app.post("/guild/:guildId/wordfilter-add", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const word = String(req.body.word || "").trim().toLowerCase().slice(0, 200);
+      const action = ["delete", "warn", "timeout"].includes(req.body.action) ? req.body.action : "delete";
+      if (word) {
+        await run(
+          `INSERT INTO word_filter (guild_id, word, action) VALUES (?, ?, ?)
+           ON CONFLICT (guild_id, word) DO UPDATE SET action=excluded.action`,
+          [guildId, word, action]
+        );
+      }
+      return res.redirect(getModuleRedirect(guildId, "automod"));
+    } catch (e) {
+      console.error("wordfilter-add error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/wordfilter-delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.body.id, 10);
+      if (id) await run(`DELETE FROM word_filter WHERE guild_id=? AND id=?`, [guildId, id]);
+      return res.redirect(getModuleRedirect(guildId, "automod"));
+    } catch (e) {
+      console.error("wordfilter-delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─── Scheduled Messages POST routes ───────────────────────────────────────
+  app.post("/guild/:guildId/scheduled-add", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const channelId = String(req.body.channel_id || "").trim();
+      const intervalMins = Math.max(5, parseInt(req.body.interval_minutes, 10) || 60);
+      const content = String(req.body.content || "").trim().slice(0, 2000);
+      if (channelId && content) {
+        const nextRun = Date.now() + intervalMins * 60_000;
+        await run(
+          `INSERT INTO scheduled_messages (guild_id, channel_id, content, interval_minutes, next_run_at, enabled)
+           VALUES (?, ?, ?, ?, ?, 1)`,
+          [guildId, channelId, content, intervalMins, nextRun]
+        );
+      }
+      return res.redirect(getModuleRedirect(guildId, "scheduled"));
+    } catch (e) {
+      console.error("scheduled-add error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/scheduled-toggle", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.body.id, 10);
+      if (id) {
+        const row = await get(`SELECT enabled FROM scheduled_messages WHERE guild_id=? AND id=?`, [guildId, id]);
+        if (row) await run(`UPDATE scheduled_messages SET enabled=? WHERE id=?`, [row.enabled ? 0 : 1, id]);
+      }
+      return res.redirect(getModuleRedirect(guildId, "scheduled"));
+    } catch (e) {
+      console.error("scheduled-toggle error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  app.post("/guild/:guildId/scheduled-delete", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const id = parseInt(req.body.id, 10);
+      if (id) await run(`DELETE FROM scheduled_messages WHERE guild_id=? AND id=?`, [guildId, id]);
+      return res.redirect(getModuleRedirect(guildId, "scheduled"));
+    } catch (e) {
+      console.error("scheduled-delete error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
   });
 
   // ─────────────────────────────────────────────

@@ -1886,7 +1886,152 @@ async function cmdAutomodPreset(message, args) {
     ]
   );
 
-  await message.reply(`âœ… Applied automod preset: **${presetName}**.`).catch(() => {});
+  await message.reply(`✅ Applied automod preset: **${presetName}**.`).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// UTILITY: serverinfo / userinfo / avatar / profile
+// ─────────────────────────────────────────────────────
+
+async function cmdServerInfo(message) {
+  const g = message.guild;
+  await g.fetch().catch(() => {});
+  const owner = await g.fetchOwner().catch(() => null);
+  const channels = g.channels.cache;
+  const textCount = channels.filter(c => c.type === 0).size;
+  const voiceCount = channels.filter(c => c.type === 2).size;
+  const roleCount = g.roles.cache.size - 1;
+  const emojiCount = g.emojis.cache.size;
+  const boostTier = g.premiumTier;
+  const boostCount = g.premiumSubscriptionCount || 0;
+  const verificationMap = ["None", "Low", "Medium", "High", "Highest"];
+  const embed = new EmbedBuilder()
+    .setColor(0x1abc9c)
+    .setTitle(`${g.name}`)
+    .setThumbnail(g.iconURL({ size: 256 }) || null)
+    .addFields(
+      { name: "Owner", value: owner ? `${owner.user.tag}` : "Unknown", inline: true },
+      { name: "ID", value: g.id, inline: true },
+      { name: "Created", value: `<t:${Math.floor(g.createdTimestamp / 1000)}:D>`, inline: true },
+      { name: "Members", value: `${g.memberCount}`, inline: true },
+      { name: "Channels", value: `${textCount} text · ${voiceCount} voice`, inline: true },
+      { name: "Roles", value: `${roleCount}`, inline: true },
+      { name: "Emojis", value: `${emojiCount}`, inline: true },
+      { name: "Boost Tier", value: `Level ${boostTier} (${boostCount} boosts)`, inline: true },
+      { name: "Verification", value: verificationMap[g.verificationLevel] || "Unknown", inline: true }
+    )
+    .setFooter({ text: `Guild ID: ${g.id}` });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdUserInfo(message, args) {
+  let target = message.member;
+  if (args[0]) {
+    const found = await pickUserSmart(message, args[0]);
+    if (found?.member) target = found.member;
+    else if (found?.ambiguous) {
+      await message.reply("Multiple users matched. Please be more specific or use a mention.").catch(() => {});
+      return;
+    }
+  }
+  const user = target.user;
+  const roles = target.roles.cache
+    .filter(r => r.id !== message.guild.roles.everyone.id)
+    .sort((a, b) => b.position - a.position)
+    .map(r => `<@&${r.id}>`)
+    .slice(0, 15)
+    .join(" ") || "None";
+
+  const embed = new EmbedBuilder()
+    .setColor(target.displayColor || 0x7289da)
+    .setThumbnail(user.displayAvatarURL({ size: 256 }))
+    .setTitle(`${user.username}`)
+    .addFields(
+      { name: "Display Name", value: target.displayName || user.username, inline: true },
+      { name: "ID", value: user.id, inline: true },
+      { name: "Bot?", value: user.bot ? "Yes" : "No", inline: true },
+      { name: "Account Created", value: `<t:${Math.floor(user.createdTimestamp / 1000)}:D>`, inline: true },
+      { name: "Joined Server", value: target.joinedTimestamp ? `<t:${Math.floor(target.joinedTimestamp / 1000)}:D>` : "Unknown", inline: true },
+      { name: `Roles (${target.roles.cache.size - 1})`, value: roles.slice(0, 1024), inline: false }
+    )
+    .setFooter({ text: `User ID: ${user.id}` });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdAvatar(message, args) {
+  let target = message.member;
+  if (args[0]) {
+    const found = await pickUserSmart(message, args[0]);
+    if (found?.member) target = found.member;
+  }
+  const user = target.user;
+  const avatarUrl = user.displayAvatarURL({ size: 1024, extension: "png" });
+  const embed = new EmbedBuilder()
+    .setColor(0x7289da)
+    .setTitle(`${user.username}'s Avatar`)
+    .setImage(avatarUrl)
+    .setFooter({ text: user.id });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdProfile(message, args) {
+  let target = message.member;
+  if (args[0]) {
+    const found = await pickUserSmart(message, args[0]);
+    if (found?.member) target = found.member;
+    else if (found?.ambiguous) {
+      await message.reply("Multiple users matched. Please use a mention.").catch(() => {});
+      return;
+    }
+  }
+
+  const userId = target.user.id;
+  const guildId = message.guild.id;
+
+  const [xpRow, ecoRow, classRow, buffRows] = await Promise.all([
+    get(`SELECT xp, level FROM user_xp WHERE guild_id=? AND user_id=?`, [guildId, userId]),
+    get(`SELECT wallet, bank, prestige_level FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]),
+    get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]),
+    all(`SELECT buff_id, expires_at FROM user_buffs WHERE guild_id=? AND user_id=? AND expires_at > ?`, [guildId, userId, Date.now()])
+  ]);
+
+  const xp = xpRow?.xp || 0;
+  const level = xpRow?.level || 0;
+  const wallet = ecoRow?.wallet || 0;
+  const bank = ecoRow?.bank || 0;
+  const prestige = ecoRow?.prestige_level || 0;
+  const className = classRow?.class_id || "None";
+
+  const xpRank = await get(
+    `SELECT COUNT(*)+1 AS rank FROM user_xp WHERE guild_id=? AND xp > ?`,
+    [guildId, xp]
+  );
+  const rank = xpRank?.rank || "?";
+
+  const ecoSettings = await get(`SELECT currency_symbol FROM economy_settings WHERE guild_id=?`, [guildId]);
+  const sym = ecoSettings?.currency_symbol || "🪙";
+
+  const activeBuffs = buffRows.length
+    ? buffRows.map(b => `• ${b.buff_id} (expires <t:${Math.floor(b.expires_at / 1000)}:R>)`).join("\n")
+    : "None";
+
+  const embed = new EmbedBuilder()
+    .setColor(target.displayColor || 0x1abc9c)
+    .setAuthor({ name: target.displayName, iconURL: target.user.displayAvatarURL({ size: 128 }) })
+    .setThumbnail(target.user.displayAvatarURL({ size: 256 }))
+    .setTitle("Profile Card")
+    .addFields(
+      { name: "Level", value: `${level}`, inline: true },
+      { name: "XP", value: `${xp.toLocaleString()}`, inline: true },
+      { name: "Rank", value: `#${rank}`, inline: true },
+      { name: "Wallet", value: `${sym}${wallet.toLocaleString()}`, inline: true },
+      { name: "Bank", value: `${sym}${bank.toLocaleString()}`, inline: true },
+      { name: "Prestige", value: `${prestige}`, inline: true },
+      { name: "Class", value: className, inline: true },
+      { name: "Active Buffs", value: activeBuffs, inline: false }
+    )
+    .setFooter({ text: `User ID: ${userId}` });
+  await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 async function cmdAfk(message, args) {
@@ -1950,6 +2095,157 @@ async function cmdEditSnipe(message) {
     )
     .setTimestamp(new Date(Number(row.edited_at || Date.now())));
   await message.reply({ embeds: [embed], allowedMentions: { parse: [] } }).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// WORD FILTER management commands
+// ─────────────────────────────────────────────────────
+
+async function cmdWordFilter(message, args) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("You need admin/manager permissions to manage the word filter.").catch(() => {});
+    return;
+  }
+  const sub = String(args[0] || "").trim().toLowerCase();
+  const guildId = message.guild.id;
+
+  if (sub === "add") {
+    const word = String(args[1] || "").trim().toLowerCase();
+    const action = ["delete", "warn", "timeout"].includes(args[2]) ? args[2] : "delete";
+    if (!word) {
+      await message.reply("Usage: `!wordfilter add <word> [delete|warn|timeout]`").catch(() => {});
+      return;
+    }
+    await run(
+      `INSERT INTO word_filter (guild_id, word, action) VALUES (?, ?, ?)
+       ON CONFLICT (guild_id, word) DO UPDATE SET action=excluded.action`,
+      [guildId, word, action]
+    );
+    await message.reply(`✅ Added \`${word}\` to word filter (action: **${action}**).`).catch(() => {});
+    return;
+  }
+
+  if (sub === "remove" || sub === "delete") {
+    const word = String(args[1] || "").trim().toLowerCase();
+    if (!word) {
+      await message.reply("Usage: `!wordfilter remove <word>`").catch(() => {});
+      return;
+    }
+    await run(`DELETE FROM word_filter WHERE guild_id=? AND word=?`, [guildId, word]);
+    await message.reply(`✅ Removed \`${word}\` from word filter.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "list") {
+    const rows = await all(`SELECT word, action FROM word_filter WHERE guild_id=? ORDER BY word ASC`, [guildId]);
+    if (!rows.length) {
+      await message.reply("No words in the filter list.").catch(() => {});
+      return;
+    }
+    const lines = rows.map(r => `• \`${r.word}\` → **${r.action}**`).join("\n");
+    const embed = new EmbedBuilder()
+      .setColor(0xff4444)
+      .setTitle("Word Filter List")
+      .setDescription(lines.slice(0, 4000));
+    await message.reply({ embeds: [embed] }).catch(() => {});
+    return;
+  }
+
+  await message.reply("Usage: `!wordfilter add <word> [action]` | `!wordfilter remove <word>` | `!wordfilter list`").catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// SCHEDULED MESSAGES management commands
+// ─────────────────────────────────────────────────────
+
+async function cmdSchedule(message, args) {
+  if (!isAdminOrManager(message.member)) {
+    await message.reply("You need admin/manager permissions to manage scheduled messages.").catch(() => {});
+    return;
+  }
+  const sub = String(args[0] || "").trim().toLowerCase();
+  const guildId = message.guild.id;
+
+  if (sub === "add") {
+    // !schedule add #channel <interval_minutes> <message content...>
+    const channelArg = args[1] || "";
+    const channelMatch = channelArg.match(/^<#(\d+)>$/) || channelArg.match(/^(\d{15,21})$/);
+    if (!channelMatch) {
+      await message.reply("Usage: `!schedule add <#channel> <interval_minutes> <message>`").catch(() => {});
+      return;
+    }
+    const channelId = channelMatch[1];
+    const intervalMins = parseInt(args[2], 10);
+    if (!intervalMins || intervalMins < 5) {
+      await message.reply("Interval must be at least 5 minutes.").catch(() => {});
+      return;
+    }
+    const content = args.slice(3).join(" ").trim();
+    if (!content) {
+      await message.reply("Please provide the message content.").catch(() => {});
+      return;
+    }
+    const nextRun = Date.now() + intervalMins * 60_000;
+    await run(
+      `INSERT INTO scheduled_messages (guild_id, channel_id, content, interval_minutes, next_run_at, enabled)
+       VALUES (?, ?, ?, ?, ?, 1)`,
+      [guildId, channelId, content, intervalMins, nextRun]
+    );
+    await message.reply(`✅ Scheduled message added to <#${channelId}> every **${intervalMins}** minutes.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "list") {
+    const rows = await all(`SELECT id, channel_id, interval_minutes, enabled, content FROM scheduled_messages WHERE guild_id=? ORDER BY id ASC`, [guildId]);
+    if (!rows.length) {
+      await message.reply("No scheduled messages configured.").catch(() => {});
+      return;
+    }
+    const lines = rows.map(r =>
+      `**#${r.id}** → <#${r.channel_id}> every ${r.interval_minutes}m [${r.enabled ? "on" : "off"}]\n> ${String(r.content).slice(0, 80)}`
+    ).join("\n\n");
+    const embed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle("Scheduled Messages")
+      .setDescription(lines.slice(0, 4000));
+    await message.reply({ embeds: [embed] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "delete" || sub === "remove") {
+    const id = parseInt(args[1], 10);
+    if (!id) {
+      await message.reply("Usage: `!schedule delete <id>`").catch(() => {});
+      return;
+    }
+    const row = await get(`SELECT id FROM scheduled_messages WHERE guild_id=? AND id=?`, [guildId, id]);
+    if (!row) {
+      await message.reply("Scheduled message not found.").catch(() => {});
+      return;
+    }
+    await run(`DELETE FROM scheduled_messages WHERE id=?`, [id]);
+    await message.reply(`✅ Deleted scheduled message #${id}.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "toggle") {
+    const id = parseInt(args[1], 10);
+    if (!id) {
+      await message.reply("Usage: `!schedule toggle <id>`").catch(() => {});
+      return;
+    }
+    const row = await get(`SELECT id, enabled FROM scheduled_messages WHERE guild_id=? AND id=?`, [guildId, id]);
+    if (!row) {
+      await message.reply("Scheduled message not found.").catch(() => {});
+      return;
+    }
+    const newState = row.enabled ? 0 : 1;
+    await run(`UPDATE scheduled_messages SET enabled=? WHERE id=?`, [newState, id]);
+    await message.reply(`✅ Scheduled message #${id} is now **${newState ? "enabled" : "disabled"}**.`).catch(() => {});
+    return;
+  }
+
+  await message.reply("Usage: `!schedule add <#channel> <mins> <message>` | `!schedule list` | `!schedule delete <id>` | `!schedule toggle <id>`").catch(() => {});
 }
 
 async function cmdModmail(message, args) {
@@ -3975,11 +4271,65 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
+  if (cmd === "serverinfo" || cmd === "server") {
+    await cmdServerInfo(message);
+    return true;
+  }
+
+  if (cmd === "userinfo" || cmd === "whois") {
+    await cmdUserInfo(message, args);
+    return true;
+  }
+
+  if (cmd === "avatar" || cmd === "pfp") {
+    await cmdAvatar(message, args);
+    return true;
+  }
+
+  if (cmd === "profile" || cmd === "card") {
+    await cmdProfile(message, args);
+    return true;
+  }
+
+  // Economy admin
+  if (cmd === "ecoadmin" || cmd === "economyadmin") {
+    const { cmdEcoAdmin } = require("./economyCommands");
+    await cmdEcoAdmin(message, args);
+    return true;
+  }
+
+  // Trade
+  if (cmd === "trade") {
+    const { cmdTrade } = require("./economyCommands");
+    await cmdTrade(message, args);
+    return true;
+  }
+
+  // Lottery
+  if (cmd === "lottery" || cmd === "lotto") {
+    const { cmdLottery } = require("./economyCommands");
+    await cmdLottery(message, args);
+    return true;
+  }
+
+  // Word filter management
+  if (cmd === "wordfilter" || cmd === "filter") {
+    await cmdWordFilter(message, args);
+    return true;
+  }
+
+  // Scheduled messages
+  if (cmd === "schedule" || cmd === "autopost") {
+    await cmdSchedule(message, args);
+    return true;
+  }
+
   // Check for custom commands
   const customCmd = await get(
     `SELECT * FROM custom_commands WHERE guild_id=? AND command_name=?`,
     [message.guild.id, cmd]
   );
+
 
   function replaceCustomCommandPlaceholders(text, message, targetMember = null) {
     if (!text || typeof text !== 'string') return text;

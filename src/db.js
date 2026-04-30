@@ -1292,6 +1292,72 @@ async function initDb() {
     // Columns might already exist, ignore error
   }
 
+    // ── New Feature Tables ─────────────────────────────────────────────────────
+    try {
+    // Word/phrase filter
+    await run(`
+      CREATE TABLE IF NOT EXISTS word_filter (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        word TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT 'delete',
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        UNIQUE (guild_id, word)
+      )
+    `);
+
+    // Trade offers between players
+    await run(`
+      CREATE TABLE IF NOT EXISTS trade_offers (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        from_user_id TEXT NOT NULL,
+        to_user_id TEXT NOT NULL,
+        from_item TEXT NOT NULL,
+        to_item TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+        resolved_at BIGINT DEFAULT NULL
+      )
+    `);
+
+    // Lottery
+    await run(`
+      CREATE TABLE IF NOT EXISTS lottery_pool (
+        guild_id TEXT NOT NULL PRIMARY KEY,
+        pot BIGINT NOT NULL DEFAULT 0,
+        ticket_price INTEGER NOT NULL DEFAULT 100,
+        last_draw_at BIGINT DEFAULT NULL
+      )
+    `);
+    await run(`
+      CREATE TABLE IF NOT EXISTS lottery_tickets (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 1,
+        purchased_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+      )
+    `);
+
+    // Scheduled / auto-post messages
+    await run(`
+      CREATE TABLE IF NOT EXISTS scheduled_messages (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        content TEXT NOT NULL,
+        interval_minutes INTEGER NOT NULL DEFAULT 60,
+        next_run_at BIGINT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        created_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT
+      )
+    `);
+
+  } catch (e) {
+    // ignore duplicate-column / already-exists errors
+  }
+
   console.log("[db] ✓ All database tables initialized successfully");
   } catch (err) {
     console.error("[db] ✗ Failed to initialize database:");

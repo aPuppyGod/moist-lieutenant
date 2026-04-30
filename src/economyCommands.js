@@ -955,6 +955,398 @@ async function cmdInventory(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
+// ─────────────────────────────────────────────────────
+// ECONOMY ADMIN: give / take / set / reset
+// ─────────────────────────────────────────────────────
+
+async function cmdEcoAdmin(message, args) {
+  // Permission check: must be admin/manager
+  const member = message.member;
+  if (!member) return;
+  const isAdmin = member.permissions?.has(1n << 3n) || // Administrator bit
+    member.id === (process.env.BOT_MANAGER_ID || "900758140499398676");
+  const settings = await get(`SELECT manager_role_id FROM guild_settings WHERE guild_id=?`, [message.guild.id]);
+  const isManager = settings?.manager_role_id && member.roles?.cache?.has(settings.manager_role_id);
+  if (!isAdmin && !isManager) {
+    await message.reply("You need admin/manager permissions to use `ecoadmin`.").catch(() => {});
+    return;
+  }
+
+  const sub = String(args[0] || "").toLowerCase();
+  const guildId = message.guild.id;
+
+  const ecoSettings = await get(`SELECT currency_symbol FROM economy_settings WHERE guild_id=?`, [guildId]);
+  const sym = ecoSettings?.currency_symbol || "🪙";
+
+  if (!["give", "take", "set", "reset"].includes(sub)) {
+    await message.reply("Usage: `!ecoadmin give|take|set|reset <@user> [amount]`").catch(() => {});
+    return;
+  }
+
+  const found = await pickUserSmart(message, args[1]);
+  if (!found?.member) {
+    await message.reply("User not found. Please mention or provide a valid username/ID.").catch(() => {});
+    return;
+  }
+  const target = found.member;
+  const targetId = target.user.id;
+
+  // Ensure user economy row exists
+  await run(
+    `INSERT INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)
+     ON CONFLICT (guild_id, user_id) DO NOTHING`,
+    [guildId, targetId]
+  );
+
+  if (sub === "reset") {
+    await run(`UPDATE user_economy SET wallet=0, bank=0 WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
+    await message.reply(`✅ Reset economy for ${target.user.tag}.`).catch(() => {});
+    return;
+  }
+
+  const amount = parseInt(args[2], 10);
+  if (!amount || amount < 0) {
+    await message.reply("Please provide a valid positive amount.").catch(() => {});
+    return;
+  }
+
+  if (sub === "give") {
+    await run(`UPDATE user_economy SET wallet=wallet+? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await message.reply(`✅ Gave ${sym}${amount.toLocaleString()} to ${target.user.tag}.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "take") {
+    await run(`UPDATE user_economy SET wallet=GREATEST(0, wallet-?) WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await message.reply(`✅ Removed ${sym}${amount.toLocaleString()} from ${target.user.tag}.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "set") {
+    await run(`UPDATE user_economy SET wallet=? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await message.reply(`✅ Set ${target.user.tag}'s wallet to ${sym}${amount.toLocaleString()}.`).catch(() => {});
+    return;
+  }
+}
+
+// ─────────────────────────────────────────────────────
+// TRADE: offer, accept, decline, list
+// ─────────────────────────────────────────────────────
+
+async function cmdTrade(message, args) {
+  const sub = String(args[0] || "").toLowerCase();
+  const guildId = message.guild.id;
+  const userId = message.author.id;
+
+  const ecoSettings = await get(`SELECT enabled FROM economy_settings WHERE guild_id=?`, [guildId]);
+  if (!ecoSettings?.enabled) {
+    await message.reply("Economy is not enabled on this server.").catch(() => {});
+    return;
+  }
+
+  if (sub === "offer") {
+    // !trade offer @user <your_item> for <their_item>
+    // e.g. !trade offer @User iron_sword for gold_bar
+    const forIdx = args.indexOf("for");
+    if (forIdx === -1 || forIdx < 3) {
+      await message.reply("Usage: `!trade offer <@user> <your_item> for <their_item>`").catch(() => {});
+      return;
+    }
+    const found = await pickUserSmart(message, args[1]);
+    if (!found?.member) {
+      await message.reply("Target user not found.").catch(() => {});
+      return;
+    }
+    const toUser = found.member;
+    if (toUser.user.id === userId) {
+      await message.reply("You cannot trade with yourself.").catch(() => {});
+      return;
+    }
+
+    const fromItem = args.slice(2, forIdx).join(" ").trim().toLowerCase();
+    const toItem = args.slice(forIdx + 1).join(" ").trim().toLowerCase();
+    if (!fromItem || !toItem) {
+      await message.reply("Please specify both items for the trade.").catch(() => {});
+      return;
+    }
+
+    // Verify sender has fromItem in inventory
+    const senderInv = await get(
+      `SELECT id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`,
+      [guildId, userId, fromItem]
+    );
+    if (!senderInv || senderInv.quantity < 1) {
+      await message.reply(`You don't have **${fromItem}** in your inventory.`).catch(() => {});
+      return;
+    }
+
+    await run(
+      `INSERT INTO trade_offers (guild_id, from_user_id, to_user_id, from_item, to_item, status)
+       VALUES (?, ?, ?, ?, ?, 'pending')`,
+      [guildId, userId, toUser.user.id, fromItem, toItem]
+    );
+
+    const offer = await get(`SELECT id FROM trade_offers WHERE guild_id=? AND from_user_id=? AND status='pending' ORDER BY id DESC LIMIT 1`, [guildId, userId]);
+    await message.reply(
+      `✅ Trade offer #${offer?.id} sent to ${toUser.user.tag}!\n` +
+      `You offer: **${fromItem}** | You want: **${toItem}**\n` +
+      `They can accept with \`!trade accept ${offer?.id}\` or decline with \`!trade decline ${offer?.id}\`.`
+    ).catch(() => {});
+    return;
+  }
+
+  if (sub === "accept") {
+    const offerId = parseInt(args[1], 10);
+    if (!offerId) {
+      await message.reply("Usage: `!trade accept <trade_id>`").catch(() => {});
+      return;
+    }
+
+    const offer = await get(
+      `SELECT * FROM trade_offers WHERE id=? AND guild_id=? AND to_user_id=? AND status='pending'`,
+      [offerId, guildId, userId]
+    );
+    if (!offer) {
+      await message.reply("Trade offer not found or not addressed to you.").catch(() => {});
+      return;
+    }
+
+    // Check both inventories
+    const receiverInv = await get(
+      `SELECT id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`,
+      [guildId, userId, offer.to_item]
+    );
+    if (!receiverInv || receiverInv.quantity < 1) {
+      await message.reply(`You don't have **${offer.to_item}** in your inventory to complete this trade.`).catch(() => {});
+      return;
+    }
+
+    const senderInv = await get(
+      `SELECT id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`,
+      [guildId, offer.from_user_id, offer.from_item]
+    );
+    if (!senderInv || senderInv.quantity < 1) {
+      await run(`UPDATE trade_offers SET status='cancelled', resolved_at=? WHERE id=?`, [Date.now(), offerId]);
+      await message.reply(`Trade cancelled — the other party no longer has **${offer.from_item}**.`).catch(() => {});
+      return;
+    }
+
+    // Execute trade: subtract 1 from each, add 1 to each
+    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`, [guildId, offer.from_user_id, offer.from_item]);
+    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`, [guildId, userId, offer.to_item]);
+
+    await run(
+      `INSERT INTO user_inventory (guild_id, user_id, item_name, quantity)
+       VALUES (?, ?, ?, 1)
+       ON CONFLICT (guild_id, user_id, item_name) DO UPDATE SET quantity=quantity+1`,
+      [guildId, userId, offer.from_item]
+    );
+    await run(
+      `INSERT INTO user_inventory (guild_id, user_id, item_name, quantity)
+       VALUES (?, ?, ?, 1)
+       ON CONFLICT (guild_id, user_id, item_name) DO UPDATE SET quantity=quantity+1`,
+      [guildId, offer.from_user_id, offer.to_item]
+    );
+
+    await run(`UPDATE trade_offers SET status='completed', resolved_at=? WHERE id=?`, [Date.now(), offerId]);
+    await message.reply(`✅ Trade #${offerId} completed! You gave **${offer.to_item}** and received **${offer.from_item}**.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "decline") {
+    const offerId = parseInt(args[1], 10);
+    if (!offerId) {
+      await message.reply("Usage: `!trade decline <trade_id>`").catch(() => {});
+      return;
+    }
+    const offer = await get(
+      `SELECT * FROM trade_offers WHERE id=? AND guild_id=? AND (to_user_id=? OR from_user_id=?) AND status='pending'`,
+      [offerId, guildId, userId, userId]
+    );
+    if (!offer) {
+      await message.reply("Trade offer not found.").catch(() => {});
+      return;
+    }
+    await run(`UPDATE trade_offers SET status='declined', resolved_at=? WHERE id=?`, [Date.now(), offerId]);
+    await message.reply(`✅ Trade #${offerId} declined.`).catch(() => {});
+    return;
+  }
+
+  if (sub === "list") {
+    const rows = await all(
+      `SELECT id, from_user_id, to_user_id, from_item, to_item, status, created_at
+       FROM trade_offers WHERE guild_id=? AND (from_user_id=? OR to_user_id=?) AND status='pending'
+       ORDER BY id DESC LIMIT 10`,
+      [guildId, userId, userId]
+    );
+    if (!rows.length) {
+      await message.reply("You have no pending trades.").catch(() => {});
+      return;
+    }
+    const lines = rows.map(r => {
+      const dir = r.from_user_id === userId ? "📤 Outgoing" : "📥 Incoming";
+      return `**#${r.id}** ${dir}\nOffer: \`${r.from_item}\` → Want: \`${r.to_item}\``;
+    }).join("\n\n");
+    const embed = new EmbedBuilder()
+      .setColor(0x9b59b6)
+      .setTitle("Your Pending Trades")
+      .setDescription(lines.slice(0, 4000));
+    await message.reply({ embeds: [embed] }).catch(() => {});
+    return;
+  }
+
+  await message.reply("Usage: `!trade offer <@user> <item> for <item>` | `!trade accept <id>` | `!trade decline <id>` | `!trade list`").catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// LOTTERY: buy tickets, check status, draw (admin)
+// ─────────────────────────────────────────────────────
+
+async function cmdLottery(message, args) {
+  const sub = String(args[0] || "").toLowerCase();
+  const guildId = message.guild.id;
+  const userId = message.author.id;
+
+  const ecoSettings = await get(`SELECT enabled, currency_symbol FROM economy_settings WHERE guild_id=?`, [guildId]);
+  if (!ecoSettings?.enabled) {
+    await message.reply("Economy is not enabled on this server.").catch(() => {});
+    return;
+  }
+  const sym = ecoSettings.currency_symbol || "🪙";
+
+  // Ensure lottery pool row exists
+  await run(
+    `INSERT INTO lottery_pool (guild_id, pot, ticket_price) VALUES (?, 0, 100)
+     ON CONFLICT (guild_id) DO NOTHING`,
+    [guildId]
+  );
+  const pool = await get(`SELECT pot, ticket_price, last_draw_at FROM lottery_pool WHERE guild_id=?`, [guildId]);
+  const ticketPrice = pool?.ticket_price || 100;
+
+  if (!sub || sub === "status" || sub === "info") {
+    // Count total tickets and user's tickets
+    const totalTickets = await get(`SELECT COALESCE(SUM(count),0) AS total FROM lottery_tickets WHERE guild_id=?`, [guildId]);
+    const userTickets = await get(`SELECT COALESCE(SUM(count),0) AS total FROM lottery_tickets WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+    const pot = pool?.pot || 0;
+    const embed = new EmbedBuilder()
+      .setColor(0xf1c40f)
+      .setTitle("🎟️ Lottery")
+      .addFields(
+        { name: "Current Pot", value: `${sym}${pot.toLocaleString()}`, inline: true },
+        { name: "Ticket Price", value: `${sym}${ticketPrice}`, inline: true },
+        { name: "Total Tickets Sold", value: `${totalTickets?.total || 0}`, inline: true },
+        { name: "Your Tickets", value: `${userTickets?.total || 0}`, inline: true }
+      )
+      .setFooter({ text: "Buy tickets with !lottery buy <amount> • Admin draws with !lottery draw" });
+    await message.reply({ embeds: [embed] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "buy") {
+    const count = Math.max(1, parseInt(args[1], 10) || 1);
+    if (count > 100) {
+      await message.reply("You can buy at most 100 tickets at once.").catch(() => {});
+      return;
+    }
+    const cost = ticketPrice * count;
+
+    await run(
+      `INSERT INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)
+       ON CONFLICT (guild_id, user_id) DO NOTHING`,
+      [guildId, userId]
+    );
+    const eco = await get(`SELECT wallet FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+    if ((eco?.wallet || 0) < cost) {
+      await message.reply(`You need ${sym}${cost.toLocaleString()} but only have ${sym}${(eco?.wallet || 0).toLocaleString()}.`).catch(() => {});
+      return;
+    }
+
+    await run(`UPDATE user_economy SET wallet=wallet-? WHERE guild_id=? AND user_id=?`, [cost, guildId, userId]);
+    await run(`UPDATE lottery_pool SET pot=pot+? WHERE guild_id=?`, [cost, guildId]);
+    await run(
+      `INSERT INTO lottery_tickets (guild_id, user_id, count) VALUES (?, ?, ?)`,
+      [guildId, userId, count]
+    );
+
+    await message.reply(`🎟️ Bought **${count}** ticket${count > 1 ? "s" : ""} for ${sym}${cost.toLocaleString()}! Good luck!`).catch(() => {});
+    return;
+  }
+
+  if (sub === "draw") {
+    // Admin only
+    const member = message.member;
+    const isAdmin = member?.permissions?.has(1n << 3n) ||
+      member?.id === (process.env.BOT_MANAGER_ID || "900758140499398676");
+    const gsRow = await get(`SELECT manager_role_id FROM guild_settings WHERE guild_id=?`, [guildId]);
+    const isManager = gsRow?.manager_role_id && member?.roles?.cache?.has(gsRow.manager_role_id);
+    if (!isAdmin && !isManager) {
+      await message.reply("Only admins/managers can draw the lottery.").catch(() => {});
+      return;
+    }
+
+    const pot = pool?.pot || 0;
+    if (pot === 0) {
+      await message.reply("The lottery pot is empty — no tickets sold yet.").catch(() => {});
+      return;
+    }
+
+    // Build weighted ticket pool
+    const tickets = await all(`SELECT user_id, count FROM lottery_tickets WHERE guild_id=?`, [guildId]);
+    if (!tickets.length) {
+      await message.reply("No tickets sold yet.").catch(() => {});
+      return;
+    }
+
+    const pool_arr = [];
+    for (const t of tickets) {
+      for (let i = 0; i < t.count; i++) pool_arr.push(t.user_id);
+    }
+    const winnerId = pool_arr[Math.floor(Math.random() * pool_arr.length)];
+
+    // Give winner the pot
+    await run(
+      `INSERT INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)
+       ON CONFLICT (guild_id, user_id) DO NOTHING`,
+      [guildId, winnerId]
+    );
+    await run(`UPDATE user_economy SET wallet=wallet+? WHERE guild_id=? AND user_id=?`, [pot, guildId, winnerId]);
+
+    // Reset lottery
+    await run(`UPDATE lottery_pool SET pot=0, last_draw_at=? WHERE guild_id=?`, [Date.now(), guildId]);
+    await run(`DELETE FROM lottery_tickets WHERE guild_id=?`, [guildId]);
+
+    const winnerUser = await message.guild.members.fetch(winnerId).catch(() => null);
+    const winnerTag = winnerUser?.user?.tag || `<@${winnerId}>`;
+    const embed = new EmbedBuilder()
+      .setColor(0xf1c40f)
+      .setTitle("🎉 Lottery Draw!")
+      .setDescription(`**Winner: ${winnerTag}**\nPrize: **${sym}${pot.toLocaleString()}**`)
+      .setFooter({ text: `Total tickets: ${pool_arr.length}` });
+    await message.channel.send({ embeds: [embed] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "setprice") {
+    const member = message.member;
+    const isAdmin = member?.permissions?.has(1n << 3n) ||
+      member?.id === (process.env.BOT_MANAGER_ID || "900758140499398676");
+    if (!isAdmin) {
+      await message.reply("Only admins can set the ticket price.").catch(() => {});
+      return;
+    }
+    const price = parseInt(args[1], 10);
+    if (!price || price < 1) {
+      await message.reply("Please provide a valid ticket price.").catch(() => {});
+      return;
+    }
+    await run(`UPDATE lottery_pool SET ticket_price=? WHERE guild_id=?`, [price, guildId]);
+    await message.reply(`✅ Lottery ticket price set to ${sym}${price}.`).catch(() => {});
+    return;
+  }
+
+  await message.reply("Usage: `!lottery` | `!lottery buy <amount>` | `!lottery draw` (admin) | `!lottery setprice <price>` (admin)").catch(() => {});
+}
+
 module.exports = {
   cmdBalance,
   cmdDaily,
@@ -972,4 +1364,7 @@ module.exports = {
   cmdShop,
   cmdBuy,
   cmdInventory,
+  cmdEcoAdmin,
+  cmdTrade,
+  cmdLottery,
 };

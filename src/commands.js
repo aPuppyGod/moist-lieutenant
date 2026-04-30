@@ -1990,14 +1990,14 @@ async function cmdProfile(message, args) {
 
   const [xpRow, ecoRow, classRow, buffRows] = await Promise.all([
     get(`SELECT xp, level FROM user_xp WHERE guild_id=? AND user_id=?`, [guildId, userId]),
-    get(`SELECT wallet, bank, prestige_level FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]),
+    get(`SELECT balance, bank, prestige_level FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]),
     get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]),
-    all(`SELECT buff_id, expires_at FROM user_buffs WHERE guild_id=? AND user_id=? AND expires_at > ?`, [guildId, userId, Date.now()])
+    all(`SELECT buff_id, expires_at FROM user_buffs WHERE guild_id=? AND user_id=? AND expires_at > ?`, [guildId, userId, Date.now()]).catch(() => [])
   ]);
 
   const xp = xpRow?.xp || 0;
   const level = xpRow?.level || 0;
-  const wallet = ecoRow?.wallet || 0;
+  const wallet = ecoRow?.balance || 0;
   const bank = ecoRow?.bank || 0;
   const prestige = ecoRow?.prestige_level || 0;
   const className = classRow?.class_id || "None";

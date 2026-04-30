@@ -4236,6 +4236,8 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     const economyShopItems = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [guildId]);
     const economyJobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY pay_min ASC`, [guildId]);
     const recentTransactions = await all(`SELECT * FROM economy_transactions WHERE guild_id=? ORDER BY id DESC LIMIT 20`, [guildId]);
+    const wordFilterRows = await all(`SELECT id, word, action FROM word_filter WHERE guild_id=? ORDER BY word ASC`, [guildId]).catch(() => []);
+    const scheduledMessages = await all(`SELECT id, channel_id, content, interval_minutes, next_run_at, enabled FROM scheduled_messages WHERE guild_id=? ORDER BY id DESC`, [guildId]).catch(() => []);
     const reactionRolesConfig = await all(`SELECT * FROM reaction_roles WHERE guild_id=? ORDER BY created_at DESC`, [guildId]);
     const birthdaySettings = await get(`SELECT * FROM birthday_settings WHERE guild_id=?`, [guildId]);
     const upcomingBirthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day LIMIT 20`, [guildId]);
@@ -4262,9 +4264,6 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
     }
     
     const eventConfigMap = new Map(eventConfigs.map((cfg) => [cfg.event_key, cfg]));
-
-    const wordFilterRows = await all(`SELECT id, word, action FROM word_filter WHERE guild_id=? ORDER BY word ASC`, [guildId]).catch(() => []);
-    const scheduledMessages = await all(`SELECT * FROM scheduled_messages WHERE guild_id=? ORDER BY id ASC`, [guildId]).catch(() => []);
 
     const requestedModule = String(req.query.module || "overview").toLowerCase();
     const moduleTabs = [

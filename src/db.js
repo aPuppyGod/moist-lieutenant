@@ -1257,7 +1257,7 @@ async function initDb() {
         posted_at BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
         expires_at BIGINT NOT NULL,
         claimed_by TEXT DEFAULT NULL,
-        claimed_at BIGINT DEFAULT NULL,=
+        claimed_at BIGINT DEFAULT NULL,
         status TEXT NOT NULL DEFAULT 'active'
       )
     `);

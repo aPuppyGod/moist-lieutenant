@@ -993,13 +993,13 @@ async function cmdEcoAdmin(message, args) {
 
   // Ensure user economy row exists
   await run(
-    `INSERT INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)
+    `INSERT INTO user_economy (guild_id, user_id, balance, bank) VALUES (?, ?, 0, 0)
      ON CONFLICT (guild_id, user_id) DO NOTHING`,
     [guildId, targetId]
   );
 
   if (sub === "reset") {
-    await run(`UPDATE user_economy SET wallet=0, bank=0 WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
+    await run(`UPDATE user_economy SET balance=0, bank=0 WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
     await message.reply(`✅ Reset economy for ${target.user.tag}.`).catch(() => {});
     return;
   }
@@ -1011,19 +1011,19 @@ async function cmdEcoAdmin(message, args) {
   }
 
   if (sub === "give") {
-    await run(`UPDATE user_economy SET wallet=wallet+? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
     await message.reply(`✅ Gave ${sym}${amount.toLocaleString()} to ${target.user.tag}.`).catch(() => {});
     return;
   }
 
   if (sub === "take") {
-    await run(`UPDATE user_economy SET wallet=GREATEST(0, wallet-?) WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await run(`UPDATE user_economy SET balance=GREATEST(0, balance-?) WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
     await message.reply(`✅ Removed ${sym}${amount.toLocaleString()} from ${target.user.tag}.`).catch(() => {});
     return;
   }
 
   if (sub === "set") {
-    await run(`UPDATE user_economy SET wallet=? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
     await message.reply(`✅ Set ${target.user.tag}'s wallet to ${sym}${amount.toLocaleString()}.`).catch(() => {});
     return;
   }
@@ -1070,20 +1070,36 @@ async function cmdTrade(message, args) {
       return;
     }
 
-    // Verify sender has fromItem in inventory
+    const offeredItem = await get(
+      `SELECT item_id, name FROM economy_shop_items
+       WHERE guild_id=? AND (LOWER(item_id)=LOWER(?) OR LOWER(name)=LOWER(?))
+       LIMIT 1`,
+      [guildId, fromItem, fromItem]
+    );
+    const wantedItem = await get(
+      `SELECT item_id, name FROM economy_shop_items
+       WHERE guild_id=? AND (LOWER(item_id)=LOWER(?) OR LOWER(name)=LOWER(?))
+       LIMIT 1`,
+      [guildId, toItem, toItem]
+    );
+    if (!offeredItem || !wantedItem) {
+      await message.reply("One or both items were not found in the shop catalog. Use the item ID from the shop/inventory.").catch(() => {});
+      return;
+    }
+
     const senderInv = await get(
-      `SELECT id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`,
-      [guildId, userId, fromItem]
+      `SELECT item_id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
+      [guildId, userId, offeredItem.item_id]
     );
     if (!senderInv || senderInv.quantity < 1) {
-      await message.reply(`You don't have **${fromItem}** in your inventory.`).catch(() => {});
+      await message.reply(`You don't have **${offeredItem.name || offeredItem.item_id}** in your inventory.`).catch(() => {});
       return;
     }
 
     await run(
       `INSERT INTO trade_offers (guild_id, from_user_id, to_user_id, from_item, to_item, status)
        VALUES (?, ?, ?, ?, ?, 'pending')`,
-      [guildId, userId, toUser.user.id, fromItem, toItem]
+      [guildId, userId, toUser.user.id, offeredItem.item_id, wantedItem.item_id]
     );
 
     const offer = await get(`SELECT id FROM trade_offers WHERE guild_id=? AND from_user_id=? AND status='pending' ORDER BY id DESC LIMIT 1`, [guildId, userId]);
@@ -1111,9 +1127,8 @@ async function cmdTrade(message, args) {
       return;
     }
 
-    // Check both inventories
     const receiverInv = await get(
-      `SELECT id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`,
+      `SELECT item_id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
       [guildId, userId, offer.to_item]
     );
     if (!receiverInv || receiverInv.quantity < 1) {
@@ -1122,7 +1137,7 @@ async function cmdTrade(message, args) {
     }
 
     const senderInv = await get(
-      `SELECT id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`,
+      `SELECT item_id, quantity FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
       [guildId, offer.from_user_id, offer.from_item]
     );
     if (!senderInv || senderInv.quantity < 1) {
@@ -1131,20 +1146,19 @@ async function cmdTrade(message, args) {
       return;
     }
 
-    // Execute trade: subtract 1 from each, add 1 to each
-    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`, [guildId, offer.from_user_id, offer.from_item]);
-    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_name ILIKE ?`, [guildId, userId, offer.to_item]);
+    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`, [guildId, offer.from_user_id, offer.from_item]);
+    await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`, [guildId, userId, offer.to_item]);
 
     await run(
-      `INSERT INTO user_inventory (guild_id, user_id, item_name, quantity)
+      `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
        VALUES (?, ?, ?, 1)
-       ON CONFLICT (guild_id, user_id, item_name) DO UPDATE SET quantity=quantity+1`,
+       ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity=user_inventory.quantity+1`,
       [guildId, userId, offer.from_item]
     );
     await run(
-      `INSERT INTO user_inventory (guild_id, user_id, item_name, quantity)
+      `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
        VALUES (?, ?, ?, 1)
-       ON CONFLICT (guild_id, user_id, item_name) DO UPDATE SET quantity=quantity+1`,
+       ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity=user_inventory.quantity+1`,
       [guildId, offer.from_user_id, offer.to_item]
     );
 
@@ -1251,17 +1265,17 @@ async function cmdLottery(message, args) {
     const cost = ticketPrice * count;
 
     await run(
-      `INSERT INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)
+      `INSERT INTO user_economy (guild_id, user_id, balance, bank) VALUES (?, ?, 0, 0)
        ON CONFLICT (guild_id, user_id) DO NOTHING`,
       [guildId, userId]
     );
-    const eco = await get(`SELECT wallet FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
-    if ((eco?.wallet || 0) < cost) {
-      await message.reply(`You need ${sym}${cost.toLocaleString()} but only have ${sym}${(eco?.wallet || 0).toLocaleString()}.`).catch(() => {});
+    const eco = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+    if ((eco?.balance || 0) < cost) {
+      await message.reply(`You need ${sym}${cost.toLocaleString()} but only have ${sym}${(eco?.balance || 0).toLocaleString()}.`).catch(() => {});
       return;
     }
 
-    await run(`UPDATE user_economy SET wallet=wallet-? WHERE guild_id=? AND user_id=?`, [cost, guildId, userId]);
+    await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [cost, guildId, userId]);
     await run(`UPDATE lottery_pool SET pot=pot+? WHERE guild_id=?`, [cost, guildId]);
     await run(
       `INSERT INTO lottery_tickets (guild_id, user_id, count) VALUES (?, ?, ?)`,
@@ -1305,11 +1319,11 @@ async function cmdLottery(message, args) {
 
     // Give winner the pot
     await run(
-      `INSERT INTO user_economy (guild_id, user_id, wallet, bank) VALUES (?, ?, 0, 0)
+      `INSERT INTO user_economy (guild_id, user_id, balance, bank) VALUES (?, ?, 0, 0)
        ON CONFLICT (guild_id, user_id) DO NOTHING`,
       [guildId, winnerId]
     );
-    await run(`UPDATE user_economy SET wallet=wallet+? WHERE guild_id=? AND user_id=?`, [pot, guildId, winnerId]);
+    await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [pot, guildId, winnerId]);
 
     // Reset lottery
     await run(`UPDATE lottery_pool SET pot=0, last_draw_at=? WHERE guild_id=?`, [Date.now(), guildId]);

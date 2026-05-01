@@ -1400,6 +1400,297 @@ async function cmdLottery(message, args) {
   await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!lottery` | `!lottery buy <amount>` | `!lottery draw` (admin) | `!lottery setprice <price>` (admin)" }] }).catch(() => {});
 }
 
+// ─────────────────────────────────────────────────────
+// ECONOMY: ROULETTE
+// ─────────────────────────────────────────────────────
+
+async function cmdRoulette(message, args) {
+  const economySettings = await getEconomySettings(message.guild.id);
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  const ecoPrefix = economySettings.economy_prefix || "$";
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  if (!args[0] || !args[1]) {
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x8e44ad).setTitle("🎡 Roulette").setDescription(
+      `Bet on a number (0-36), color (red/black), or group (even/odd/low/high)!\n\n**Usage:** \`${ecoPrefix}roulette <bet> <choice>\`\n\n**Payouts:**\n🔴/⚫ Red or Black → 2x\n🔢 Even/Odd → 2x\n📊 Low (1-18)/High (19-36) → 2x\n🎯 Single number (0-36) → 35x jackpot\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
+    )] }).catch(() => {});
+    return;
+  }
+
+  const bet = parseInt(args[0]);
+  if (isNaN(bet) || bet <= 0) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid bet amount." }] }).catch(() => {}); return;
+  }
+  if (economy.balance < bet) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {}); return;
+  }
+
+  const choice = args[1].toLowerCase();
+  const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+  const spin = Math.floor(Math.random() * 37); // 0-36
+  const spinColor = spin === 0 ? "green" : RED_NUMBERS.has(spin) ? "red" : "black";
+  const spinEmoji = spin === 0 ? "💚" : spinColor === "red" ? "🔴" : "⚫";
+
+  let won = false;
+  let multiplier = 0;
+  let choiceDesc = choice;
+
+  const numChoice = parseInt(choice);
+  if (!isNaN(numChoice) && numChoice >= 0 && numChoice <= 36) {
+    won = spin === numChoice;
+    multiplier = 35;
+    choiceDesc = `number ${numChoice}`;
+  } else if (choice === "red") {
+    won = spinColor === "red";
+    multiplier = 2;
+    choiceDesc = "🔴 Red";
+  } else if (choice === "black") {
+    won = spinColor === "black";
+    multiplier = 2;
+    choiceDesc = "⚫ Black";
+  } else if (choice === "even") {
+    won = spin !== 0 && spin % 2 === 0;
+    multiplier = 2;
+    choiceDesc = "Even";
+  } else if (choice === "odd") {
+    won = spin % 2 !== 0;
+    multiplier = 2;
+    choiceDesc = "Odd";
+  } else if (choice === "low") {
+    won = spin >= 1 && spin <= 18;
+    multiplier = 2;
+    choiceDesc = "Low (1-18)";
+  } else if (choice === "high") {
+    won = spin >= 19 && spin <= 36;
+    multiplier = 2;
+    choiceDesc = "High (19-36)";
+  } else {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid choice! Use: red, black, even, odd, low, high, or a number 0-36." }] }).catch(() => {}); return;
+  }
+
+  const winnings = won ? bet * (multiplier - 1) : -bet;
+  const newBalance = economy.balance + winnings;
+  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "roulette", winnings, `Roulette ${spin} (bet ${bet} on ${choice})`]);
+
+  const embed = {
+    color: won ? 0x2ecc71 : 0xe74c3c,
+    title: "🎡 Roulette",
+    description: `The wheel spins...\n\n${spinEmoji} **${spin}** ${spinColor.toUpperCase()}\n\nYou bet on **${choiceDesc}**\n${won ? `✅ You won **${winnings} ${economySettings.currency_name}**!` : `❌ You lost **${bet} ${economySettings.currency_name}**.`}`,
+    fields: [
+      { name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true },
+      { name: "Multiplier", value: won ? `${multiplier}x` : "0x", inline: true }
+    ]
+  };
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────
+// ECONOMY: BLACKJACK
+// ─────────────────────────────────────────────────────
+
+function bjCardValue(card) {
+  if (["J","Q","K"].includes(card[0])) return 10;
+  if (card[0] === "A") return 11;
+  return parseInt(card[0]);
+}
+
+function bjHandValue(hand) {
+  let val = hand.reduce((s, c) => s + bjCardValue(c), 0);
+  let aces = hand.filter(c => c[0] === "A").length;
+  while (val > 21 && aces > 0) { val -= 10; aces--; }
+  return val;
+}
+
+function bjDeck() {
+  const suits = ["♠","♥","♦","♣"];
+  const ranks = ["A","2","3","4","5","6","7","8","9","10","J","Q","K"];
+  const deck = [];
+  for (const s of suits) for (const r of ranks) deck.push(r + s);
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  return deck;
+}
+
+function bjHandStr(hand) { return hand.join(" "); }
+
+async function cmdBlackjack(message, args) {
+  const economySettings = await getEconomySettings(message.guild.id);
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  const ecoPrefix = economySettings.economy_prefix || "$";
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  if (!args[0]) {
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x2d6a4f).setTitle("🃏 Blackjack").setDescription(
+      `Try to beat the dealer by getting closer to 21 without going over!\n\n**Usage:** \`${ecoPrefix}blackjack <bet>\`\n\n**Rules:**\n• Blackjack (Ace + 10-card on deal) = **2.5x**\n• Beat dealer = **2x**\n• Push (tie) = bet returned\n• Bust or lose = lose bet\n\n**Controls:** Type \`hit\` or \`stand\` in 30 seconds\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
+    )] }).catch(() => {});
+    return;
+  }
+
+  const bet = parseInt(args[0]);
+  if (isNaN(bet) || bet <= 0) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid bet amount." }] }).catch(() => {}); return;
+  }
+  if (economy.balance < bet) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {}); return;
+  }
+
+  const deck = bjDeck();
+  let playerHand = [deck.pop(), deck.pop()];
+  let dealerHand = [deck.pop(), deck.pop()];
+
+  const showState = (showDealer = false) => {
+    const dHand = showDealer ? bjHandStr(dealerHand) : `${dealerHand[0]} ??`;
+    const dVal = showDealer ? bjHandValue(dealerHand) : "?";
+    return `🃏 **Your hand:** ${bjHandStr(playerHand)} = **${bjHandValue(playerHand)}**\n🎩 **Dealer:** ${dHand} = **${dVal}**`;
+  };
+
+  // Natural blackjack check
+  if (bjHandValue(playerHand) === 21) {
+    const winnings = Math.floor(bet * 1.5);
+    const newBalance = economy.balance + winnings;
+    await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
+    await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+      [message.guild.id, message.author.id, "blackjack", winnings, `Blackjack natural (bet ${bet})`]);
+    await message.reply({ embeds: [{ color: 0xf1c40f, title: "🃏 BLACKJACK!", description: `${showState(true)}\n\n🎉 Natural blackjack! You win **${winnings} ${economySettings.currency_name}** (2.5x)!` }] }).catch(() => {});
+    return;
+  }
+
+  const gameMsg = await message.reply({ embeds: [new EmbedBuilder().setColor(0x2d6a4f).setTitle("🃏 Blackjack").setDescription(
+    `${showState()}\n\nType \`hit\` to draw a card or \`stand\` to hold (30 seconds)`
+  )] }).catch(() => null);
+  if (!gameMsg) return;
+
+  let playerBust = false;
+  const filter = m => m.author.id === message.author.id && ["hit","stand","h","s"].includes(m.content.toLowerCase());
+  const collector = message.channel.createMessageCollector({ filter, time: 30000 });
+
+  collector.on("collect", async m => {
+    const act = m.content.toLowerCase();
+    if (act === "hit" || act === "h") {
+      playerHand.push(deck.pop());
+      const pVal = bjHandValue(playerHand);
+      if (pVal > 21) {
+        playerBust = true;
+        collector.stop("bust");
+        return;
+      }
+      if (pVal === 21) { collector.stop("stand"); return; }
+      await m.reply({ embeds: [{ color: 0x3498db, description: `${showState()}\n\nType \`hit\` or \`stand\`` }] }).catch(() => {});
+    } else {
+      collector.stop("stand");
+    }
+  });
+
+  collector.on("end", async (collected, reason) => {
+    if (reason === "time" && !playerBust) reason = "stand";
+
+    // Dealer plays
+    while (bjHandValue(dealerHand) < 17) dealerHand.push(deck.pop());
+
+    const pVal = bjHandValue(playerHand);
+    const dVal = bjHandValue(dealerHand);
+    let result, winnings, color;
+
+    if (playerBust) {
+      result = `💥 You busted (${pVal})! Dealer wins.`;
+      winnings = -bet;
+      color = 0xe74c3c;
+    } else if (dVal > 21 || pVal > dVal) {
+      result = `✅ You win! (${pVal} vs ${dVal})`;
+      winnings = bet;
+      color = 0x2ecc71;
+    } else if (pVal === dVal) {
+      result = `🤝 Push! (${pVal} vs ${dVal}) — Bet returned.`;
+      winnings = 0;
+      color = 0xf1c40f;
+    } else {
+      result = `❌ Dealer wins! (${pVal} vs ${dVal})`;
+      winnings = -bet;
+      color = 0xe74c3c;
+    }
+
+    const newBalance = economy.balance + winnings;
+    await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
+    if (winnings !== 0) {
+      await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+        [message.guild.id, message.author.id, "blackjack", winnings, `Blackjack (bet ${bet})`]);
+    }
+
+    await message.reply({ embeds: [{ color, title: "🃏 Blackjack — Result", description: `${showState(true)}\n\n${result}`, fields: [{ name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }] }] }).catch(() => {});
+  });
+}
+
+// ─────────────────────────────────────────────────────
+// ECONOMY: HIGH-LOW
+// ─────────────────────────────────────────────────────
+
+async function cmdHighLow(message, args) {
+  const economySettings = await getEconomySettings(message.guild.id);
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  const ecoPrefix = economySettings.economy_prefix || "$";
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  if (!args[0]) {
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xe67e22).setTitle("📈 High-Low").setDescription(
+      `Guess if the next number is higher or lower!\n\n**Usage:** \`${ecoPrefix}highlow <bet> <higher|lower>\`\n\n**Payout:** 1.9x (house edge: 10%)\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
+    )] }).catch(() => {});
+    return;
+  }
+
+  const bet = parseInt(args[0]);
+  if (isNaN(bet) || bet <= 0) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid bet amount." }] }).catch(() => {}); return;
+  }
+  if (economy.balance < bet) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {}); return;
+  }
+
+  const choice = args[1]?.toLowerCase();
+  if (!["higher","lower","h","l","high","low"].includes(choice)) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Choose `higher` or `lower`." }] }).catch(() => {}); return;
+  }
+  const guessHigher = ["higher","h","high"].includes(choice);
+
+  const first = Math.floor(Math.random() * 10) + 1; // 1-10
+  const second = Math.floor(Math.random() * 10) + 1;
+
+  // Tie = house wins
+  const actuallyHigher = second > first;
+  const won = guessHigher ? actuallyHigher : !actuallyHigher;
+
+  const winnings = won ? Math.floor(bet * 0.9) : -bet;
+  const newBalance = economy.balance + winnings;
+  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "highlow", winnings, `High-Low (bet ${bet})`]);
+
+  await message.reply({ embeds: [{
+    color: won ? 0x2ecc71 : 0xe74c3c,
+    title: "📈 High-Low",
+    description: `First number: **${first}**\nSecond number: **${second}**\n\nYou guessed **${guessHigher ? "higher" : "lower"}**\n${won ? `✅ Correct! +**${winnings} ${economySettings.currency_name}**` : `❌ Wrong! -**${bet} ${economySettings.currency_name}**`}`,
+    fields: [{ name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }]
+  }] }).catch(() => {});
+}
+
 module.exports = {
   cmdBalance,
   cmdDaily,
@@ -1420,5 +1711,8 @@ module.exports = {
   cmdEcoAdmin,
   cmdTrade,
   cmdLottery,
+  cmdRoulette,
+  cmdBlackjack,
+  cmdHighLow,
 };
 

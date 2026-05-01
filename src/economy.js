@@ -381,8 +381,10 @@ async function cmdClass(message, args, util) {
     return;
   }
 
-  const classKey = args[0].toLowerCase();
-  const murk_class = MURK_CLASSES[classKey];
+  // Support both "$class merchant" and "$class select merchant"
+  const rawArg = args[0]?.toLowerCase();
+  const classKey = rawArg === "select" ? args[1]?.toLowerCase() : rawArg;
+  const murk_class = classKey ? MURK_CLASSES[classKey] : null;
 
   if (!murk_class) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid class! Choose: `brigand`, `artificer`, `scholar`, or `merchant`." }] }).catch(() => {});
@@ -511,6 +513,21 @@ async function cmdAdventure(message, args, util) {
     return;
   }
 
+  // Cooldown: 15 minutes
+  const now = Date.now();
+  const adventureCooldown = 900000;
+  const lastAdventure = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='adventure' AND stat_name='last_adventure'`,
+    [message.guild.id, message.author.id]
+  );
+  if (lastAdventure?.last_played && (now - lastAdventure.last_played) < adventureCooldown) {
+    const timeLeft = adventureCooldown - (now - lastAdventure.last_played);
+    const minutes = Math.floor(timeLeft / 60000);
+    const seconds = Math.floor((timeLeft % 60000) / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🗺️ You need to rest! Come back in **${minutes}m ${seconds}s**.` }] }).catch(() => {});
+    return;
+  }
+
   const storyId = args[0]?.toLowerCase();
   if (!storyId || !SWAMP_STORIES[storyId]) {
     const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) =>
@@ -578,6 +595,14 @@ async function cmdAdventure(message, args, util) {
        VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET chapter=?, completed=?, last_updated=?`,
       [message.guild.id, message.author.id, storyId, nextChapter, isCompleted ? 1 : 0, Date.now(), nextChapter, isCompleted ? 1 : 0, Date.now()]
+    );
+
+    // Record cooldown
+    await runCmd(
+      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+       VALUES (?, ?, 'adventure', 'last_adventure', 1, ?)
+       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=stat_value+1, last_played=?`,
+      [message.guild.id, message.author.id, now, now]
     );
 
     const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter} next time...`;
@@ -1121,6 +1146,11 @@ async function cmdFish(message, args, util) {
 
   const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
     [message.guild.id, message.author.id]);
+  if (!economy) {
+    console.error('[cmdFish] economy row missing for', message.author.id, message.guild.id);
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: '❌ Could not load your economy data. Please try again.' }] }).catch(() => {});
+    return;
+  }
   const newBalance = economy.balance + fish.value;
   
   await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
@@ -1219,6 +1249,11 @@ async function cmdDig(message, args, util) {
 
   const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
     [message.guild.id, message.author.id]);
+  if (!economy) {
+    console.error('[cmdDig] economy row missing for', message.author.id, message.guild.id);
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: '❌ Could not load your economy data. Please try again.' }] }).catch(() => {});
+    return;
+  }
   const newBalance = economy.balance + totalValveGain;
   
   await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
@@ -1255,7 +1290,7 @@ async function cmdRobBank(message, args, util) {
   if (robber.last_bank_rob && (now - robber.last_bank_rob) < cooldown) {
     const timeLeft = cooldown - (now - robber.last_bank_rob);
     const minutes = Math.floor(timeLeft / 60000);
-  await message.reply({ embeds: [{ color: 0x2ecc71, title: '🎁 Gift Sent!', description: `You gifted **${inventoryItem.name}** to **${target.username}**! They'll find it in their inventory.` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🚔 The police are still after you! Wait **${minutes}m** before another bank robbery.` }] }).catch(() => {});
     return;
   }
 

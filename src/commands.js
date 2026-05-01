@@ -409,6 +409,9 @@ async function cmdEconomy(message) {
           `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
           `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
           `\`${ecoPrefix}slots <bet>\` — Spin the slots`,
+          `\`${ecoPrefix}roulette <bet> <red|black|even|odd|low|high|0-36>\` — Wheel spin`,
+          `\`${ecoPrefix}blackjack <bet>\` — Beat the dealer`,
+          `\`${ecoPrefix}highlow <bet> <higher|lower>\` — Guess the next number`,
         ].join("\n"),
         inline: false
       },
@@ -3587,6 +3590,7 @@ const {
   cmdBalance, cmdDaily, cmdWeekly, cmdPay, cmdEcoLeaderboard,
   cmdDeposit, cmdWithdraw, cmdRob, cmdSlots, cmdCoinflip, cmdDice,
   cmdJob, cmdWork, cmdShop, cmdBuy, cmdInventory,
+  cmdRoulette, cmdBlackjack, cmdHighLow,
 } = require("./economyCommands");
 
 // ─────────────────────────────────────────────────────
@@ -3823,7 +3827,8 @@ async function handleCommands(message) {
   // List of economy commands that can use the economy prefix
   const economyCommands = ["balance", "bal", "daily", "weekly", "pay", "baltop", "richest",
     "deposit", "dep", "withdraw", "with", "rob", "bankrob", "bank-rob", "bankrobbery", "slots", "slot", "coinflip", "cf", 
-    "dice", "roll", "job", "jobs", "work", "shift", "shop", "store", "buy", "purchase", 
+    "dice", "roll", "roulette", "blackjack", "bj", "highlow", "hl",
+    "job", "jobs", "work", "shift", "shop", "store", "buy", "purchase", 
     "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call",
     "adventure", "story", "explore", "swamp", "bounty", "bounties", "craft", "crafting",
     "prestige", "class", "use", "consume", "item", "inspect", "gift", "trade", "lottery",
@@ -3861,12 +3866,13 @@ async function executeCommand(message, cmd, args, prefix) {
   if (!message.guild) return false;
   try {
 
-  // Initialize default shop items for economy-enabled guilds
+  // Initialize default shop items and jobs for economy-enabled guilds
   if ((cmd === "shop" || cmd === "store" || cmd === "buy" || cmd === "purchase" || cmd === "balance" || 
        cmd === "fish" || cmd === "dig" || cmd === "bankrob" || cmd === "phone") && message.author.id !== message.client?.user?.id) {
     const economySettings = await getEconomySettingsRow(message.guild.id);
     if (economySettings?.enabled) {
       await ensureDefaultShopItems(message.guild.id).catch(() => {});
+      await ensureDefaultJobs(message.guild.id).catch(() => {});
     }
   }
 
@@ -4124,6 +4130,21 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "dice" || cmd === "roll") {
     await cmdDice(message, args);
+    return true;
+  }
+
+  if (cmd === "roulette") {
+    await cmdRoulette(message, args);
+    return true;
+  }
+
+  if (cmd === "blackjack" || cmd === "bj") {
+    await cmdBlackjack(message, args);
+    return true;
+  }
+
+  if (cmd === "highlow" || cmd === "hl") {
+    await cmdHighLow(message, args);
     return true;
   }
 
@@ -5030,6 +5051,36 @@ async function registerSlashCommands(client) {
   console.log(`[slash] Registered ${defs.length} commands (guild-only sync across ${guildSynced} guilds)`);
 }
 
+async function ensureDefaultJobs(guildId) {
+  const defaultJobs = [
+    // id, name, pay_min, pay_max, required_shifts (total), weekly_shifts_required
+    ["swamp_sweeper",    "🧹 Swamp Sweeper",          30,   70,   0,   2],
+    ["bog_collector",   "🪣 Bog Collector",           60,  120,   5,   3],
+    ["fish_sorter",     "🐟 Fish Sorter",             80,  160,  10,   3],
+    ["market_runner",   "🛒 Market Runner",          120,  220,  20,   4],
+    ["torch_lighter",   "🔦 Torch Lighter",          150,  280,  30,   4],
+    ["mud_bricklayer",  "🧱 Mud Bricklayer",         200,  350,  45,   5],
+    ["alchemists_aide", "⚗️ Alchemist's Aide",       280,  450,  60,   5],
+    ["murk_guard",      "🛡️ Murk Guard",             350,  550,  80,   5],
+    ["ruin_scout",      "🗺️ Ruin Scout",             450,  700, 100,   6],
+    ["bazaar_merchant", "💼 Bazaar Merchant",        600,  900, 130,   6],
+    ["arcane_scribe",   "📜 Arcane Scribe",          800, 1200, 170,   7],
+    ["deep_diver",      "🌊 Deep Diver",            1000, 1600, 220,   7],
+    ["murk_artificer",  "⚙️ Murk Artificer",       1400, 2000, 280,   8],
+    ["shadow_broker",   "🎭 Shadow Broker",         1800, 2500, 350,   8],
+    ["murk_warlord",    "⚔️ Murk Warlord",          2500, 4000, 500,  10],
+  ];
+  for (const [id, name, pay_min, pay_max, required_shifts, weekly_shifts_required] of defaultJobs) {
+    const exists = await get(`SELECT id FROM economy_jobs WHERE guild_id=? AND id=?`, [guildId, `${guildId}-${id}`]);
+    if (!exists) {
+      await run(
+        `INSERT INTO economy_jobs (id, guild_id, name, pay_min, pay_max, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [`${guildId}-${id}`, guildId, name, pay_min, pay_max, required_shifts, weekly_shifts_required]
+      ).catch(() => {});
+    }
+  }
+}
+
 async function ensureDefaultShopItems(guildId) {
   // Setup default economy shop items for minigames and features
   const defaultItems = [
@@ -5074,5 +5125,5 @@ async function ensureDefaultShopItems(guildId) {
   }
 }
 
-module.exports = { handleCommands, handleSlashCommand, registerSlashCommands, endGiveaway, ensureDefaultShopItems };
+module.exports = { handleCommands, handleSlashCommand, registerSlashCommands, endGiveaway, ensureDefaultShopItems, ensureDefaultJobs };
 

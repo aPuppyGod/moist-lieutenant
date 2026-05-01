@@ -20,9 +20,9 @@ const BOT_MANAGER_ID = process.env.BOT_MANAGER_ID || "900758140499398676";
 const MODERATION_PERMISSION = PermissionsBitField.Flags.ModerateMembers;
 const DEFAULT_MOD_COMMAND_PERMISSION = PermissionsBitField.Flags.ManageMessages;
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Permission helpers
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 function isAdminOrManager(member) {
   if (!member) return false;
@@ -59,9 +59,9 @@ async function requireModerator(message) {
   return false;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Private VC room lookup + auth
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function getRoomByTextChannel(guildId, textChannelId) {
   return await get(
@@ -93,9 +93,9 @@ async function assertVoiceCmdAllowed(message) {
   return { ok: true, room };
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Role hierarchy check for moderation
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 function canModerate(executor, target) {
   if (!executor || !target) return false;
@@ -109,9 +109,9 @@ function canModerate(executor, target) {
   return executorHighest.position > targetHighest.position;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Parsing helpers
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 function parseCommand(content, prefixes) {
   const matchedPrefix = prefixes.find((p) => content.startsWith(p));
@@ -257,9 +257,9 @@ async function setUserXp(guildId, userId, xp) {
   );
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Command implementations
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 // Draw avatar border and frame effects
 function drawAvatarBorder(ctx, prefs) {
@@ -439,7 +439,7 @@ async function cmdSetModRole(message, args) {
     [message.guild.id, role.id]
   );
 
-  await message.reply(`âœ… Mod role set to <@&${role.id}>.`).catch(() => {});
+  await message.reply(`✅ Mod role set to <@&${role.id}>.`).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -739,22 +739,22 @@ async function cmdLeaderboard(message, args) {
 
     // Medal emojis for top 3
     let medal = "";
-    if (rank === 1) medal = "ðŸ¥‡";
-    else if (rank === 2) medal = "ðŸ¥ˆ";
-    else if (rank === 3) medal = "ðŸ¥‰";
+    if (rank === 1) medal = "🥇";
+    else if (rank === 2) medal = "🥈";
+    else if (rank === 3) medal = "🥉";
     else medal = `\`${rank}\``;
 
-    // Compact format: rank emoji â€¢ name â€¢ level â€¢ XP
+    // Compact format: rank emoji • name • level • XP
     lines.push(
-      `${medal} **${name}** â€¢ Lv.${r.level} â€¢ \`${r.xp.toLocaleString()} XP\``
+      `${medal} **${name}** • Lv.${r.level} • \`${r.xp.toLocaleString()} XP\``
     );
   }
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle(`ðŸ† ${message.guild.name} Leaderboard`)
+    .setTitle(`🏆 ${message.guild.name} Leaderboard`)
     .setDescription(lines.join("\n"))
-    .setFooter({ text: `Page ${page} â€¢ Use !leaderboard <page> to view other pages` })
+    .setFooter({ text: `Page ${page} • Use !leaderboard <page> to view other pages` })
     .setTimestamp();
 
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -773,7 +773,7 @@ async function cmdXp(message, args) {
   const pick = await pickUserSmart(message, arg);
   if (!sub || !["add", "set"].includes(sub) || !pick) {
     await message.reply(
-      "Usage:\nâ€¢ `!xp add <user> <amount>`\nâ€¢ `!xp set <user> <amount>`"
+      "Usage:\n• `!xp add <user> <amount>`\n• `!xp set <user> <amount>`"
     ).catch(() => {});
     return;
   }
@@ -806,7 +806,7 @@ async function cmdXp(message, args) {
     [newXp, newLevel, message.guild.id, target.id]
   );
   await message.reply(
-    `${sub === "set" ? "Set" : "Added"} XP for ${target} â†’ XP **${newXp}**, Level **${newLevel}**`
+    `${sub === "set" ? "Set" : "Added"} XP for ${target} → XP **${newXp}**, Level **${newLevel}**`
   ).catch(() => {});
 }
 
@@ -907,14 +907,14 @@ async function cmdSyncRoles(message) {
   await message.reply(`Synced roles: **${assigned}** assigned, **${removed}** removed.`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Fun commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmd8Ball(message, args) {
   const question = args.join(" ").trim();
   if (!question) {
-    await message.reply("â“ Ask me a question! Usage: `!8ball <question>`").catch(() => {});
+    await message.reply("❓ Ask me a question! Usage: `!8ball <question>`").catch(() => {});
     return;
   }
 
@@ -939,7 +939,7 @@ async function cmd8Ball(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("ðŸŽ± Magic 8-Ball")
+    .setTitle("🎱 Magic 8-Ball")
     .addFields(
       { name: "Question", value: question, inline: false },
       { name: "Answer", value: answer, inline: false }
@@ -952,11 +952,11 @@ async function cmd8Ball(message, args) {
 
 async function cmdCoinFlip(message) {
   const result = Math.random() < 0.5 ? "Heads" : "Tails";
-  const emoji = result === "Heads" ? "ðŸŸ¡" : "âšª";
+  const emoji = result === "Heads" ? "🟡" : "⚪";
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("ðŸª™ Coin Flip")
+    .setTitle("🪙 Coin Flip")
     .setDescription(`${emoji} **${result}**!`)
     .setTimestamp();
   
@@ -1038,9 +1038,9 @@ async function cmdRoll(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("ðŸŽ² Dice Roll")
+    .setTitle("🎲 Dice Roll")
     .addFields(
-      { name: "Configuration", value: `${count} Ã— d${sides}`, inline: true },
+      { name: "Configuration", value: `${count} × d${sides}`, inline: true },
       { name: "Results", value: rolls.join(", "), inline: false }
     );
   
@@ -1063,7 +1063,7 @@ async function cmdChoose(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("ðŸ¤” I choose...")
+    .setTitle("🤔 I choose...")
     .setDescription(`**${choice}**`)
     .setTimestamp();
   
@@ -1117,10 +1117,10 @@ async function cmdSuggest(message, args) {
   const embed = new EmbedBuilder()
     .setColor("#7bc96f")
     .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-    .setTitle(`ðŸ’¡ Suggestion #${suggestionId}`)
+    .setTitle(`💡 Suggestion #${suggestionId}`)
     .setDescription(suggestion)
-    .addFields({ name: "Status", value: requireReview ? "ðŸ•µï¸ Under Review" : "ðŸŸ¡ Pending", inline: true })
-    .setFooter({ text: requireReview ? "Awaiting staff review" : `ðŸ‘ 0 | ðŸ‘Ž 0` })
+    .addFields({ name: "Status", value: requireReview ? "🕵️ Under Review" : "🟡 Pending", inline: true })
+    .setFooter({ text: requireReview ? "Awaiting staff review" : `👍 0 | 👎 0` })
     .setTimestamp();
 
   const suggestionMsg = await targetChannel.send({ embeds: [embed] });
@@ -1129,20 +1129,20 @@ async function cmdSuggest(message, args) {
     await run(`UPDATE suggestions SET review_message_id=? WHERE id=?`, [suggestionMsg.id, suggestionId]);
   } else {
     // React with voting emojis only for directly published suggestions.
-    await suggestionMsg.react("ðŸ‘").catch(() => {});
-    await suggestionMsg.react("ðŸ‘Ž").catch(() => {});
+    await suggestionMsg.react("👍").catch(() => {});
+    await suggestionMsg.react("👎").catch(() => {});
     await run(`UPDATE suggestions SET message_id=?, published_message_id=?, upvotes=0, downvotes=0 WHERE id=?`, [suggestionMsg.id, suggestionMsg.id, suggestionId]);
   }
 
-  await message.react("âœ…").catch(() => {});
+  await message.react("✅").catch(() => {});
 }
 
 function renderSuggestionStatus(statusRaw) {
   const status = String(statusRaw || "pending").toLowerCase();
-  if (status === "approved") return "âœ… Approved";
-  if (status === "denied") return "âŒ Denied";
-  if (status === "under_review") return "ðŸ•µï¸ Under Review";
-  return "ðŸŸ¡ Pending";
+  if (status === "approved") return "✅ Approved";
+  if (status === "denied") return "❌ Denied";
+  if (status === "under_review") return "🕵️ Under Review";
+  return "🟡 Pending";
 }
 
 async function cmdSuggestions(message, args) {
@@ -1181,15 +1181,15 @@ async function cmdSuggestions(message, args) {
   const lines = rows.map((s) => {
     const createdTs = Number(s.created_at || 0) > 0 ? Math.floor(Number(s.created_at) / 1000) : null;
     const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
-    const authorText = mode === "all" ? ` â€¢ by <@${s.user_id}>` : "";
+    const authorText = mode === "all" ? ` • by <@${s.user_id}>` : "";
     const preview = String(s.content || "").replace(/\n+/g, " ").slice(0, 120);
     const note = s.staff_response ? `\nStaff: ${String(s.staff_response).replace(/\n+/g, " ").slice(0, 90)}` : "";
-    return `**#${s.id}** ${renderSuggestionStatus(s.status)}${authorText} â€¢ ${createdText}\n${preview || "(no content)"}${note}`;
+    return `**#${s.id}** ${renderSuggestionStatus(s.status)}${authorText} • ${createdText}\n${preview || "(no content)"}${note}`;
   });
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
-    .setTitle(mode === "all" ? "ðŸ’¡ Server Suggestions" : "ðŸ’¡ Your Suggestions")
+    .setTitle(mode === "all" ? "💡 Server Suggestions" : "💡 Your Suggestions")
     .setDescription(lines.join("\n\n"))
     .setFooter({ text: "Use !suggestion-status <id> for full details." })
     .setTimestamp();
@@ -1213,7 +1213,7 @@ async function cmdSuggestionStatus(message, args) {
   );
 
   if (!suggestion) {
-    await message.reply("âŒ Suggestion not found for this server.").catch(() => {});
+    await message.reply("❌ Suggestion not found for this server.").catch(() => {});
     return;
   }
 
@@ -1221,7 +1221,7 @@ async function cmdSuggestionStatus(message, args) {
   const fields = [
     { name: "Status", value: renderSuggestionStatus(suggestion.status), inline: true },
     { name: "Author", value: `<@${suggestion.user_id}>`, inline: true },
-    { name: "Votes", value: `ðŸ‘ ${Number(suggestion.upvotes || 0)} | ðŸ‘Ž ${Number(suggestion.downvotes || 0)}`, inline: true }
+    { name: "Votes", value: `👍 ${Number(suggestion.upvotes || 0)} | 👎 ${Number(suggestion.downvotes || 0)}`, inline: true }
   ];
 
   if (suggestion.staff_response) {
@@ -1238,7 +1238,7 @@ async function cmdSuggestionStatus(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle(`ðŸ’¡ Suggestion #${suggestion.id}`)
+    .setTitle(`💡 Suggestion #${suggestion.id}`)
     .setDescription(String(suggestion.content || "(no content)").slice(0, 4096))
     .addFields(fields)
     .setFooter({ text: createdTs ? `Created <t:${createdTs}:R>` : "Created time unknown" })
@@ -1263,19 +1263,19 @@ async function cmdSuggestionWithdraw(message, args) {
   );
 
   if (!suggestion) {
-    await message.reply("âŒ Suggestion not found for this server.").catch(() => {});
+    await message.reply("❌ Suggestion not found for this server.").catch(() => {});
     return;
   }
 
   const staff = isAdminOrManager(message.member) || await isModerator(message.member);
   const isOwner = String(suggestion.user_id) === String(message.author.id);
   if (!staff && !isOwner) {
-    await message.reply("âŒ You can only withdraw your own suggestions.").catch(() => {});
+    await message.reply("❌ You can only withdraw your own suggestions.").catch(() => {});
     return;
   }
 
   if (!staff && ["approved", "denied"].includes(String(suggestion.status || "").toLowerCase())) {
-    await message.reply("âŒ You can only withdraw pending or under-review suggestions.").catch(() => {});
+    await message.reply("❌ You can only withdraw pending or under-review suggestions.").catch(() => {});
     return;
   }
 
@@ -1303,12 +1303,12 @@ async function cmdSuggestionWithdraw(message, args) {
   }
 
   await run(`DELETE FROM suggestions WHERE guild_id=? AND id=?`, [message.guild.id, suggestionId]);
-  await message.reply(`âœ… Suggestion #${suggestionId} has been withdrawn.`).catch(() => {});
+  await message.reply(`✅ Suggestion #${suggestionId} has been withdrawn.`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Moderation commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 function parseDurationMs(text) {
   if (!text) return null;
@@ -1474,7 +1474,7 @@ async function cmdBan(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("âŒ You cannot ban someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot ban someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -1487,7 +1487,7 @@ async function cmdBan(message, args) {
   trackModerationAction(message, "ban_add", { targetUserId: target.id });
   await target.ban({ reason }).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "ban", reason);
-  await message.reply(`âœ… Banned ${target.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Banned ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdTempBan(message, args) {
@@ -1506,7 +1506,7 @@ async function cmdTempBan(message, args) {
 
   const target = pick.member;
   if (!canModerate(message.member, target)) {
-    await message.reply("âŒ You cannot temp-ban someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot temp-ban someone with a higher or equal role.").catch(() => {});
     return;
   }
   if (!target.bannable) {
@@ -1516,7 +1516,7 @@ async function cmdTempBan(message, args) {
 
   const durationMs = parseDurationMs(args[1]);
   if (!durationMs || durationMs < 60_000) {
-    await message.reply("âŒ Invalid duration. Use format like 10m, 1h, 1d (minimum 1m).").catch(() => {});
+    await message.reply("❌ Invalid duration. Use format like 10m, 1h, 1d (minimum 1m).").catch(() => {});
     return;
   }
 
@@ -1533,7 +1533,7 @@ async function cmdTempBan(message, args) {
   );
   await logModAction(message.guild.id, target.id, message.author.id, "tempban", reason, `Until: ${new Date(unbanAt).toISOString()}`);
 
-  await message.reply(`âœ… Temp-banned ${target.user.tag} until <t:${Math.floor(unbanAt / 1000)}:F> (<t:${Math.floor(unbanAt / 1000)}:R>).`).catch(() => {});
+  await message.reply(`✅ Temp-banned ${target.user.tag} until <t:${Math.floor(unbanAt / 1000)}:F> (<t:${Math.floor(unbanAt / 1000)}:R>).`).catch(() => {});
 }
 
 async function cmdUnban(message, args) {
@@ -1547,7 +1547,7 @@ async function cmdUnban(message, args) {
   trackModerationAction(message, "ban_remove", { targetUserId: userId });
   await message.guild.members.unban(userId, reason).catch(() => {});
   await logModAction(message.guild.id, userId, message.author.id, "unban", reason);
-  await message.reply("âœ… Unbanned user.").catch(() => {});
+  await message.reply("✅ Unbanned user.").catch(() => {});
 }
 
 async function cmdKick(message, args) {
@@ -1566,7 +1566,7 @@ async function cmdKick(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("âŒ You cannot kick someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot kick someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -1579,7 +1579,7 @@ async function cmdKick(message, args) {
   trackModerationAction(message, "member_remove", { targetUserId: target.id });
   await target.kick(reason).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "kick", reason);
-  await message.reply(`âœ… Kicked ${target.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Kicked ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdMute(message, args) {
@@ -1598,7 +1598,7 @@ async function cmdMute(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("âŒ You cannot mute someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot mute someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -1611,7 +1611,7 @@ async function cmdMute(message, args) {
   trackModerationAction(message, "member_timeout", { targetUserId: target.id, timedOut: true });
   await target.timeout(durationMs, reason).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "mute", reason, `Duration: ${durationMs}ms`);
-  await message.reply(`âœ… Muted ${target.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Muted ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdUnmute(message, args) {
@@ -1636,7 +1636,7 @@ async function cmdUnmute(message, args) {
   trackModerationAction(message, "member_timeout", { targetUserId: target.id, timedOut: false });
   await target.timeout(null, reason).catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "unmute", reason);
-  await message.reply(`âœ… Unmuted ${target.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Unmuted ${target.user.tag}.`).catch(() => {});
 }
 
 async function cmdPurge(message, args) {
@@ -1667,7 +1667,7 @@ async function cmdPurge(message, args) {
   trackModerationAction(message, "message_bulk_delete", { channelId: message.channel.id, count: purgedCount || amount });
 
   if (isInteractionCommand) {
-    await message.reply(`âœ… Purged ${purgedCount} messages.`).catch(() => {});
+    await message.reply(`✅ Purged ${purgedCount} messages.`).catch(() => {});
   }
 }
 
@@ -1685,7 +1685,7 @@ async function cmdWarn(message, args) {
   }
 
   if (!canModerate(message.member, pick.member)) {
-    await message.reply("âŒ You cannot warn someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot warn someone with a higher or equal role.").catch(() => {});
     return;
   }
 
@@ -1709,7 +1709,7 @@ async function cmdWarn(message, args) {
   await logModAction(message.guild.id, pick.member.id, message.author.id, "warn", reason, `Points: ${points}`);
   const totals = await getTotalWarningPoints(message.guild.id, pick.member.id);
   const ladderResult = await applyWarnLadder(message, pick.member, totals.totalPoints, reason);
-  await message.reply(`âœ… Warned ${pick.member.user.tag} for ${points} point${points === 1 ? "" : "s"}. Total: ${totals.totalPoints} point${totals.totalPoints === 1 ? "" : "s"}.${ladderResult ? `\n${ladderResult}` : ""}`).catch(() => {});
+  await message.reply(`✅ Warned ${pick.member.user.tag} for ${points} point${points === 1 ? "" : "s"}. Total: ${totals.totalPoints} point${totals.totalPoints === 1 ? "" : "s"}.${ladderResult ? `\n${ladderResult}` : ""}`).catch(() => {});
 }
 
 async function cmdWarnings(message, args) {
@@ -1763,7 +1763,7 @@ async function cmdWarnings(message, args) {
   }
 
   const totals = await getTotalWarningPoints(message.guild.id, pick.member.id);
-  embed.setFooter({ text: `Total Warnings: ${totals.totalWarnings} â€¢ Total Points: ${totals.totalPoints}` });
+  embed.setFooter({ text: `Total Warnings: ${totals.totalWarnings} • Total Points: ${totals.totalPoints}` });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
@@ -1772,7 +1772,7 @@ async function cmdWarnLadder(message, args) {
   if (!args.length || args[0] === "view") {
     const ladder = await getWarnLadderSettings(message.guild.id);
     await message.reply(
-      `Warn ladder:\nâ€¢ ${ladder.timeoutThreshold} points â†’ timeout (${ladder.timeoutMinutes}m)\nâ€¢ ${ladder.kickThreshold} points â†’ kick\nâ€¢ ${ladder.banThreshold} points â†’ ban\nUse \`!warnladder set <timeoutThreshold> <kickThreshold> <banThreshold> [timeoutMinutes]\` to update.`
+      `Warn ladder:\n• ${ladder.timeoutThreshold} points → timeout (${ladder.timeoutMinutes}m)\n• ${ladder.kickThreshold} points → kick\n• ${ladder.banThreshold} points → ban\nUse \`!warnladder set <timeoutThreshold> <kickThreshold> <banThreshold> [timeoutMinutes]\` to update.`
     ).catch(() => {});
     return;
   }
@@ -1795,7 +1795,7 @@ async function cmdWarnLadder(message, args) {
     [timeoutThreshold, kickThreshold, banThreshold, timeoutMinutes, message.guild.id]
   );
 
-  await message.reply(`âœ… Updated warn ladder: ${timeoutThreshold} â†’ timeout (${timeoutMinutes}m), ${kickThreshold} â†’ kick, ${banThreshold} â†’ ban.`).catch(() => {});
+  await message.reply(`✅ Updated warn ladder: ${timeoutThreshold} → timeout (${timeoutMinutes}m), ${kickThreshold} → kick, ${banThreshold} → ban.`).catch(() => {});
 }
 
 async function cmdTempRole(message, args) {
@@ -1816,12 +1816,12 @@ async function cmdTempRole(message, args) {
 
   const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
   if (!role) {
-    await message.reply("âŒ Role not found.").catch(() => {});
+    await message.reply("❌ Role not found.").catch(() => {});
     return;
   }
 
   if (!canModerate(message.member, pick.member)) {
-    await message.reply("âŒ You cannot modify roles for someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot modify roles for someone with a higher or equal role.").catch(() => {});
     return;
   }
 
@@ -1833,7 +1833,7 @@ async function cmdTempRole(message, args) {
     [message.guild.id, pick.member.id, role.id, message.author.id, reason, Date.now(), Date.now() + durationMs]
   );
   await logModAction(message.guild.id, pick.member.id, message.author.id, "temp_role_add", reason, `Role: ${role.name}; Duration: ${durationMs}ms`);
-  await message.reply(`âœ… Added ${role.name} to ${pick.member.user.tag} for ${formatDurationText(durationMs)}.`).catch(() => {});
+  await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag} for ${formatDurationText(durationMs)}.`).catch(() => {});
 }
 
 async function cmdAutomodPreset(message, args) {
@@ -2044,7 +2044,7 @@ async function cmdAfk(message, args) {
      DO UPDATE SET reason=excluded.reason, afk_at=excluded.afk_at`,
     [message.guild.id, message.author.id, reason, Date.now()]
   );
-  await message.reply(`âœ… AFK set: ${reason}`).catch(() => {});
+  await message.reply(`✅ AFK set: ${reason}`).catch(() => {});
 }
 
 async function cmdSnipe(message) {
@@ -2267,7 +2267,7 @@ async function cmdModmail(message, args) {
       return;
     }
     await run(`UPDATE modmail_threads SET status='closed', closed_at=?, last_message_at=? WHERE id=?`, [Date.now(), Date.now(), thread.id]);
-    await message.reply("âœ… Modmail thread closed.").catch(() => {});
+    await message.reply("✅ Modmail thread closed.").catch(() => {});
     return;
   }
 
@@ -2279,7 +2279,7 @@ async function cmdModmail(message, args) {
   if (sub === "disable") {
     await getGuildSettings(message.guild.id).catch(() => null);
     await run(`UPDATE guild_settings SET modmail_enabled=0 WHERE guild_id=?`, [message.guild.id]);
-    await message.reply("âœ… Modmail disabled.").catch(() => {});
+    await message.reply("✅ Modmail disabled.").catch(() => {});
     return;
   }
 
@@ -2301,7 +2301,7 @@ async function cmdModmail(message, args) {
     `UPDATE guild_settings SET modmail_enabled=1, modmail_channel_id=?, modmail_support_role_id=?, modmail_category_id=? WHERE guild_id=?`,
     [channelId, supportRoleId, categoryId, message.guild.id]
   );
-  await message.reply(`âœ… Modmail enabled. Inbox: <#${channelId}>${supportRoleId ? ` â€¢ Support role: <@&${supportRoleId}>` : ""}${categoryId ? ` â€¢ Category: <#${categoryId}>` : ""}`).catch(() => {});
+  await message.reply(`✅ Modmail enabled. Inbox: <#${channelId}>${supportRoleId ? ` • Support role: <@&${supportRoleId}>` : ""}${categoryId ? ` • Category: <#${categoryId}>` : ""}`).catch(() => {});
 }
 
 async function cmdClearWarns(message, args) {
@@ -2319,7 +2319,7 @@ async function cmdClearWarns(message, args) {
 
   const result = await run(`DELETE FROM mod_warnings WHERE guild_id=? AND user_id=?`, [message.guild.id, pick.member.id]);
   const count = result?.changes || 0;
-  await message.reply(`âœ… Cleared ${count} warning(s) for ${pick.member.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Cleared ${count} warning(s) for ${pick.member.user.tag}.`).catch(() => {});
 }
 
 async function cmdClearWarn(message, args) {
@@ -2332,12 +2332,12 @@ async function cmdClearWarn(message, args) {
 
   const warning = await get(`SELECT user_id FROM mod_warnings WHERE guild_id=? AND id=?`, [message.guild.id, warningId]);
   if (!warning) {
-    await message.reply("âŒ Warning not found.").catch(() => {});
+    await message.reply("❌ Warning not found.").catch(() => {});
     return;
   }
 
   await run(`DELETE FROM mod_warnings WHERE guild_id=? AND id=?`, [message.guild.id, warningId]);
-  await message.reply(`âœ… Cleared warning #${warningId}.`).catch(() => {});
+  await message.reply(`✅ Cleared warning #${warningId}.`).catch(() => {});
 }
 
 async function cmdModLogs(message, args) {
@@ -2373,16 +2373,16 @@ async function cmdModLogs(message, args) {
     .setTimestamp();
 
   const actionEmojis = {
-    ban: "ðŸ”¨",
-    kick: "ðŸ‘¢",
-    mute: "ðŸ”‡",
-    unmute: "ðŸ”Š",
-    warn: "âš ï¸",
-    timeout: "â°",
-    role_add: "âž•",
-    role_remove: "âž–",
-    nick_change: "âœï¸",
-    softban: "ðŸ§¹"
+    ban: "🔨",
+    kick: "👢",
+    mute: "🔇",
+    unmute: "🔊",
+    warn: "⚠️",
+    timeout: "⏰",
+    role_add: "➕",
+    role_remove: "➖",
+    nick_change: "✏️",
+    softban: "🧹"
   };
 
   for (const row of rows) {
@@ -2396,7 +2396,7 @@ async function cmdModLogs(message, args) {
       minute: '2-digit'
     });
     
-    const emoji = actionEmojis[row.action] || "ðŸ“‹";
+    const emoji = actionEmojis[row.action] || "📋";
     const actionName = row.action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     
     let value = `**Moderator:** ${modTag}\n**Date:** ${timestamp}`;
@@ -2507,7 +2507,7 @@ async function cmdAuditSearch(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0xffaa55)
-    .setTitle("ðŸ”Ž Audit Search Results")
+    .setTitle("🔎 Audit Search Results")
     .setDescription(trimText(lines.join("\n"), 3900))
     .setFooter({ text: `Filters: action=${parsed.action || "any"}, days=${parsed.days}, limit=${parsed.limit}` })
     .setTimestamp();
@@ -2521,7 +2521,7 @@ async function cmdLock(message) {
   await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
     SendMessages: false
   }).catch(() => {});
-  await message.reply("ðŸ”’ Channel locked.").catch(() => {});
+  await message.reply("🔒 Channel locked.").catch(() => {});
 }
 
 async function cmdUnlock(message) {
@@ -2530,7 +2530,7 @@ async function cmdUnlock(message) {
   await message.channel.permissionOverwrites.edit(message.guild.roles.everyone, {
     SendMessages: null
   }).catch(() => {});
-  await message.reply("ðŸ”“ Channel unlocked.").catch(() => {});
+  await message.reply("🔓 Channel unlocked.").catch(() => {});
 }
 
 async function cmdSlowmode(message, args) {
@@ -2542,7 +2542,7 @@ async function cmdSlowmode(message, args) {
   }
   trackModerationAction(message, "channel_update", { channelId: message.channel.id });
   await message.channel.setRateLimitPerUser(seconds).catch(() => {});
-  await message.reply(`âœ… Slowmode set to ${seconds}s.`).catch(() => {});
+  await message.reply(`✅ Slowmode set to ${seconds}s.`).catch(() => {});
 }
 
 async function cmdNick(message, args) {
@@ -2567,7 +2567,7 @@ async function cmdNick(message, args) {
   await pick.member.setNickname(nick.slice(0, 32)).catch(() => {});
   trackModerationAction(message, "member_nick_update", { targetUserId: pick.member.id });
   await logModAction(message.guild.id, pick.member.id, message.author.id, "nick_change", null, `New nickname: ${nick.slice(0, 32)}`);
-  await message.reply(`âœ… Updated nickname for ${pick.member.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Updated nickname for ${pick.member.user.tag}.`).catch(() => {});
 }
 
 async function cmdRole(message, args) {
@@ -2599,14 +2599,14 @@ async function cmdRole(message, args) {
     trackModerationAction(message, "member_role_update", { targetUserId: pick.member.id });
     await pick.member.roles.remove(role).catch(() => {});
     await logModAction(message.guild.id, pick.member.id, message.author.id, "role_remove", null, `Role: ${role.name}`);
-    await message.reply(`âœ… Removed ${role.name} from ${pick.member.user.tag}.`).catch(() => {});
+    await message.reply(`✅ Removed ${role.name} from ${pick.member.user.tag}.`).catch(() => {});
     return;
   }
 
   trackModerationAction(message, "member_role_update", { targetUserId: pick.member.id });
   await pick.member.roles.add(role).catch(() => {});
   await logModAction(message.guild.id, pick.member.id, message.author.id, "role_add", null, `Role: ${role.name}`);
-  await message.reply(`âœ… Added ${role.name} to ${pick.member.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Added ${role.name} to ${pick.member.user.tag}.`).catch(() => {});
 }
 
 async function cmdSoftban(message, args) {
@@ -2625,7 +2625,7 @@ async function cmdSoftban(message, args) {
   const target = pick.member;
   
   if (!canModerate(message.member, target)) {
-    await message.reply("âŒ You cannot softban someone with a higher or equal role.").catch(() => {});
+    await message.reply("❌ You cannot softban someone with a higher or equal role.").catch(() => {});
     return;
   }
   
@@ -2639,16 +2639,16 @@ async function cmdSoftban(message, args) {
   trackModerationAction(message, "ban_remove", { targetUserId: target.id });
   await message.guild.members.unban(target.id, "Softban release").catch(() => {});
   await logModAction(message.guild.id, target.id, message.author.id, "softban", reason);
-  await message.reply(`âœ… Softbanned ${target.user.tag}.`).catch(() => {});
+  await message.reply(`✅ Softbanned ${target.user.tag}.`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Reaction Role commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdReactionRole(message, args) {
   if (!isAdminOrManager(message.member)) {
-    await message.reply("âŒ Only admins/managers can configure reaction roles.").catch(() => {});
+    await message.reply("❌ Only admins/managers can configure reaction roles.").catch(() => {});
     return;
   }
 
@@ -2685,14 +2685,14 @@ async function cmdReactionRoleAdd(message, args) {
   try {
     targetMessage = await message.channel.messages.fetch(messageId);
   } catch (e) {
-    await message.reply("âŒ Message not found in this channel. Make sure the message ID is correct and in this channel.").catch(() => {});
+    await message.reply("❌ Message not found in this channel. Make sure the message ID is correct and in this channel.").catch(() => {});
     return;
   }
 
   // Parse emoji
   const emojiKey = normalizeEmojiKey(emojiRaw);
   if (!emojiKey) {
-    await message.reply("âŒ Invalid emoji. Use a unicode emoji or a custom emoji like `:name:id` or `<:name:id>`.").catch(() => {});
+    await message.reply("❌ Invalid emoji. Use a unicode emoji or a custom emoji like `:name:id` or `<:name:id>`.").catch(() => {});
     return;
   }
 
@@ -2702,7 +2702,7 @@ async function cmdReactionRoleAdd(message, args) {
   const roleId = roleRaw.replace(/[<@&>]/g, "");
   const role = message.guild.roles.cache.get(roleId) || await message.guild.roles.fetch(roleId).catch(() => null);
   if (!role) {
-    await message.reply("âŒ Role not found. Mention the role or use its ID.").catch(() => {});
+    await message.reply("❌ Role not found. Mention the role or use its ID.").catch(() => {});
     return;
   }
 
@@ -2731,7 +2731,7 @@ async function cmdReactionRoleAdd(message, args) {
     console.error("Failed to react to message:", e);
   }
 
-  await message.reply(`âœ… Reaction role added! Reacting with ${emojiRaw} will give the ${role.name} role.`).catch(() => {});
+  await message.reply(`✅ Reaction role added! Reacting with ${emojiRaw} will give the ${role.name} role.`).catch(() => {});
 }
 
 async function cmdReactionRoleRemove(message, args) {
@@ -2746,14 +2746,14 @@ async function cmdReactionRoleRemove(message, args) {
   // Parse emoji
   const emojiKey = normalizeEmojiKey(emojiRaw);
   if (!emojiKey) {
-    await message.reply("âŒ Invalid emoji.").catch(() => {});
+    await message.reply("❌ Invalid emoji.").catch(() => {});
     return;
   }
 
   // Remove from database
   await removeReactionRoleBinding(message.guild.id, messageId, emojiKey);
 
-  await message.reply(`âœ… Reaction role removed for message ${messageId} with emoji ${emojiRaw}.`).catch(() => {});
+  await message.reply(`✅ Reaction role removed for message ${messageId} with emoji ${emojiRaw}.`).catch(() => {});
 }
 
 async function cmdReactionRoleList(message) {
@@ -2769,7 +2769,7 @@ async function cmdReactionRoleList(message) {
     const role = message.guild.roles.cache.get(binding.role_id);
     const roleName = role ? role.name : `Unknown (${binding.role_id})`;
     const channelLink = `<#${binding.channel_id}>`;
-    lines.push(`â€¢ Message \`${binding.message_id}\` in ${channelLink}: \`${binding.emoji_key}\` â†’ @${roleName}`);
+    lines.push(`• Message \`${binding.message_id}\` in ${channelLink}: \`${binding.emoji_key}\` → @${roleName}`);
   }
 
   const embed = new EmbedBuilder()
@@ -2780,9 +2780,9 @@ async function cmdReactionRoleList(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Private VC commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdVoiceLimit(message, args) {
   const check = await assertVoiceCmdAllowed(message);
@@ -2826,7 +2826,7 @@ async function cmdVoiceLock(message) {
     Connect: false
   }).catch((e) => console.error(e));
 
-  await message.reply("ðŸ”’ VC locked (everyone can still see it, but canâ€™t join).").catch(() => {});
+  await message.reply("🔒 VC locked (everyone can still see it, but can’t join).").catch(() => {});
 }
 
 async function cmdVoiceUnlock(message) {
@@ -2848,7 +2848,7 @@ async function cmdVoiceUnlock(message) {
     Connect: true
   }).catch((e) => console.error(e));
 
-  await message.reply("ðŸ”“ VC unlocked (everyone can join).").catch(() => {});
+  await message.reply("🔓 VC unlocked (everyone can join).").catch(() => {});
 }
 
 async function cmdVoiceRename(message, args) {
@@ -2900,21 +2900,21 @@ async function cmdVoiceBan(message, args = []) {
     Connect: false
   }).catch((e) => console.error(e));
 
-  // If theyâ€™re currently inside, kick them out of the VC
+  // If they’re currently inside, kick them out of the VC
   if (target.voice?.channelId === voice.id) {
     await target.voice.setChannel(null).catch(() => {});
   }
 
-  await message.reply(`ðŸš« Banned ${target} from joining this VC.`).catch(() => {});
+  await message.reply(`🚫 Banned ${target} from joining this VC.`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Member Count Channel
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdMemberCount(message, args) {
   if (!isAdminOrManager(message.member)) {
-    await message.reply("âŒ Only administrators can use this command.").catch(() => {});
+    await message.reply("❌ Only administrators can use this command.").catch(() => {});
     return;
   }
 
@@ -2926,14 +2926,14 @@ async function cmdMemberCount(message, args) {
     if (existingSettings?.member_count_channel_id) {
       const existingChannel = message.guild.channels.cache.get(existingSettings.member_count_channel_id);
       if (existingChannel) {
-        await message.reply(`âŒ Member count channel is already enabled: ${existingChannel}`).catch(() => {});
+        await message.reply(`❌ Member count channel is already enabled: ${existingChannel}`).catch(() => {});
         return;
       }
     }
 
     // Create the voice channel
     const memberCount = message.guild.memberCount;
-    const channelName = `ðŸ‘¥ Members: ${memberCount}`;
+    const channelName = `👥 Members: ${memberCount}`;
 
     try {
       const channel = await message.guild.channels.create({
@@ -2953,10 +2953,10 @@ async function cmdMemberCount(message, args) {
         [channel.id, message.guild.id]
       );
 
-      await message.reply(`âœ… Member count channel created: ${channel}\nWill update every 5 minutes.`).catch(() => {});
+      await message.reply(`✅ Member count channel created: ${channel}\nWill update every 5 minutes.`).catch(() => {});
     } catch (err) {
       console.error("[members] Failed to create channel:", err);
-      await message.reply("âŒ Failed to create member count channel. Check bot permissions.").catch(() => {});
+      await message.reply("❌ Failed to create member count channel. Check bot permissions.").catch(() => {});
     }
     return;
   }
@@ -2964,7 +2964,7 @@ async function cmdMemberCount(message, args) {
   if (subcommand === "disable" || subcommand === "off") {
     const settings = await get(`SELECT member_count_channel_id FROM guild_settings WHERE guild_id=?`, [message.guild.id]);
     if (!settings?.member_count_channel_id) {
-      await message.reply("âŒ Member count channel is not enabled.").catch(() => {});
+      await message.reply("❌ Member count channel is not enabled.").catch(() => {});
       return;
     }
 
@@ -2982,16 +2982,16 @@ async function cmdMemberCount(message, args) {
       [message.guild.id]
     );
 
-    await message.reply(`âœ… Member count channel disabled and removed.`).catch(() => {});
+    await message.reply(`✅ Member count channel disabled and removed.`).catch(() => {});
     return;
   }
 
-  await message.reply(`ðŸ”§ **Member Count Commands**\n\n\`!member-count enable\` - Create and enable member count channel\n\`!member-count disable\` - Disable and delete member count channel`).catch(() => {});
+  await message.reply(`🔧 **Member Count Commands**\n\n\`!member-count enable\` - Create and enable member count channel\n\`!member-count disable\` - Disable and delete member count channel`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Giveaway Commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdGiveaway(message, args) {
   const subcommand = args[0]?.toLowerCase();
@@ -2999,7 +2999,7 @@ async function cmdGiveaway(message, args) {
 
   if (subcommand === "start") {
     if (!isStaff) {
-      await message.reply("âŒ Only moderators/admins can start giveaways.").catch(() => {});
+      await message.reply("❌ Only moderators/admins can start giveaways.").catch(() => {});
       return;
     }
 
@@ -3012,13 +3012,13 @@ async function cmdGiveaway(message, args) {
 
     const durationMs = parseDurationMs(args[1]);
     if (!durationMs) {
-      await message.reply("âŒ Invalid duration. Use format like: 1m, 1h, 1d (m=minutes, h=hours, d=days)").catch(() => {});
+      await message.reply("❌ Invalid duration. Use format like: 1m, 1h, 1d (m=minutes, h=hours, d=days)").catch(() => {});
       return;
     }
 
     const winners = Number.parseInt(args[2], 10);
     if (!Number.isFinite(winners) || winners < 1 || winners > 10) {
-      await message.reply("âŒ Winners must be between 1 and 10.").catch(() => {});
+      await message.reply("❌ Winners must be between 1 and 10.").catch(() => {});
       return;
     }
 
@@ -3027,26 +3027,26 @@ async function cmdGiveaway(message, args) {
 
     const giveawayEmbed = {
       color: 0x00ff00,
-      title: "ðŸŽ‰ GIVEAWAY ðŸŽ‰",
-      description: `**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nReact with ðŸŽ‰ to enter!`,
+      title: "🎉 GIVEAWAY 🎉",
+      description: `**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nReact with 🎉 to enter!`,
       footer: { text: `Hosted by ${message.author.tag}` },
       timestamp: new Date(endTime).toISOString()
     };
 
     const giveawayMsg = await message.channel.send({ embeds: [giveawayEmbed] }).catch(() => null);
     if (!giveawayMsg) {
-      await message.reply("âŒ Failed to create giveaway message.").catch(() => {});
+      await message.reply("❌ Failed to create giveaway message.").catch(() => {});
       return;
     }
 
-    await giveawayMsg.react("ðŸŽ‰").catch(() => {});
+    await giveawayMsg.react("🎉").catch(() => {});
 
     const result = await run(`
       INSERT INTO giveaways (guild_id, channel_id, message_id, host_id, prize, winners_count, end_time)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `, [message.guild.id, message.channel.id, giveawayMsg.id, message.author.id, prize, winners, endTime]);
 
-    await message.reply(`âœ… Giveaway created! ID: ${result.lastID}`).catch(() => {});
+    await message.reply(`✅ Giveaway created! ID: ${result.lastID}`).catch(() => {});
   } else if (subcommand === "end") {
     // !giveaway end <message_id>
     if (!args[1]) {
@@ -3056,17 +3056,17 @@ async function cmdGiveaway(message, args) {
 
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!giveaway) {
-      await message.reply("âŒ Giveaway not found or already ended.").catch(() => {});
+      await message.reply("❌ Giveaway not found or already ended.").catch(() => {});
       return;
     }
 
     if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
-      await message.reply("âŒ Only the giveaway host or server staff can end this giveaway.").catch(() => {});
+      await message.reply("❌ Only the giveaway host or server staff can end this giveaway.").catch(() => {});
       return;
     }
 
     await endGiveaway(message.client, giveaway);
-    await message.reply("âœ… Giveaway ended!").catch(() => {});
+    await message.reply("✅ Giveaway ended!").catch(() => {});
   } else if (subcommand === "reroll") {
     // !giveaway reroll <message_id>
     if (!args[1]) {
@@ -3076,17 +3076,17 @@ async function cmdGiveaway(message, args) {
 
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=?`, [args[1], message.guild.id]);
     if (!giveaway) {
-      await message.reply("âŒ Giveaway not found.").catch(() => {});
+      await message.reply("❌ Giveaway not found.").catch(() => {});
       return;
     }
 
     if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
-      await message.reply("âŒ Only the giveaway host or server staff can reroll this giveaway.").catch(() => {});
+      await message.reply("❌ Only the giveaway host or server staff can reroll this giveaway.").catch(() => {});
       return;
     }
 
     await rerollGiveaway(message.client, giveaway);
-    await message.reply("âœ… Giveaway rerolled!").catch(() => {});
+    await message.reply("✅ Giveaway rerolled!").catch(() => {});
   } else if (subcommand === "cancel") {
     if (!args[1]) {
       await message.reply("Usage: `!giveaway cancel <message_id> [reason]`").catch(() => {});
@@ -3095,18 +3095,18 @@ async function cmdGiveaway(message, args) {
 
     const giveaway = await get(`SELECT * FROM giveaways WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!giveaway) {
-      await message.reply("âŒ Active giveaway not found.").catch(() => {});
+      await message.reply("❌ Active giveaway not found.").catch(() => {});
       return;
     }
 
     if (!isStaff && String(giveaway.host_id) !== String(message.author.id)) {
-      await message.reply("âŒ Only the giveaway host or server staff can cancel this giveaway.").catch(() => {});
+      await message.reply("❌ Only the giveaway host or server staff can cancel this giveaway.").catch(() => {});
       return;
     }
 
     const reason = args.slice(2).join(" ").trim() || "Canceled by staff.";
     await cancelGiveaway(message.client, giveaway, reason, message.author);
-    await message.reply("âœ… Giveaway canceled.").catch(() => {});
+    await message.reply("✅ Giveaway canceled.").catch(() => {});
   } else if (subcommand === "list") {
     const activeGiveaways = await all(
       `SELECT id, channel_id, message_id, host_id, prize, winners_count, end_time
@@ -3126,12 +3126,12 @@ async function cmdGiveaway(message, args) {
       const endsAtTs = Number(g.end_time || 0) > 0 ? Math.floor(Number(g.end_time) / 1000) : null;
       const endText = endsAtTs ? `<t:${endsAtTs}:R>` : "unknown";
       const link = `https://discord.com/channels/${message.guild.id}/${g.channel_id}/${g.message_id}`;
-      return `**#${g.id}** â€¢ ${g.prize}\nWinners: ${g.winners_count} â€¢ Ends: ${endText} â€¢ Host: <@${g.host_id}>\n[Jump to giveaway](${link})`;
+      return `**#${g.id}** • ${g.prize}\nWinners: ${g.winners_count} • Ends: ${endText} • Host: <@${g.host_id}>\n[Jump to giveaway](${link})`;
     });
 
     const embed = new EmbedBuilder()
       .setColor(0x00ff99)
-      .setTitle("ðŸŽ‰ Active Giveaways")
+      .setTitle("🎉 Active Giveaways")
       .setDescription(lines.join("\n\n"))
       .setFooter({ text: "Use !giveaway end|reroll|cancel <message_id>" })
       .setTimestamp();
@@ -3151,7 +3151,7 @@ async function cmdGiveaway(message, args) {
     );
 
     if (!giveaway) {
-      await message.reply("âŒ Giveaway not found.").catch(() => {});
+      await message.reply("❌ Giveaway not found.").catch(() => {});
       return;
     }
 
@@ -3164,7 +3164,7 @@ async function cmdGiveaway(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(Number(giveaway.ended || 0) === 1 ? 0x8b0000 : 0x00ff99)
-      .setTitle(`ðŸŽ‰ Giveaway #${giveaway.id}`)
+      .setTitle(`🎉 Giveaway #${giveaway.id}`)
       .addFields(
         { name: "Prize", value: String(giveaway.prize || "Unknown"), inline: false },
         { name: "Status", value: Number(giveaway.ended || 0) === 1 ? "Ended" : "Active", inline: true },
@@ -3197,7 +3197,7 @@ async function cancelGiveaway(client, giveaway, reason = "Canceled by staff.", c
 
   const cancelEmbed = {
     color: 0x808080,
-    title: "ðŸš« GIVEAWAY CANCELED",
+    title: "🚫 GIVEAWAY CANCELED",
     description: `**Prize:** ${giveaway.prize}\n**Reason:** ${reason}`,
     footer: { text: canceledBy ? `Canceled by ${canceledBy.tag}` : `Hosted by ${giveaway.host_id}` }
   };
@@ -3216,7 +3216,7 @@ async function endGiveaway(client, giveaway) {
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
   if (!giveawayMsg) return;
 
-  const reaction = giveawayMsg.reactions.cache.get("ðŸŽ‰");
+  const reaction = giveawayMsg.reactions.cache.get("🎉");
   if (!reaction) {
     await run(`UPDATE giveaways SET ended=1 WHERE id=?`, [giveaway.id]);
     return;
@@ -3239,7 +3239,7 @@ async function endGiveaway(client, giveaway) {
     }
 
     const winnerMentions = winners.map(w => `<@${w.id}>`).join(", ");
-    await channel.send(`ðŸŽ‰ Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
+    await channel.send(`🎉 Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
   }
 
   const winnerIds = winners.map(w => w.id).join(",");
@@ -3247,7 +3247,7 @@ async function endGiveaway(client, giveaway) {
 
   const endEmbed = {
     color: 0xff0000,
-    title: "ðŸŽ‰ GIVEAWAY ENDED ðŸŽ‰",
+    title: "🎉 GIVEAWAY ENDED 🎉",
     description: `**Prize:** ${giveaway.prize}\n**Winners:** ${winners.length > 0 ? winners.map(w => w.tag).join(", ") : "No winners"}`,
     footer: { text: `Hosted by ${giveaway.host_id}` }
   };
@@ -3266,7 +3266,7 @@ async function rerollGiveaway(client, giveaway) {
   const giveawayMsg = await channel.messages.fetch(giveaway.message_id).catch(() => null);
   if (!giveawayMsg) return;
 
-  const reaction = giveawayMsg.reactions.cache.get("ðŸŽ‰");
+  const reaction = giveawayMsg.reactions.cache.get("🎉");
   if (!reaction) return;
 
   const users = await reaction.users.fetch();
@@ -3288,12 +3288,12 @@ async function rerollGiveaway(client, giveaway) {
   }
 
   const winnerMentions = winners.map(w => `<@${w.id}>`).join(", ");
-  await channel.send(`ðŸŽ‰ **REROLL!** Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
+  await channel.send(`🎉 **REROLL!** Congratulations ${winnerMentions}! You won **${giveaway.prize}**!`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Advanced Poll Commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdAdvancedPoll(message, args) {
   // !poll create <question> | <option1> | <option2> | ...
@@ -3312,7 +3312,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const parts = content.split("|").map(p => p.trim());
     if (parts.length < 3) {
-      await message.reply("âŒ You need at least a question and 2 options.").catch(() => {});
+      await message.reply("❌ You need at least a question and 2 options.").catch(() => {});
       return;
     }
 
@@ -3320,15 +3320,15 @@ async function cmdAdvancedPoll(message, args) {
     const options = parts.slice(1);
 
     if (options.length > 10) {
-      await message.reply("âŒ Maximum 10 options allowed.").catch(() => {});
+      await message.reply("❌ Maximum 10 options allowed.").catch(() => {});
       return;
     }
 
-    const emojis = ["1ï¸âƒ£", "2ï¸âƒ£", "3ï¸âƒ£", "4ï¸âƒ£", "5ï¸âƒ£", "6ï¸âƒ£", "7ï¸âƒ£", "8ï¸âƒ£", "9ï¸âƒ£", "ðŸ”Ÿ"];
+    const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
     
     const pollEmbed = {
       color: 0x3498db,
-      title: "ðŸ“Š Poll",
+      title: "📊 Poll",
       description: `**${question}**\n\n${options.map((opt, i) => `${emojis[i]} ${opt}`).join("\n")}`,
       footer: { text: `Created by ${message.author.tag}` },
       timestamp: new Date().toISOString()
@@ -3336,7 +3336,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const pollMsg = await message.channel.send({ embeds: [pollEmbed] }).catch(() => null);
     if (!pollMsg) {
-      await message.reply("âŒ Failed to create poll.").catch(() => {});
+      await message.reply("❌ Failed to create poll.").catch(() => {});
       return;
     }
 
@@ -3349,7 +3349,7 @@ async function cmdAdvancedPoll(message, args) {
       VALUES (?, ?, ?, ?, ?, ?)
     `, [message.guild.id, message.channel.id, pollMsg.id, message.author.id, question, JSON.stringify(options)]);
 
-    await message.reply(`âœ… Poll created! React to vote. ID: ${result.lastID}`).catch(() => {});
+    await message.reply(`✅ Poll created! React to vote. ID: ${result.lastID}`).catch(() => {});
   } else if (subcommand === "end") {
     if (!args[1]) {
       await message.reply("Usage: `!poll end <message_id>`").catch(() => {});
@@ -3358,18 +3358,18 @@ async function cmdAdvancedPoll(message, args) {
 
     const poll = await get(`SELECT * FROM polls WHERE message_id=? AND guild_id=? AND ended=0`, [args[1], message.guild.id]);
     if (!poll) {
-      await message.reply("âŒ Active poll not found.").catch(() => {});
+      await message.reply("❌ Active poll not found.").catch(() => {});
       return;
     }
 
     const canManage = poll.creator_id === message.author.id || isAdminOrManager(message.member) || await isModerator(message.member);
     if (!canManage) {
-      await message.reply("âŒ Only the poll creator or server staff can end this poll.").catch(() => {});
+      await message.reply("❌ Only the poll creator or server staff can end this poll.").catch(() => {});
       return;
     }
 
     await endPoll(message.client, poll);
-    await message.reply("âœ… Poll ended!").catch(() => {});
+    await message.reply("✅ Poll ended!").catch(() => {});
   } else if (subcommand === "list") {
     const polls = await all(
       `SELECT id, message_id, question, creator_id, created_at
@@ -3389,12 +3389,12 @@ async function cmdAdvancedPoll(message, args) {
       const createdTs = Number(poll.created_at || 0) > 0 ? Math.floor(Number(poll.created_at) / 1000) : null;
       const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
       const question = String(poll.question || "").slice(0, 140);
-      return `**${question || "Untitled poll"}**\nMessage ID: \`${poll.message_id}\` â€¢ Creator: <@${poll.creator_id}> â€¢ Created: ${createdText}`;
+      return `**${question || "Untitled poll"}**\nMessage ID: \`${poll.message_id}\` • Creator: <@${poll.creator_id}> • Created: ${createdText}`;
     });
 
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
-      .setTitle("ðŸ“Š Active Polls")
+      .setTitle("📊 Active Polls")
       .setDescription(lines.join("\n\n"))
       .setFooter({ text: "Use !poll end <message_id> to close one." })
       .setTimestamp();
@@ -3414,7 +3414,7 @@ async function cmdAdvancedPoll(message, args) {
     );
 
     if (!poll) {
-      await message.reply("âŒ Poll not found.").catch(() => {});
+      await message.reply("❌ Poll not found.").catch(() => {});
       return;
     }
 
@@ -3429,7 +3429,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(Number(poll.ended || 0) === 1 ? 0x2ecc71 : 0x3498db)
-      .setTitle(`ðŸ“Š Poll #${poll.id}`)
+      .setTitle(`📊 Poll #${poll.id}`)
       .setDescription(`**${poll.question || "Untitled poll"}**`)
       .addFields(
         { name: "Status", value: Number(poll.ended || 0) === 1 ? "Ended" : "Active", inline: true },
@@ -3458,7 +3458,7 @@ async function endPoll(client, poll) {
   if (!pollMsg) return;
 
   const options = JSON.parse(poll.options);
-  const emojis = ["1ï¸âƒ£", "2ï¸âƒ£", "3ï¸âƒ£", "4ï¸âƒ£", "5ï¸âƒ£", "6ï¸âƒ£", "7ï¸âƒ£", "8ï¸âƒ£", "9ï¸âƒ£", "ðŸ”Ÿ"];
+  const emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"];
   
   const results = [];
   for (let i = 0; i < options.length; i++) {
@@ -3472,8 +3472,8 @@ async function endPoll(client, poll) {
 
   const resultsEmbed = {
     color: 0x2ecc71,
-    title: "ðŸ“Š Poll Results",
-    description: `**${poll.question}**\n\n${results.map((r, i) => `${i === 0 ? "ðŸ¥‡" : i === 1 ? "ðŸ¥ˆ" : i === 2 ? "ðŸ¥‰" : "â€¢"} **${r.option}**: ${r.votes} vote${r.votes !== 1 ? "s" : ""} (${totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0}%)`).join("\n")}\n\n**Total Votes:** ${totalVotes}`,
+    title: "📊 Poll Results",
+    description: `**${poll.question}**\n\n${results.map((r, i) => `${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "•"} **${r.option}**: ${r.votes} vote${r.votes !== 1 ? "s" : ""} (${totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0}%)`).join("\n")}\n\n**Total Votes:** ${totalVotes}`,
     footer: { text: "Poll ended" },
     timestamp: new Date().toISOString()
   };
@@ -3482,18 +3482,18 @@ async function endPoll(client, poll) {
   await run(`UPDATE polls SET ended=1 WHERE id=?`, [poll.id]);
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Economy Commands (see src/economyCommands.js)
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 const {
   cmdBalance, cmdDaily, cmdWeekly, cmdPay, cmdEcoLeaderboard,
   cmdDeposit, cmdWithdraw, cmdRob, cmdSlots, cmdCoinflip, cmdDice,
   cmdJob, cmdWork, cmdShop, cmdBuy, cmdInventory,
 } = require("./economyCommands");
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Reminder Commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdRemindMe(message, args) {
   if (args.length < 2) {
@@ -3503,7 +3503,7 @@ async function cmdRemindMe(message, args) {
 
   const durationMs = parseDurationMs(args[0]);
   if (!durationMs) {
-    await message.reply("âŒ Invalid duration. Use format like: 1m, 1h, 1d").catch(() => {});
+    await message.reply("❌ Invalid duration. Use format like: 1m, 1h, 1d").catch(() => {});
     return;
   }
 
@@ -3515,7 +3515,7 @@ async function cmdRemindMe(message, args) {
     VALUES (?, ?, ?, ?, ?)
   `, [message.author.id, message.guild.id, message.channel.id, reminderText, remindAt]);
 
-  await message.reply(`âœ… I'll remind you in ${args[0]}: "${reminderText}"`).catch(() => {});
+  await message.reply(`✅ I'll remind you in ${args[0]}: "${reminderText}"`).catch(() => {});
 }
 
 async function cmdReminders(message, args) {
@@ -3547,12 +3547,12 @@ async function cmdReminders(message, args) {
     const createdTs = createdAt > 0 ? Math.floor(createdAt / 1000) : null;
     const createdText = createdTs ? `<t:${createdTs}:R>` : "unknown";
     const text = String(reminder.reminder_text || "").replace(/\n+/g, " ").slice(0, 120);
-    return `**#${reminder.id}** â€¢ ${status} â€¢ created ${createdText}\n${text || "(no text)"}`;
+    return `**#${reminder.id}** • ${status} • created ${createdText}\n${text || "(no text)"}`;
   });
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
-    .setTitle("â° Your Pending Reminders")
+    .setTitle("⏰ Your Pending Reminders")
     .setDescription(lines.join("\n\n"))
     .setFooter({ text: `Use !remindcancel <id> to cancel one.` })
     .setTimestamp();
@@ -3576,7 +3576,7 @@ async function cmdRemindCancel(message, args) {
   );
 
   if (!reminder) {
-    await message.reply("âŒ Reminder not found (or already completed/canceled). Use `!reminders` to check active IDs.").catch(() => {});
+    await message.reply("❌ Reminder not found (or already completed/canceled). Use `!reminders` to check active IDs.").catch(() => {});
     return;
   }
 
@@ -3588,7 +3588,7 @@ async function cmdRemindCancel(message, args) {
   );
 
   const preview = String(reminder.reminder_text || "").replace(/\n+/g, " ").slice(0, 140);
-  await message.reply(`âœ… Canceled reminder #${reminderId}${preview ? `: "${preview}"` : ""}`).catch(() => {});
+  await message.reply(`✅ Canceled reminder #${reminderId}${preview ? `: "${preview}"` : ""}`).catch(() => {});
 }
 
 async function cmdRemindClear(message) {
@@ -3612,7 +3612,7 @@ async function cmdRemindClear(message) {
     [message.author.id, message.guild.id]
   );
 
-  await message.reply(`âœ… Cleared ${count} pending reminder${count === 1 ? "" : "s"}.`).catch(() => {});
+  await message.reply(`✅ Cleared ${count} pending reminder${count === 1 ? "" : "s"}.`).catch(() => {});
 }
 
 async function cmdRemindSnooze(message, args) {
@@ -3625,7 +3625,7 @@ async function cmdRemindSnooze(message, args) {
 
   const durationMs = parseDurationMs(durationText);
   if (!durationMs) {
-    await message.reply("âŒ Invalid duration. Use format like: 10m, 1h, 1d").catch(() => {});
+    await message.reply("❌ Invalid duration. Use format like: 10m, 1h, 1d").catch(() => {});
     return;
   }
 
@@ -3637,7 +3637,7 @@ async function cmdRemindSnooze(message, args) {
   );
 
   if (!reminder) {
-    await message.reply("âŒ Active reminder not found for that ID.").catch(() => {});
+    await message.reply("❌ Active reminder not found for that ID.").catch(() => {});
     return;
   }
 
@@ -3650,12 +3650,12 @@ async function cmdRemindSnooze(message, args) {
   );
 
   const ts = Math.floor(newTime / 1000);
-  await message.reply(`âœ… Snoozed reminder #${reminderId} to <t:${ts}:R>.`).catch(() => {});
+  await message.reply(`✅ Snoozed reminder #${reminderId} to <t:${ts}:R>.`).catch(() => {});
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Birthday Commands
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function cmdBirthday(message, args) {
   const subcommand = args[0]?.toLowerCase();
@@ -3669,7 +3669,7 @@ async function cmdBirthday(message, args) {
 
     const parts = args[1].split("/");
     if (parts.length < 2 || parts.length > 3) {
-      await message.reply("âŒ Invalid date format. Use MM/DD or MM/DD/YYYY").catch(() => {});
+      await message.reply("❌ Invalid date format. Use MM/DD or MM/DD/YYYY").catch(() => {});
       return;
     }
 
@@ -3678,7 +3678,7 @@ async function cmdBirthday(message, args) {
     const year = parts[2] ? Number.parseInt(parts[2], 10) : null;
 
     if (!Number.isFinite(month) || month < 1 || month > 12 || !Number.isFinite(day) || day < 1 || day > 31) {
-      await message.reply("âŒ Invalid date.").catch(() => {});
+      await message.reply("❌ Invalid date.").catch(() => {});
       return;
     }
 
@@ -3688,10 +3688,10 @@ async function cmdBirthday(message, args) {
       ON CONFLICT (guild_id, user_id) DO UPDATE SET birth_month=EXCLUDED.birth_month, birth_day=EXCLUDED.birth_day, birth_year=EXCLUDED.birth_year
     `, [message.guild.id, message.author.id, month, day, year]);
 
-    await message.reply(`ðŸŽ‚ Your birthday has been set to ${month}/${day}${year ? `/${year}` : ""}!`).catch(() => {});
+    await message.reply(`🎂 Your birthday has been set to ${month}/${day}${year ? `/${year}` : ""}!`).catch(() => {});
   } else if (subcommand === "remove") {
     await run(`DELETE FROM birthdays WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-    await message.reply("âœ… Your birthday has been removed.").catch(() => {});
+    await message.reply("✅ Your birthday has been removed.").catch(() => {});
   } else if (subcommand === "list") {
     const birthdays = await all(`SELECT * FROM birthdays WHERE guild_id=? ORDER BY birth_month, birth_day`, [message.guild.id]);
     
@@ -3702,7 +3702,7 @@ async function cmdBirthday(message, args) {
 
     const embed = {
       color: 0xe91e63,
-      title: "ðŸŽ‚ Birthday List",
+      title: "🎂 Birthday List",
       description: birthdays.map(b => `<@${b.user_id}>: ${b.birth_month}/${b.birth_day}${b.birth_year ? `/${b.birth_year}` : ""}`).join("\n"),
       footer: { text: `${birthdays.length} birthday${birthdays.length !== 1 ? "s" : ""} registered` }
     };
@@ -3713,9 +3713,9 @@ async function cmdBirthday(message, args) {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 // Main handler
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────
 
 async function handleCommands(message) {
   if (!message || !message.content) return false;
@@ -3770,7 +3770,7 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "moist-lieutenant") {
     const publicUrl = process.env.BOT_PUBLIC_URL || process.env.DISCORD_CALLBACK_URL?.replace('/auth/discord/callback', '') || "http://localhost:8080";
-    await message.reply(`ðŸ¸ **Moist Lieutenant Dashboard**\n\nView the leaderboard and customize your rank card: ${publicUrl}`).catch(() => {});
+    await message.reply(`🐸 **Moist Lieutenant Dashboard**\n\nView the leaderboard and customize your rank card: ${publicUrl}`).catch(() => {});
     return true;
   }
 
@@ -4600,7 +4600,7 @@ async function handleSlashCommand(interaction) {
 
       const targetMessage = interaction.targetMessage;
       if (!targetMessage) {
-        await interaction.reply({ content: "âŒ Could not find the target message.", ephemeral: true });
+        await interaction.reply({ content: "❌ Could not find the target message.", ephemeral: true });
         return true;
       }
 
@@ -4614,7 +4614,7 @@ async function handleSlashCommand(interaction) {
         });
 
         if (messages.size === 0) {
-          await interaction.editReply({ content: "âš ï¸ No messages found after the selected message." });
+          await interaction.editReply({ content: "⚠️ No messages found after the selected message." });
           return true;
         }
 
@@ -4623,7 +4623,7 @@ async function handleSlashCommand(interaction) {
         const deletableMessages = messages.filter(msg => msg.createdTimestamp > twoWeeksAgo);
 
         if (deletableMessages.size === 0) {
-          await interaction.editReply({ content: "âš ï¸ All messages are older than 14 days and cannot be bulk deleted." });
+          await interaction.editReply({ content: "⚠️ All messages are older than 14 days and cannot be bulk deleted." });
           return true;
         }
 
@@ -4643,12 +4643,12 @@ async function handleSlashCommand(interaction) {
         );
 
         await interaction.editReply({ 
-          content: `âœ… Purged ${deleted.size} message(s) from after the selected message.` 
+          content: `✅ Purged ${deleted.size} message(s) from after the selected message.` 
         });
       } catch (err) {
         console.error("Purge Until Here error:", err);
         await interaction.editReply({ 
-          content: "âŒ An error occurred while purging messages. Some messages may be too old or I may lack permissions." 
+          content: "❌ An error occurred while purging messages. Some messages may be too old or I may lack permissions." 
         });
       }
 
@@ -4922,18 +4922,18 @@ async function ensureDefaultShopItems(guildId) {
   // Setup default economy shop items for minigames and features
   const defaultItems = [
     // Tools (durable, single equipment pieces)
-    { id: 'fishing_rod', name: 'ðŸŽ£ Fishing Rod', description: 'Essential tool for fishing. Use /fish to catch treasure from the sea!', price: 200, type: 'tool' },
-    { id: 'shovel', name: 'â›ï¸ Shovel', description: 'Dig for treasures underground. Use /dig to start digging!', price: 200, type: 'tool' },
-    { id: 'padlock', name: 'ðŸ”’ Padlock', description: 'Protects your wallet from robberies (single use)', price: 100, type: 'single' },
-    { id: 'phone', name: 'ðŸ“± Phone', description: 'Call services - police (protection), taxi (explore), takeout (food)', price: 150, type: 'single' },
+    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'Essential tool for fishing. Use /fish to catch treasure from the sea!', price: 200, type: 'tool' },
+    { id: 'shovel', name: '⛏️ Shovel', description: 'Dig for treasures underground. Use /dig to start digging!', price: 200, type: 'tool' },
+    { id: 'padlock', name: '🔒 Padlock', description: 'Protects your wallet from robberies (single use)', price: 100, type: 'single' },
+    { id: 'phone', name: '📱 Phone', description: 'Call services - police (protection), taxi (explore), takeout (food)', price: 150, type: 'single' },
     
     // Consumables
-    { id: 'treasure_map', name: 'ðŸ—ºï¸ Treasure Map', description: 'Doubles rewards for your next /dig or increases /fish success!', price: 80, type: 'consumable' },
-    { id: 'food', name: 'ðŸ” Food Item', description: 'A basic food item. Collect different types from takeout!', price: 25, type: 'consumable' },
+    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next /dig or increases /fish success!', price: 80, type: 'consumable' },
+    { id: 'food', name: '🍔 Food Item', description: 'A basic food item. Collect different types from takeout!', price: 25, type: 'consumable' },
     
     // Special Items
-    { id: 'lucky_charm', name: 'âœ¨ Lucky Charm', description: 'Increases luck in minigames by 10%', price: 300, type: 'cosmetic' },
-    { id: 'vip_pass', name: 'ðŸŽ« VIP Pass', description: 'Unlock exclusive minigames and higher rewards', price: 500, type: 'single' }
+    { id: 'lucky_charm', name: '✨ Lucky Charm', description: 'Increases luck in minigames by 10%', price: 300, type: 'cosmetic' },
+    { id: 'vip_pass', name: '🎫 VIP Pass', description: 'Unlock exclusive minigames and higher rewards', price: 500, type: 'single' }
   ];
 
   for (const item of defaultItems) {

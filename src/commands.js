@@ -3735,7 +3735,10 @@ async function handleCommands(message) {
   const economyCommands = ["balance", "bal", "daily", "weekly", "pay", "baltop", "richest",
     "deposit", "dep", "withdraw", "with", "rob", "bankrob", "bank-rob", "bankrobbery", "slots", "slot", "coinflip", "cf", 
     "dice", "roll", "job", "jobs", "work", "shift", "shop", "store", "buy", "purchase", 
-    "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call"];
+    "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call",
+    "adventure", "story", "explore", "swamp", "bounty", "bounties", "craft", "crafting",
+    "prestige", "class", "use", "consume", "item", "inspect", "gift", "trade", "lottery",
+    "ecoadmin", "leaderboard", "lb"];
   
   // Try economy prefix first for economy commands
   const economySettings = await getEconomySettingsRow(message.guild.id);
@@ -3770,7 +3773,7 @@ async function executeCommand(message, cmd, args, prefix) {
 
   // Initialize default shop items for economy-enabled guilds
   if ((cmd === "shop" || cmd === "store" || cmd === "buy" || cmd === "purchase" || cmd === "balance" || 
-       cmd === "fish" || cmd === "dig" || cmd === "bankrob" || cmd === "phone") && message.author.id !== client?.user?.id) {
+       cmd === "fish" || cmd === "dig" || cmd === "bankrob" || cmd === "phone") && message.author.id !== message.client?.user?.id) {
     const economySettings = await getEconomySettingsRow(message.guild.id);
     if (economySettings?.enabled) {
       await ensureDefaultShopItems(message.guild.id).catch(() => {});
@@ -4930,23 +4933,42 @@ async function registerSlashCommands(client) {
 async function ensureDefaultShopItems(guildId) {
   // Setup default economy shop items for minigames and features
   const defaultItems = [
-    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'A gnarled rod carved from swamp oak. Required to fish in the murky waters.', price: 300, type: 'tool', use_effect: 'fishing_rod' },
-    { id: 'shovel', name: '⛏️ Rusty Shovel', description: 'A well-worn shovel caked with dried mud. Required for digging in the swamp.', price: 250, type: 'tool', use_effect: 'shovel' },
-    { id: 'padlock', name: '🔒 Padlock', description: 'Secures your wallet from thieves. Grants 4-hour robbery immunity when used.', price: 250, type: 'consumable', use_effect: 'padlock' },
-    { id: 'phone', name: '📱 Phone', description: 'Call services — police (protection), taxi (stories), takeout (food).', price: 150, type: 'single', use_effect: null },
-    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next dig or increases fish success rate.', price: 80, type: 'consumable', use_effect: null },
-    { id: 'swamp_tonic', name: '🧪 Swamp Tonic', description: 'A bubbling green brew. Boosts all earnings by 20% for 1 hour.', price: 200, type: 'consumable', use_effect: 'swamp_tonic' },
-    { id: 'fortune_scroll', name: '📜 Fortune Scroll', description: 'An ancient parchment. Reading it grants a random coin bonus of 50–500.', price: 400, type: 'consumable', use_effect: 'fortune_scroll' },
-    { id: 'revival_potion', name: '💜 Revival Potion', description: 'Automatically saves you from death in adventures. Keep it in your inventory.', price: 500, type: 'consumable', use_effect: 'revival_potion' },
+    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'A gnarled rod carved from swamp oak. Required to fish in the murky waters.', price: 300, type: 'tool', use_effect: 'fishing_rod', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3a3.png' },
+    { id: 'shovel', name: '⛏️ Rusty Shovel', description: 'A well-worn shovel caked with dried mud. Required for digging in the swamp.', price: 250, type: 'tool', use_effect: 'shovel', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/26cf.png' },
+    { id: 'swamp_tonic', name: '🧪 Swamp Tonic', description: 'A bubbling green brew. Boosts all earnings by 20% for 1 hour.', price: 200, type: 'consumable', use_effect: 'swamp_tonic', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ea.png' },
+    { id: 'revival_potion', name: '💜 Revival Potion', description: 'A violet vial that revives you from near-death. Fully restores lost coins on death.', price: 500, type: 'consumable', use_effect: 'revival_potion', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f49c.png' },
+    { id: 'padlock', name: '🔒 Padlock', description: 'Secures your wallet from thieves. Grants 4-hour robbery immunity when used.', price: 250, type: 'consumable', use_effect: 'padlock', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f512.png' },
+    { id: 'trap_kit', name: '🪤 Trap Kit', description: 'Sets an invisible trap. The next person to rob you loses 20% of their wallet instead.', price: 350, type: 'consumable', use_effect: 'trap_kit', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa64.png' },
+    { id: 'fortune_scroll', name: '📜 Fortune Scroll', description: 'An ancient parchment. Reading it grants a random coin bonus of 50-500.', price: 400, type: 'consumable', use_effect: 'fortune_scroll', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f4dc.png' },
+    { id: 'murk_map', name: '🗺️ Murk Map', description: 'A hand-drawn map of the deep swamp. Doubles your explore loot for 2 hours.', price: 600, type: 'consumable', use_effect: 'murk_map', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f5fa.png' },
+    { id: 'void_essence', name: '🌑 Void Essence', description: 'A vial of pure void energy. Use it to crystallize 3-8 free Murk Shards.', price: 750, type: 'consumable', use_effect: 'void_essence', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f311.png' },
+    { id: 'ancient_coin', name: '🪙 Ancient Coin', description: 'A pre-Murk currency. Sell it to a merchant for 1.5x its purchase value.', price: 450, type: 'consumable', use_effect: 'ancient_coin', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa99.png' },
+    { id: 'murk_shard', name: '🔷 Murk Shard', description: 'A crystallized fragment of the Murk\'s dark energy. Core crafting material.', price: 150, type: 'material', use_effect: null, image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f537.png' },
+    { id: 'shadow_cloak', name: '🌑 Shadow Cloak', description: 'A cloak woven from Murk shadows. Makes you completely unrobbable for 2 hours.', price: 900, type: 'consumable', use_effect: 'shadow_cloak', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9e5.png' },
+    { id: 'lucky_charm', name: '🍀 Lucky Charm', description: 'A four-leaf clover in swamp resin. +20% earnings boost for 6 hours.', price: 700, type: 'consumable', use_effect: 'lucky_charm', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f340.png' },
+    { id: 'gamblers_dice', name: '🎲 Gambler\'s Dice', description: 'Cursed dice from a lost game. 40% chance to triple your wallet, or lose 40%.', price: 800, type: 'consumable', use_effect: 'gamblers_dice', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3b2.png' },
+    { id: 'merchants_lens', name: '🔍 Merchant\'s Lens', description: 'A magnifying glass that reveals another user\'s exact wallet and bank balance.', price: 550, type: 'consumable', use_effect: 'merchants_lens', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f50d.png' },
+    { id: 'frog_amulet', name: '🐸 Frog Amulet', description: 'A carved frog totem from the Murk. Permanently boosts daily rewards by 15%.', price: 650, type: 'single', use_effect: 'frog_amulet', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f438.png' },
+    { id: 'lizard_totem', name: '🦎 Lizard Totem', description: 'An ancient carved totem. Passively regenerates +50 coins per hour forever.', price: 850, type: 'single', use_effect: 'lizard_totem', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f98e.png' },
+    { id: 'witch_brew', name: '🫖 Witch\'s Brew', description: 'Unstable brew from Baba Murk. 50/50: doubles your wallet or halves it.', price: 650, type: 'consumable', use_effect: 'witch_brew', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fad6.png' },
+    { id: 'prestige_token', name: '⭐ Prestige Token', description: 'A glowing token of exceptional status. Required for the Prestige Ascension ritual.', price: 2000, type: 'single', use_effect: 'prestige_use', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/2b50.png' },
+    { id: 'dragon_scale', name: '🐉 Dragon Scale', description: 'A mythical scale from the Murk Serpent. 2x all earnings for 3 hours.', price: 1200, type: 'consumable', use_effect: 'dragon_scale', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f409.png' },
+    { id: 'trophy', name: '🏆 Swamp Trophy', description: 'A prestigious collectible awarded to Murk survivors. Pure bragging rights.', price: 1000, type: 'collectible', use_effect: null, image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3c6.png' },
+    { id: 'frog_crown', name: '👑 Frog Crown', description: 'The legendary crown of the Murk Frog King. +25% daily and weekly bonus permanently.', price: 1500, type: 'single', use_effect: 'frog_crown', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f451.png' },
+    { id: 'black_market_pass', name: '🎭 Black Market Pass', description: 'A forged pass to The Dark Bazaar. Permanently unlocks dark market trades.', price: 1800, type: 'single', use_effect: 'black_market_pass', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ad.png' },
+    { id: 'murk_lantern', name: '🏮 Murk Lantern', description: 'A lantern burning swamp gas. Doubles explore loot for 2 hours when lit.', price: 500, type: 'consumable', use_effect: 'murk_lantern', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ee.png' },
+    { id: 'cursed_compass', name: '🧭 Cursed Compass', description: 'Points to buried treasure... or danger. 65% chance for a 200-1000 coin jackpot.', price: 750, type: 'consumable', use_effect: 'cursed_compass', image: 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ed.png' },
+    { id: 'phone', name: '📱 Phone', description: 'Call services — police (protection), taxi (stories), takeout (food).', price: 150, type: 'single', use_effect: null, image: null },
+    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next dig or increases fish success rate.', price: 80, type: 'consumable', use_effect: null, image: null },
   ];
 
   for (const item of defaultItems) {
     const exists = await get(`SELECT item_id FROM economy_shop_items WHERE guild_id=? AND item_id=?`, [guildId, item.id]);
     if (!exists) {
       await run(
-        `INSERT INTO economy_shop_items (id, guild_id, item_id, name, description, price, item_type, use_effect)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [`${guildId}-${item.id}`, guildId, item.id, item.name, item.description, item.price, item.type, item.use_effect || null]
+        `INSERT INTO economy_shop_items (id, guild_id, item_id, name, description, price, item_type, use_effect, item_image_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [`${guildId}-${item.id}`, guildId, item.id, item.name, item.description, item.price, item.type, item.use_effect || null, item.image || null]
       );
     }
   }

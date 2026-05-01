@@ -304,9 +304,14 @@ async function cmdCraft(message, args, util) {
       [message.guild.id, message.author.id]
     );
 
+    const updatedPrestige = await getCmd(
+      `SELECT prestige_level FROM user_economy WHERE guild_id=? AND user_id=?`,
+      [message.guild.id, message.author.id]
+    );
+
     await runCmd(
       `INSERT INTO prestige_log (guild_id, user_id, prestige_level) VALUES (?, ?, ?)`,
-      [message.guild.id, message.author.id, await getCmd(`SELECT prestige_level FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id])]
+      [message.guild.id, message.author.id, Number(updatedPrestige?.prestige_level || 0)]
     );
   }
 

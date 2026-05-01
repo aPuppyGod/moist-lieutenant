@@ -1,4 +1,4 @@
-﻿// src/commands.js
+// src/commands.js
 const { PermissionsBitField, ChannelType, AttachmentBuilder, EmbedBuilder } = require("discord.js");
 const { get, all, run } = require("./db");
 const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
@@ -140,6 +140,15 @@ async function getModPrefixes(message) {
   const configured = (await getGuildSettings(message.guild.id).catch(() => null))?.command_prefix || DEFAULT_PREFIX;
   const prefix = String(configured || DEFAULT_PREFIX).trim() || DEFAULT_PREFIX;
   return [prefix];
+}
+
+async function getEconomySettingsRow(guildId) {
+  await run(
+    `INSERT INTO economy_settings (guild_id) VALUES (?)
+     ON CONFLICT (guild_id) DO NOTHING`,
+    [guildId]
+  ).catch(() => {});
+  return await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
 }
 
 function trackModerationAction(message, action, data = {}) {
@@ -323,7 +332,7 @@ function compactEmbed(title, lines) {
 async function cmdPublicCommands(message) {
   const settings = await getGuildSettings(message.guild.id);
   const prefix = settings?.command_prefix || DEFAULT_PREFIX;
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettingsRow(message.guild.id);
   const ecoPrefix = economySettings?.economy_prefix || "$";
   
   let economyCommands = "";
@@ -3729,7 +3738,7 @@ async function handleCommands(message) {
     "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call"];
   
   // Try economy prefix first for economy commands
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettingsRow(message.guild.id);
   if (economySettings?.enabled && economySettings.economy_prefix) {
     const economyPrefix = economySettings.economy_prefix;
     const economyParsed = parseCommand(message.content, [economyPrefix]);
@@ -3762,7 +3771,7 @@ async function executeCommand(message, cmd, args, prefix) {
   // Initialize default shop items for economy-enabled guilds
   if ((cmd === "shop" || cmd === "store" || cmd === "buy" || cmd === "purchase" || cmd === "balance" || 
        cmd === "fish" || cmd === "dig" || cmd === "bankrob" || cmd === "phone") && message.author.id !== client?.user?.id) {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     if (economySettings?.enabled) {
       await ensureDefaultShopItems(message.guild.id).catch(() => {});
     }
@@ -3958,7 +3967,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "bankrob" || cmd === "bank-rob" || cmd === "bankrobbery") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdRobBank(message, args, util);
@@ -3966,7 +3975,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "fish" || cmd === "fishing") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdFish(message, args, util);
@@ -3974,7 +3983,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "dig" || cmd === "digging") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdDig(message, args, util);
@@ -3982,7 +3991,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "phone" || cmd === "call") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdPhone(message, args, util);
@@ -3990,7 +3999,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "adventure" || cmd === "story") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdAdventure(message, args, util);
@@ -3998,7 +4007,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "explore" || cmd === "swamp") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdExplore(message, args, util);
@@ -4046,7 +4055,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "bounty" || cmd === "bounties") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdBounty(message, args, util);
@@ -4054,7 +4063,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "craft" || cmd === "crafting") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdCraft(message, args, util);
@@ -4062,7 +4071,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "prestige") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdPrestige(message, args, util);
@@ -4070,7 +4079,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "class") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdClass(message, args, util);
@@ -4078,7 +4087,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "use" || cmd === "consume") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdUse(message, args, util);
@@ -4086,7 +4095,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "item" || cmd === "inspect") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdItemInfo(message, args, util);
@@ -4094,7 +4103,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "gift" || cmd === "giftitem") {
-    const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+    const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdGift(message, args, util);
@@ -4949,3 +4958,4 @@ async function ensureDefaultShopItems(guildId) {
 }
 
 module.exports = { handleCommands, handleSlashCommand, registerSlashCommands, endGiveaway, ensureDefaultShopItems };
+

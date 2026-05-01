@@ -56,12 +56,21 @@ function parseUserMentionSimple(message, arg) {
   return { found: false };
 }
 
+async function getEconomySettings(guildId) {
+  await run(
+    `INSERT INTO economy_settings (guild_id) VALUES (?)
+     ON CONFLICT (guild_id) DO NOTHING`,
+    [guildId]
+  );
+  return await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
+}
+
 // ─────────────────────────────────────────────────────
 // ECONOMY: BALANCE & REWARDS
 // ─────────────────────────────────────────────────────
 
 async function cmdBalance(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -89,7 +98,7 @@ async function cmdBalance(message, args) {
 }
 
 async function cmdDaily(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -150,7 +159,7 @@ async function cmdDaily(message) {
 }
 
 async function cmdWeekly(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -185,7 +194,7 @@ async function cmdWeekly(message) {
 }
 
 async function cmdPay(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -231,7 +240,7 @@ async function cmdPay(message, args) {
 }
 
 async function cmdEcoLeaderboard(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -268,7 +277,7 @@ async function cmdEcoLeaderboard(message) {
 // ─────────────────────────────────────────────────────
 
 async function cmdDeposit(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -308,7 +317,7 @@ async function cmdDeposit(message, args) {
 }
 
 async function cmdWithdraw(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -352,7 +361,7 @@ async function cmdWithdraw(message, args) {
 // ─────────────────────────────────────────────────────
 
 async function cmdRob(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled || !economySettings.rob_enabled) {
     await message.reply("❌ Robbing is disabled on this server.").catch(() => {});
     return;
@@ -431,7 +440,7 @@ async function cmdRob(message, args) {
 // ─────────────────────────────────────────────────────
 
 async function cmdSlots(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -499,7 +508,7 @@ async function cmdSlots(message, args) {
 }
 
 async function cmdCoinflip(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -557,7 +566,7 @@ async function cmdCoinflip(message, args) {
 }
 
 async function cmdDice(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -618,7 +627,7 @@ async function cmdDice(message, args) {
 // ─────────────────────────────────────────────────────
 
 async function cmdJob(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -720,7 +729,7 @@ async function cmdJob(message, args) {
 }
 
 async function cmdWork(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -818,7 +827,7 @@ async function cmdWork(message) {
 // ─────────────────────────────────────────────────────
 
 async function cmdShop(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -865,7 +874,7 @@ async function cmdShop(message) {
 }
 
 async function cmdBuy(message, args) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -921,7 +930,7 @@ async function cmdBuy(message, args) {
 }
 
 async function cmdInventory(message) {
-  const economySettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [message.guild.id]);
+  const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
     return;
@@ -965,8 +974,8 @@ async function cmdEcoAdmin(message, args) {
   if (!member) return;
   const isAdmin = member.permissions?.has(1n << 3n) || // Administrator bit
     member.id === (process.env.BOT_MANAGER_ID || "900758140499398676");
-  const settings = await get(`SELECT manager_role_id FROM guild_settings WHERE guild_id=?`, [message.guild.id]);
-  const isManager = settings?.manager_role_id && member.roles?.cache?.has(settings.manager_role_id);
+  const settings = await get(`SELECT mod_role_id FROM guild_settings WHERE guild_id=?`, [message.guild.id]);
+  const isManager = settings?.mod_role_id && member.roles?.cache?.has(settings.mod_role_id);
   if (!isAdmin && !isManager) {
     await message.reply("You need admin/manager permissions to use `ecoadmin`.").catch(() => {});
     return;
@@ -975,7 +984,7 @@ async function cmdEcoAdmin(message, args) {
   const sub = String(args[0] || "").toLowerCase();
   const guildId = message.guild.id;
 
-  const ecoSettings = await get(`SELECT currency_symbol FROM economy_settings WHERE guild_id=?`, [guildId]);
+  const ecoSettings = await getEconomySettings(guildId);
   const sym = ecoSettings?.currency_symbol || "🪙";
 
   if (!["give", "take", "set", "reset"].includes(sub)) {
@@ -1038,7 +1047,7 @@ async function cmdTrade(message, args) {
   const guildId = message.guild.id;
   const userId = message.author.id;
 
-  const ecoSettings = await get(`SELECT enabled FROM economy_settings WHERE guild_id=?`, [guildId]);
+  const ecoSettings = await getEconomySettings(guildId);
   if (!ecoSettings?.enabled) {
     await message.reply("Economy is not enabled on this server.").catch(() => {});
     return;
@@ -1221,7 +1230,7 @@ async function cmdLottery(message, args) {
   const guildId = message.guild.id;
   const userId = message.author.id;
 
-  const ecoSettings = await get(`SELECT enabled, currency_symbol FROM economy_settings WHERE guild_id=?`, [guildId]);
+  const ecoSettings = await getEconomySettings(guildId);
   if (!ecoSettings?.enabled) {
     await message.reply("Economy is not enabled on this server.").catch(() => {});
     return;
@@ -1291,8 +1300,8 @@ async function cmdLottery(message, args) {
     const member = message.member;
     const isAdmin = member?.permissions?.has(1n << 3n) ||
       member?.id === (process.env.BOT_MANAGER_ID || "900758140499398676");
-    const gsRow = await get(`SELECT manager_role_id FROM guild_settings WHERE guild_id=?`, [guildId]);
-    const isManager = gsRow?.manager_role_id && member?.roles?.cache?.has(gsRow.manager_role_id);
+    const gsRow = await get(`SELECT mod_role_id FROM guild_settings WHERE guild_id=?`, [guildId]);
+    const isManager = gsRow?.mod_role_id && member?.roles?.cache?.has(gsRow.mod_role_id);
     if (!isAdmin && !isManager) {
       await message.reply("Only admins/managers can draw the lottery.").catch(() => {});
       return;
@@ -1382,3 +1391,4 @@ module.exports = {
   cmdTrade,
   cmdLottery,
 };
+

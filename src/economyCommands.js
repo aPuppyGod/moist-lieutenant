@@ -2,7 +2,7 @@
 // Economy commands extracted from commands.js
 // Covers: balance, daily, weekly, pay, leaderboard, deposit, withdraw, rob, slots, coinflip, dice, job, work, shop, buy, inventory
 
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { get, all, run } = require("./db");
 const { cmdRobBank } = require("./economy");
 
@@ -839,38 +839,72 @@ async function cmdShop(message) {
     return;
   }
 
-  const grouped = new Map();
-  for (const item of items) {
-    const key = item.item_type || "misc";
-    if (!grouped.has(key)) grouped.set(key, []);
-    grouped.get(key).push(item);
-  }
-
   const typeEmoji = { tool: "🛠️", consumable: "🧪", material: "🧱", collectible: "🏆", single: "👑", misc: "📦" };
+  const ITEMS_PER_PAGE = 5;
 
-  const lines = [];
-  let idx = 1;
-  for (const [type, list] of grouped.entries()) {
-    lines.push(`\n**${typeEmoji[type] || "📦"} ${type.toUpperCase()}**`);
-    for (const item of list) {
-      const usable = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
+  // Flatten items with global numbering
+  const indexed = items.map((item, i) => ({ ...item, shopIdx: i + 1 }));
+  const totalPages = Math.ceil(indexed.length / ITEMS_PER_PAGE);
+
+  function buildPage(page) {
+    const start = page * ITEMS_PER_PAGE;
+    const pageItems = indexed.slice(start, start + ITEMS_PER_PAGE);
+    const lines = pageItems.map(item => {
+      const emoji = typeEmoji[item.item_type] || "📦";
+      const useHint = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
         ? ` | Use: \`use ${item.item_id}\``
         : "";
-      lines.push(`**${idx}. ${item.name}** - ${item.price} ${economySettings.currency_name}${usable}`);
-      lines.push(`${item.description}`);
-      idx += 1;
-    }
+      return `**${item.shopIdx}. ${emoji} ${item.name}** — ${item.price} ${economySettings.currency_name}\n${item.description}${useHint}`;
+    });
+
+    const previewItem = pageItems.find(i => i.item_image_url) || null;
+    const embed = new EmbedBuilder()
+      .setColor(0x1f8b4c)
+      .setTitle("🛒 The Murk Grand Bazaar")
+      .setDescription(lines.join("\n\n"))
+      .setFooter({ text: `Page ${page + 1}/${totalPages} • Use buy <item number> to purchase` });
+    if (previewItem?.item_image_url) embed.setThumbnail(previewItem.item_image_url);
+    return embed;
   }
 
-  const previewItem = items.find((i) => i.item_image_url) || items[0];
-  const embed = new EmbedBuilder()
-    .setColor(0x1f8b4c)
-    .setTitle("🛒 The Murk Grand Bazaar")
-    .setDescription(lines.join("\n"))
-    .setThumbnail(previewItem?.item_image_url || null)
-    .setFooter({ text: `Use buy <item number> to purchase | inspect with item <name>` });
+  function buildRow(page, disabled = false) {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("shop_prev")
+        .setLabel("◀ Prev")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(disabled || page === 0),
+      new ButtonBuilder()
+        .setCustomId("shop_page")
+        .setLabel(`${page + 1} / ${totalPages}`)
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(true),
+      new ButtonBuilder()
+        .setCustomId("shop_next")
+        .setLabel("Next ▶")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(disabled || page === totalPages - 1)
+    );
+  }
 
-  await message.reply({ embeds: [embed] }).catch(() => {});
+  let currentPage = 0;
+  const msg = await message.reply({ embeds: [buildPage(0)], components: totalPages > 1 ? [buildRow(0)] : [] }).catch(() => null);
+  if (!msg || totalPages <= 1) return;
+
+  const collector = msg.createMessageComponentCollector({
+    filter: i => i.user.id === message.author.id && (i.customId === "shop_prev" || i.customId === "shop_next"),
+    time: 120000
+  });
+
+  collector.on("collect", async interaction => {
+    if (interaction.customId === "shop_prev") currentPage = Math.max(0, currentPage - 1);
+    if (interaction.customId === "shop_next") currentPage = Math.min(totalPages - 1, currentPage + 1);
+    await interaction.update({ embeds: [buildPage(currentPage)], components: [buildRow(currentPage)] }).catch(() => {});
+  });
+
+  collector.on("end", () => {
+    msg.edit({ components: [buildRow(currentPage, true)] }).catch(() => {});
+  });
 }
 
 async function cmdBuy(message, args) {

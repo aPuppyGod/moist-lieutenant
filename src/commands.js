@@ -333,42 +333,131 @@ async function cmdPublicCommands(message) {
   const settings = await getGuildSettings(message.guild.id);
   const prefix = settings?.command_prefix || DEFAULT_PREFIX;
   const economySettings = await getEconomySettingsRow(message.guild.id);
-  const ecoPrefix = economySettings?.economy_prefix || "$";
   
-  let economyCommands = "";
-  if (economySettings?.enabled) {
-    economyCommands = `\n**Economy Commands:**\n\`${ecoPrefix}balance\` \`${ecoPrefix}daily\` \`${ecoPrefix}weekly\` \`${ecoPrefix}pay\` \`${ecoPrefix}baltop\`\n\`${ecoPrefix}deposit\` \`${ecoPrefix}withdraw\` \`${ecoPrefix}rob\` \`${ecoPrefix}bankrob\`\n\`${ecoPrefix}slots\` \`${ecoPrefix}coinflip\` \`${ecoPrefix}dice\`\n\`${ecoPrefix}shop\` \`${ecoPrefix}buy\` \`${ecoPrefix}inventory\`\n**Minigames:**\n\`${ecoPrefix}fish\` \`${ecoPrefix}dig\` \`${ecoPrefix}phone\` \`${ecoPrefix}adventure\` \`${ecoPrefix}explore\``;
-  }
-  
-  const embed = compactEmbed("Commands", [
+  const lines = [
     `\`${prefix}commands\` \`/commands\``,
+    `\`${prefix}economy\` — Economy & shop command list`,
     `\`${prefix}rank [user]\` \`/rank\``,
     `\`${prefix}leaderboard [page]\` \`/leaderboard\``,
-    `\`${prefix}moist-lieutenant\` - Get website URL`,
+    `\`${prefix}moist-lieutenant\` — Get dashboard URL`,
     `\`${prefix}8ball <question>\``,
-    `\`${prefix}flip\` - Flip a coin`,
-    `\`${prefix}poll create <question> | <option1> | <option2> ...\``,
-    `\`${prefix}poll end <message_id>\``,
-    `\`${prefix}poll list\` - View active polls`,
-    `\`${prefix}poll status <message_id>\``,
-    `\`${prefix}choose <option1> <option2> ...\``,
-    `\`${prefix}suggest <suggestion>\` - Submit a suggestion`,
-    `\`${prefix}suggestions [mine|all] [limit]\` - View suggestion queue`,
-    `\`${prefix}suggestion-status <id>\` - View one suggestion status`,
-    `\`${prefix}suggestion-withdraw <id>\` - Remove your suggestion`,
-    `\`${prefix}giveaway start <duration> <winners> <prize>\` - Start a giveaway`,
-    `\`${prefix}giveaway list\` - View active giveaways`,
-    `\`${prefix}giveaway status <message_id>\` - View giveaway details`,
-    `\`${prefix}giveaway cancel <message_id> [reason]\` - Cancel without winners`,
-    `\`${prefix}remindme <duration> <message>\` - Set a reminder`,
-    `\`${prefix}reminders [limit]\` - List your pending reminders`,
-    `\`${prefix}remindcancel <id>\` - Cancel one reminder`,
-    `\`${prefix}remindsnooze <id> <duration>\` - Delay a reminder`,
-    `\`${prefix}remindclear\` - Cancel all your pending reminders`,
-    `\`${prefix}birthday set <MM/DD>\` - Register your birthday`,
-    `\`${prefix}birthday list\` / \`${prefix}birthday remove\``,
-    economyCommands
-  ].filter(Boolean));
+    `\`${prefix}flip\` — Flip a coin`,
+    `\`${prefix}poll create <question> | <opt1> | <opt2> ...\``,
+    `\`${prefix}poll end <msg_id>\` \`${prefix}poll list\` \`${prefix}poll status <msg_id>\``,
+    `\`${prefix}choose <opt1> <opt2> ...\``,
+    `\`${prefix}suggest <suggestion>\` — Submit a suggestion`,
+    `\`${prefix}suggestions [mine|all] [limit]\``,
+    `\`${prefix}suggestion-status <id>\` \`${prefix}suggestion-withdraw <id>\``,
+    `\`${prefix}giveaway start <duration> <winners> <prize>\``,
+    `\`${prefix}giveaway list|status|cancel <msg_id>\``,
+    `\`${prefix}remindme <duration> <message>\``,
+    `\`${prefix}reminders [limit]\` \`${prefix}remindcancel <id>\``,
+    `\`${prefix}remindsnooze <id> <duration>\` \`${prefix}remindclear\``,
+    `\`${prefix}birthday set <MM/DD>\` \`${prefix}birthday list\` \`${prefix}birthday remove\``,
+  ];
+
+  if (economySettings?.enabled) {
+    const ecoPrefix = economySettings.economy_prefix || "$";
+    lines.push(`\n> 💰 Economy is enabled — use \`${ecoPrefix}economy\` for the full economy command list`);
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle("🐸 Commands")
+    .setDescription(lines.join("\n"))
+    .setColor(0x2b2d31)
+    .setFooter({ text: "Slash command equivalents available for most commands" });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+async function cmdEconomy(message) {
+  const economySettings = await getEconomySettingsRow(message.guild.id);
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is not enabled on this server." }] }).catch(() => {});
+    return;
+  }
+  const ecoPrefix = economySettings.economy_prefix || "$";
+  const name = economySettings.currency_name || "coins";
+
+  const embed = new EmbedBuilder()
+    .setTitle("💰 Economy Commands")
+    .setColor(0x1f8b4c)
+    .addFields(
+      {
+        name: "💵 Wallet & Bank",
+        value: [
+          `\`${ecoPrefix}balance\` — Check your balance`,
+          `\`${ecoPrefix}deposit <amount|all>\` — Deposit to bank`,
+          `\`${ecoPrefix}withdraw <amount|all>\` — Withdraw from bank`,
+          `\`${ecoPrefix}pay <user> <amount>\` — Send ${name}`,
+          `\`${ecoPrefix}baltop\` — Richest members`,
+        ].join("\n"),
+        inline: false
+      },
+      {
+        name: "🎁 Daily & Jobs",
+        value: [
+          `\`${ecoPrefix}daily\` — Claim daily reward`,
+          `\`${ecoPrefix}weekly\` — Claim weekly reward`,
+          `\`${ecoPrefix}job\` — View/pick a job`,
+          `\`${ecoPrefix}work\` — Complete a work shift`,
+        ].join("\n"),
+        inline: false
+      },
+      {
+        name: "🎰 Gambling",
+        value: [
+          `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
+          `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
+          `\`${ecoPrefix}slots <bet>\` — Spin the slots`,
+        ].join("\n"),
+        inline: false
+      },
+      {
+        name: "🦹 Crime",
+        value: [
+          `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
+          `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
+        ].join("\n"),
+        inline: false
+      },
+      {
+        name: "🎣 Minigames",
+        value: [
+          `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
+          `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
+          `\`${ecoPrefix}phone <police|taxi|takeout>\` — Make a call (needs 📱 Phone)`,
+          `\`${ecoPrefix}adventure <story_id>\` — Story adventure`,
+          `\`${ecoPrefix}explore\` — Explore the swamp`,
+        ].join("\n"),
+        inline: false
+      },
+      {
+        name: "🛒 Shop & Inventory",
+        value: [
+          `\`${ecoPrefix}shop\` — Browse the Murk Grand Bazaar`,
+          `\`${ecoPrefix}buy <number>\` — Buy an item from the shop`,
+          `\`${ecoPrefix}inventory\` — View your items`,
+          `\`${ecoPrefix}use <item_id>\` — Use a consumable item`,
+          `\`${ecoPrefix}item <name>\` — Inspect an item`,
+          `\`${ecoPrefix}gift <user> <item_id>\` — Gift an item`,
+        ].join("\n"),
+        inline: false
+      },
+      {
+        name: "⭐ Progression",
+        value: [
+          `\`${ecoPrefix}class\` — View/set your class (Brigand/Artificer/Scholar/Merchant)`,
+          `\`${ecoPrefix}prestige\` — Prestige (requires Prestige Token)`,
+          `\`${ecoPrefix}bounty <user> <amount>\` — Place a bounty`,
+          `\`${ecoPrefix}craft\` — Craft items`,
+          `\`${ecoPrefix}trade <user>\` — Trade with a player`,
+          `\`${ecoPrefix}lottery\` — Enter the lottery`,
+        ].join("\n"),
+        inline: false
+      }
+    )
+    .setFooter({ text: `Currency: ${name} | Type ${ecoPrefix}shop to browse items` });
+
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
@@ -3738,7 +3827,7 @@ async function handleCommands(message) {
     "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call",
     "adventure", "story", "explore", "swamp", "bounty", "bounties", "craft", "crafting",
     "prestige", "class", "use", "consume", "item", "inspect", "gift", "trade", "lottery",
-    "ecoadmin", "leaderboard", "lb"];
+    "ecoadmin", "leaderboard", "lb", "economy", "eco", "ecohelp"];
   
   // Try economy prefix first for economy commands
   const economySettings = await getEconomySettingsRow(message.guild.id);
@@ -3770,6 +3859,7 @@ async function handleCommands(message) {
 
 async function executeCommand(message, cmd, args, prefix) {
   if (!message.guild) return false;
+  try {
 
   // Initialize default shop items for economy-enabled guilds
   if ((cmd === "shop" || cmd === "store" || cmd === "buy" || cmd === "purchase" || cmd === "balance" || 
@@ -3795,6 +3885,11 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "commands") {
     await cmdPublicCommands(message);
+    return true;
+  }
+
+  if (cmd === "economy" || cmd === "eco" || cmd === "ecohelp") {
+    await cmdEconomy(message);
     return true;
   }
 
@@ -4471,6 +4566,11 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   return false;
+  } catch (err) {
+    console.error(`[CMD ERROR] ${prefix}${cmd}:`, err);
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ Something went wrong running \`${cmd}\`. Please try again.` }] }).catch(() => {});
+    return false;
+  }
 }
 
 function slashPerm(flag) {

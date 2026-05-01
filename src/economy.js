@@ -1,56 +1,57 @@
-const { all, get, run } = require("./db");
+﻿const { all, get, run } = require("./db");
+const { EmbedBuilder } = require("discord.js");
 
 /**
  * ============ MURK ECONOMY: LORE-DRIVEN DEEP ECONOMY ============
  * 
  * THE MURK LORE:
- * ───────────────────────────────────────────────────────────────
- * Deep beneath the fetid swamp lies THE MURK—a sunken civilization built by
+ * â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+ * Deep beneath the fetid swamp lies THE MURKâ€”a sunken civilization built by
  * ancient traders and alchemists. Once it thrived, but a great catastrophe
  * sealed it underwater. Now YOU are a Murk Adept, scrounging through its ruins
  * for wealth, forbidden knowledge, and power.
  * 
  * CLASS SYSTEM (Murk Archetypes):
- *   • BRIGAND: Stealth, theft, high-risk robberies (25% faster cooldowns)
- *   • ARTIFICER: Crafting, item creation, dark bazaar discount (20% shop discount)
- *   • SCHOLAR: Lore collection, expedition bonuses (25% more loot from explore/fish)
- *   • MERCHANT: Trading, bounty posting, profit margins (10% bank interest daily)
+ *   â€¢ BRIGAND: Stealth, theft, high-risk robberies (25% faster cooldowns)
+ *   â€¢ ARTIFICER: Crafting, item creation, dark bazaar discount (20% shop discount)
+ *   â€¢ SCHOLAR: Lore collection, expedition bonuses (25% more loot from explore/fish)
+ *   â€¢ MERCHANT: Trading, bounty posting, profit margins (10% bank interest daily)
  * 
  * KEY MECHANICS:
- *   1. Daily Stock → Dark Bazaar refreshes daily with new items
- *   2. Bounty Board → Post & claim bounties for coins
- *   3. Crafting → Combine items into powerful artifacts & buffs
- *   4. Prestige System → Ascend to godhood, reset for multiplicative power
- *   5. Lore Collection → Unlock story & secrets
+ *   1. Daily Stock â†’ Dark Bazaar refreshes daily with new items
+ *   2. Bounty Board â†’ Post & claim bounties for coins
+ *   3. Crafting â†’ Combine items into powerful artifacts & buffs
+ *   4. Prestige System â†’ Ascend to godhood, reset for multiplicative power
+ *   5. Lore Collection â†’ Unlock story & secrets
  */
 
 // ==================== MURK CLASSES ==================
 
 const MURK_CLASSES = {
   brigand: {
-    name: "🗡️ Brigand",
-    icon: "🗡️",
+    name: "ðŸ—¡ï¸ Brigand",
+    icon: "ðŸ—¡ï¸",
     description: "Master of stealth and high-risk crimes. 25% faster robbery cooldowns.",
     passive: "robbery_speedup",
     passive_value: 0.75  // multiply cooldown by 0.75
   },
   artificer: {
-    name: "⚙️ Artificer",
-    icon: "⚙️",
+    name: "âš™ï¸ Artificer",
+    icon: "âš™ï¸",
     description: "Craftsperson of the Murk. 20% discount at Dark Bazaar.",
     passive: "bazaar_discount",
     passive_value: 0.8
   },
   scholar: {
-    name: "📖 Scholar",
-    icon: "📖",
+    name: "ðŸ“– Scholar",
+    icon: "ðŸ“–",
     description: "Collector of forbidden knowledge. 25% more loot from expeditions.",
     passive: "expedition_bonus",
     passive_value: 1.25
   },
   merchant: {
-    name: "💼 Merchant",
-    icon: "💼",
+    name: "ðŸ’¼ Merchant",
+    icon: "ðŸ’¼",
     description: "Trader extraordinaire. 10% daily bank interest.",
     passive: "daily_interest",
     passive_value: 0.1
@@ -60,13 +61,13 @@ const MURK_CLASSES = {
 // ==================== DARK BAZAAR (Daily Shop) ==================
 
 const BAZAAR_POOL = [
-  { id: "murk_shard", name: "🔮 Murk Shard", price: 150, description: "Fragment of Murk power. Sell for +50%." },
-  { id: "swamp_tonic", name: "🧪 Swamp Tonic", price: 200, description: "Grants +25% earnings for 1 hour." },
-  { id: "ancient_coin", name: "💎 Ancient Coin", price: 100, description: "Worth 1.5x normal coins at bank." },
-  { id: "trap_kit", name: "🪤 Trap Kit", price: 250, description: "Defend against robberies—one-time use." },
-  { id: "fortune_scroll", name: "📜 Fortune Scroll", price: 300, description: "Reroll next dig/fish for better loot." },
-  { id: "murk_map", name: "🗺️ Murk Map", price: 500, description: "Find hidden Murk zones for 24hrs." },
-  { id: "void_essence", name: "✨ Void Essence", price: 800, description: "Increases max wallet capacity +500." }
+  { id: "murk_shard", name: "ðŸ”® Murk Shard", price: 150, description: "Fragment of Murk power. Sell for +50%." },
+  { id: "swamp_tonic", name: "ðŸ§ª Swamp Tonic", price: 200, description: "Grants +25% earnings for 1 hour." },
+  { id: "ancient_coin", name: "ðŸ’Ž Ancient Coin", price: 100, description: "Worth 1.5x normal coins at bank." },
+  { id: "trap_kit", name: "ðŸª¤ Trap Kit", price: 250, description: "Defend against robberiesâ€”one-time use." },
+  { id: "fortune_scroll", name: "ðŸ“œ Fortune Scroll", price: 300, description: "Reroll next dig/fish for better loot." },
+  { id: "murk_map", name: "ðŸ—ºï¸ Murk Map", price: 500, description: "Find hidden Murk zones for 24hrs." },
+  { id: "void_essence", name: "âœ¨ Void Essence", price: 800, description: "Increases max wallet capacity +500." }
 ];
 
 function generateDailyBazaar() {
@@ -83,7 +84,7 @@ function generateDailyBazaar() {
 const RECIPES = {
   // Simple combos
   "murk_elixir": {
-    name: "🔮 Murk Elixir (Master)",
+    name: "ðŸ”® Murk Elixir (Master)",
     inputs: [
       { item: "swamp_tonic", qty: 2 },
       { item: "murk_shard", qty: 1 },
@@ -94,7 +95,7 @@ const RECIPES = {
     buff: { buff_id: "super_luck", duration: 7200000 }  // 2 hours: +30% rewards
   },
   "prestige_token": {
-    name: "👑 Prestige Token",
+    name: "ðŸ‘‘ Prestige Token",
     inputs: [
       { item: "void_essence", qty: 2 },
       { item: "murk_elixir", qty: 1 },
@@ -112,7 +113,7 @@ async function cmdBounty(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -125,38 +126,33 @@ async function cmdBounty(message, args, util) {
     );
 
     if (bounties.length === 0) {
-      await message.reply("📋 No active bounties. Use `bounty post @user <amount>` to create one!").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: `ðŸ“‹ No active bounties. Use \`${ecoPrefix}bounty post @user <amount>\` to create one!` }] }).catch(() => {});
       return;
     }
 
     const list = bounties.map((b, i) => 
-      `**${i + 1}.** <@${b.target_id}> — **${b.amount}** ${economySettings.currency_name}\nPosted by <@${b.poster_id}>`
+      `**${i + 1}.** <@${b.target_id}> â€” **${b.amount}** ${economySettings.currency_name}\nPosted by <@${b.poster_id}>`
     ).join("\n\n");
 
-    await message.reply({ embeds: [{
-      color: 0xff6b6b,
-      title: "💀 Bounty Board",
-      description: list,
-      footer: { text: "Use 'bounty claim <number>' to accept a bounty!" }
-    }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xff6b6b, title: "ðŸ’€ Bounty Board", description: list, footer: { text: `Use '${ecoPrefix}bounty claim <number>' to claim a bounty!` } }] }).catch(() => {});
     return;
   }
 
   if (subcommand === "post") {
     if (args.length < 2) {
-      await message.reply(`\`${ecoPrefix}bounty post @user <amount>\`\n\n💀 Post a bounty on someone for coins!`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x9b59b6, title: "ðŸ’€ Post a Bounty", description: `**Usage:** \`${ecoPrefix}bounty post @user <amount>\`\n\nPost a bounty on someone for coins! Anyone can claim it by targeting that user.` }] }).catch(() => {});
       return;
     }
 
     const target = message.mentions.users.first();
     if (!target) {
-      await message.reply("❌ Please mention a user to bounty.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Please mention a user to bounty." }] }).catch(() => {});
       return;
     }
 
     const amount = parseInt(args[2]);
     if (isNaN(amount) || amount < 50) {
-      await message.reply("❌ Minimum bounty is 50 coins.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Minimum bounty is **50** coins." }] }).catch(() => {});
       return;
     }
 
@@ -164,29 +160,27 @@ async function cmdBounty(message, args, util) {
       [message.guild.id, message.author.id]);
 
     if (!poster || poster.balance < amount) {
-      await message.reply(`❌ You need ${amount} coins!`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `âŒ You need **${amount}** ${economySettings.currency_name} to post this bounty!` }] }).catch(() => {});
       return;
     }
 
-    // Deduct immediately
     await runCmd(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`,
       [amount, message.guild.id, message.author.id]);
 
-    // Create bounty
-    const expiresAt = Date.now() + 604800000; // 7 days
+    const expiresAt = Date.now() + 604800000;
     await runCmd(
       `INSERT INTO bounties (guild_id, poster_id, target_id, amount, expires_at) VALUES (?, ?, ?, ?, ?)`,
       [message.guild.id, message.author.id, target.id, amount, expiresAt]
     );
 
-    await message.reply(`💀 **Bounty Posted!**\n\nTarget: ${target}\nAmount: ${amount} ${economySettings.currency_name}\nExpires: <t:${Math.floor(expiresAt/1000)}:R>`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xff6b6b, title: "ðŸ’€ Bounty Posted!", description: `**Target:** ${target}\n**Reward:** ${amount} ${economySettings.currency_name}\n**Expires:** <t:${Math.floor(expiresAt/1000)}:R>` }] }).catch(() => {});
     return;
   }
 
   if (subcommand === "claim") {
     const bountyId = parseInt(args[1]);
     if (isNaN(bountyId)) {
-      await message.reply("❌ Invalid bounty ID.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Invalid bounty ID." }] }).catch(() => {});
       return;
     }
 
@@ -194,29 +188,25 @@ async function cmdBounty(message, args, util) {
       [bountyId, message.guild.id]);
 
     if (!bounty) {
-      await message.reply("❌ Bounty not found.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Bounty not found or already claimed." }] }).catch(() => {});
       return;
     }
 
     if (message.author.id === bounty.target_id) {
-      await message.reply("❌ You can't claim a bounty on yourself!").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ You can't claim a bounty on yourself!" }] }).catch(() => {});
       return;
     }
 
-    // Mark claimed, give reward
-    await runCmd(
-      `UPDATE bounties SET claimed_by=?, claimed_at=?, status='claimed' WHERE id=?`,
-      [message.author.id, Date.now(), bountyId]
-    );
-
+    await runCmd(`UPDATE bounties SET claimed_by=?, claimed_at=?, status='claimed' WHERE id=?`,
+      [message.author.id, Date.now(), bountyId]);
     await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
       [bounty.amount, message.guild.id, message.author.id]);
 
-    await message.reply(`💀 **Bounty Claimed!**\n\nYou earned **${bounty.amount}** ${economySettings.currency_name}!\nTarget: <@${bounty.target_id}>`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, title: "ðŸ’€ Bounty Claimed!", description: `You earned **${bounty.amount}** ${economySettings.currency_name}!\n**Target was:** <@${bounty.target_id}>` }] }).catch(() => {});
     return;
   }
 
-  await message.reply(`📋 **Bounty Commands:**\n\`bounty list\` - See all bounties\n\`bounty post @user <amount>\` - Post a bounty\n\`bounty claim <id>\` - Claim reward`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x9b59b6, title: "ðŸ’€ Bounty Board", description: `\`${ecoPrefix}bounty list\` â€” See all active bounties\n\`${ecoPrefix}bounty post @user <amount>\` â€” Post a bounty\n\`${ecoPrefix}bounty claim <id>\` â€” Claim reward` }] }).catch(() => {});
 }
 
 // ==================== CRAFTING SYSTEM ==================
@@ -225,7 +215,7 @@ async function cmdCraft(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -236,7 +226,7 @@ async function cmdCraft(message, args, util) {
 
     await message.reply({ embeds: [{
       color: 0x7b68ee,
-      title: "⚙️ Crafting Recipes",
+      title: "âš™ï¸ Crafting Recipes",
       description: recipes,
       footer: { text: `Use craft <recipe> to craft!` }
     }] }).catch(() => {});
@@ -247,7 +237,7 @@ async function cmdCraft(message, args, util) {
   const recipe = RECIPES[recipeName];
 
   if (!recipe) {
-    await message.reply("❌ Recipe not found.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Recipe not found. Use `craft` to see available recipes." }] }).catch(() => {});
     return;
   }
 
@@ -259,7 +249,7 @@ async function cmdCraft(message, args, util) {
     );
 
     if (!inv || inv.quantity < input.qty) {
-      await message.reply(`❌ You need ${input.qty}x ${input.item}!`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `âŒ You need **${input.qty}x ${input.item}** to craft this!` }] }).catch(() => {});
       return;
     }
   }
@@ -315,7 +305,7 @@ async function cmdCraft(message, args, util) {
     );
   }
 
-  await message.reply(`✨ **Crafted:** ${recipe.name}!`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x7b68ee, title: "âœ¨ Crafted!", description: `Successfully crafted **${recipe.name}**!${recipe.reward_coins > 0 ? `\n\nðŸ’° Bonus: +${recipe.reward_coins} ${economySettings.currency_name}` : ""}` }] }).catch(() => {});
 }
 
 // ==================== PRESTIGE SYSTEM ==================
@@ -324,7 +314,7 @@ async function cmdPrestige(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -336,11 +326,11 @@ async function cmdPrestige(message, args, util) {
 
   if (args[0]?.toLowerCase() === "ascend") {
     if (econ.prestige_level === 0) {
-      await message.reply("❌ You must craft a **Prestige Token** first!").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ You must craft a **Prestige Token** first before ascending!" }] }).catch(() => {});
       return;
     }
 
-    const multiplier = 1 + (econ.prestige_level * 0.2); // 20% per prestige level
+    const multiplier = 1 + (econ.prestige_level * 0.2);
     const awardedBalance = Math.floor(econ.total_earned * multiplier);
 
     await runCmd(
@@ -348,13 +338,13 @@ async function cmdPrestige(message, args, util) {
       [awardedBalance, message.guild.id, message.author.id]
     );
 
-    await message.reply(`👑 **ASCENDED!**\n\nYou've become a Murk God!\n\n💰 Prestige Reward: ${awardedBalance} ${economySettings.currency_name}\n📊 Multiplier: **${multiplier}x** your lifetime earnings`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle("ðŸ‘‘ ASCENDED!").setDescription(`You've become a Murk God!\n\nðŸ’° **Prestige Reward:** ${awardedBalance} ${economySettings.currency_name}\nðŸ“Š **Multiplier:** ${multiplier}x your lifetime earnings`)] }).catch(() => {});
     return;
   }
 
   const embed = {
     color: 0xffd700,
-    title: "👑 Prestige Status",
+    title: "ðŸ‘‘ Prestige Status",
     fields: [
       { name: "Level", value: `${econ.prestige_level}`, inline: true },
       { name: "Lifetime Earnings", value: `${econ.total_earned}`, inline: true },
@@ -373,7 +363,7 @@ async function cmdClass(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -384,7 +374,7 @@ async function cmdClass(message, args, util) {
 
     await message.reply({ embeds: [{
       color: 0x00d4ff,
-      title: "⚔️ Murk Archetypes",
+      title: "âš”ï¸ Murk Archetypes",
       description: classList,
       footer: { text: `Choose: class select <brigand|artificer|scholar|merchant>` }
     }] }).catch(() => {});
@@ -395,7 +385,7 @@ async function cmdClass(message, args, util) {
   const murk_class = MURK_CLASSES[classKey];
 
   if (!murk_class) {
-    await message.reply("❌ Invalid class!").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Invalid class! Choose: `brigand`, `artificer`, `scholar`, or `merchant`." }] }).catch(() => {});
     return;
   }
 
@@ -405,14 +395,14 @@ async function cmdClass(message, args, util) {
     [message.guild.id, message.author.id, classKey, classKey]
   );
 
-  await message.reply(`⚔️ **You've chosen:** ${murk_class.name}\n\n${murk_class.description}`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x00d4ff, title: `âš”ï¸ Class Chosen: ${murk_class.name}`, description: murk_class.description }] }).catch(() => {});
 }
 
 // ==================== SWAMP STORY SYSTEM ====================
 
 const SWAMP_STORIES = {
   "frog_prince": {
-    title: "🐸 The Frog Prince's Curse",
+    title: "ðŸ¸ The Frog Prince's Curse",
     chapters: {
       1: {
         text: "You find a frog sitting on a lily pad, wearing a tiny crown. It croaks: 'Help me, adventurer! I've been cursed by the Swamp Witch!'",
@@ -433,7 +423,7 @@ const SWAMP_STORIES = {
     }
   },
   "swamp_witch": {
-    title: "🧙‍♀️ The Swamp Witch's Brew",
+    title: "ðŸ§™â€â™€ï¸ The Swamp Witch's Brew",
     chapters: {
       1: {
         text: "Deep in the misty swamp, you find a bubbling cauldron. The Swamp Witch cackles: 'What do you seek, little tadpole?'",
@@ -446,7 +436,7 @@ const SWAMP_STORIES = {
     }
   },
   "dragon_lair": {
-    title: "🐉 The Dragon's Treasure",
+    title: "ðŸ‰ The Dragon's Treasure",
     chapters: {
       1: {
         text: "You discover a cave entrance guarded by a sleeping dragon. Treasure glitters inside!",
@@ -463,7 +453,7 @@ const SWAMP_STORIES = {
 const SWAMP_EVENTS = [
   {
     id: "mosquito_swarm",
-    title: "🦟 Mosquito Swarm Attack!",
+    title: "ðŸ¦Ÿ Mosquito Swarm Attack!",
     description: "A massive swarm of bloodthirsty mosquitoes descends upon you!",
     choices: [
       { text: "Swat them away", success: 0.6, reward: "mosquito_wings", consequence: "You fight them off but get bitten!" },
@@ -473,7 +463,7 @@ const SWAMP_EVENTS = [
   },
   {
     id: "crocodile_ambush",
-    title: "🐊 Crocodile Ambush!",
+    title: "ðŸŠ Crocodile Ambush!",
     description: "A massive crocodile bursts from the water, jaws snapping!",
     choices: [
       { text: "Fight back with your bare hands", success: 0.2, reward: "croc_teeth", consequence: "Miraculously, you survive!", death_chance: 0.8 },
@@ -483,7 +473,7 @@ const SWAMP_EVENTS = [
   },
   {
     id: "treasure_chest",
-    title: "💰 Mysterious Treasure Chest",
+    title: "ðŸ’° Mysterious Treasure Chest",
     description: "You find a chest half-buried in the mud. It might be trapped!",
     choices: [
       { text: "Open it carefully", success: 0.8, reward: "random_treasure", consequence: "You find valuable items!" },
@@ -494,40 +484,44 @@ const SWAMP_EVENTS = [
 ];
 
 const DEATH_SCENARIOS = [
-  "🐊 You were eaten by a crocodile!",
-  "🦟 You were drained dry by mosquitoes!",
-  "🐍 You stepped on a venomous snake!",
-  "🕷️ You were bitten by a giant spider!",
-  "🌿 You ate poisonous swamp berries!",
-  "💧 You drowned in quicksand!",
-  "🐺 You were mauled by swamp wolves!",
-  "🧟 You were possessed by swamp spirits!"
+  "ðŸŠ You were eaten by a crocodile!",
+  "ðŸ¦Ÿ You were drained dry by mosquitoes!",
+  "ðŸ You stepped on a venomous snake!",
+  "ðŸ•·ï¸ You were bitten by a giant spider!",
+  "ðŸŒ¿ You ate poisonous swamp berries!",
+  "ðŸ’§ You drowned in quicksand!",
+  "ðŸº You were mauled by swamp wolves!",
+  "ðŸ§Ÿ You were possessed by swamp spirits!"
 ];
 
 const REVIVAL_METHODS = [
-  { item: "revival_potion", name: "🧪 Revival Potion", description: "Brings you back from the dead" },
-  { item: "frog_amulet", name: "🐸 Frog Amulet", description: "Protects against one death" },
-  { item: "lizard_totem", name: "🦎 Lizard Totem", description: "Revives you with lizard magic" },
-  { item: "swamp_blessing", name: "🌿 Swamp Blessing", description: "Nature's protection" }
+  { item: "revival_potion", name: "ðŸ§ª Revival Potion", description: "Brings you back from the dead" },
+  { item: "frog_amulet", name: "ðŸ¸ Frog Amulet", description: "Protects against one death" },
+  { item: "lizard_totem", name: "ðŸ¦Ž Lizard Totem", description: "Revives you with lizard magic" },
+  { item: "swamp_blessing", name: "ðŸŒ¿ Swamp Blessing", description: "Nature's protection" }
 ];
 
 // ==================== SWAMP ADVENTURE SYSTEM ====================
 
 async function cmdAdventure(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-  
+
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
   const storyId = args[0]?.toLowerCase();
   if (!storyId || !SWAMP_STORIES[storyId]) {
-    const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) => 
-      `**${id}**: ${story.title}`
+    const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) =>
+      `**${id}** â€” ${story.title}`
     ).join('\n');
-    
-    await message.reply(`🗺️ **Swamp Adventures**\n\nChoose your adventure:\n${availableStories}\n\nUsage: \`${ecoPrefix}adventure <story_id>\``).catch(() => {});
+
+    await message.reply({ embeds: [new EmbedBuilder()
+      .setColor(0x2d6a4f)
+      .setTitle("ðŸ—ºï¸ Swamp Adventures")
+      .setDescription(`Choose an adventure to begin:\n\n${availableStories}\n\n**Usage:** \`${ecoPrefix}adventure <story_id>\``)
+    ] }).catch(() => {});
     return;
   }
 
@@ -541,17 +535,18 @@ async function cmdAdventure(message, args, util) {
   const chapter = story.chapters[currentChapter];
 
   if (!chapter) {
-    await message.reply(`✅ **${story.title}**\n\nYou have completed this adventure!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf1c40f, title: `âœ… ${story.title}`, description: "You have **completed** this adventure! Well done, Murk Adept." }] }).catch(() => {});
     return;
   }
 
-  const choicesText = chapter.choices.map((choice, i) => 
-    `${i + 1}. ${choice.text}`
-  ).join('\n');
+  const choicesText = chapter.choices.map((choice, i) => `**${i + 1}.** ${choice.text}`).join('\n');
 
-  await message.reply(`📖 **${story.title} - Chapter ${currentChapter}**\n\n${chapter.text}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0x2d6a4f)
+    .setTitle(`ðŸ“– ${story.title} â€” Chapter ${currentChapter}`)
+    .setDescription(`${chapter.text}\n\n**Choices:**\n${choicesText}\n\n*Reply with the number of your choice within 30 seconds!*`)
+  ] }).catch(() => {});
 
-  // Set up choice collector
   const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
   const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
 
@@ -560,42 +555,42 @@ async function cmdAdventure(message, args, util) {
     const choice = chapter.choices[choiceIndex];
 
     if (!choice) {
-      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
+      await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Invalid choice number!" }] }).catch(() => {});
       return;
     }
 
-    // Check death chance
     if (choice.death_chance && Math.random() < choice.death_chance) {
       await handleDeath(message, util, `You died during **${story.title}**! ${DEATH_SCENARIOS[Math.floor(Math.random() * DEATH_SCENARIOS.length)]}`);
       return;
     }
 
-    // Apply consequence
     let rewardText = "";
     if (choice.reward) {
       await giveReward(message, choice.reward, util);
-      rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
+      rewardText = `\n\nðŸŽ **Reward:** ${choice.reward.replace(/_/g, ' ')}!`;
     }
 
-    // Update progress
     const nextChapter = currentChapter + 1;
     const isCompleted = !story.chapters[nextChapter];
 
     await runCmd(
       `INSERT INTO story_progress (guild_id, user_id, story_id, chapter, completed, last_updated)
        VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET
-       chapter=?, completed=?, last_updated=?`,
+       ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET chapter=?, completed=?, last_updated=?`,
       [message.guild.id, message.author.id, storyId, nextChapter, isCompleted ? 1 : 0, Date.now(), nextChapter, isCompleted ? 1 : 0, Date.now()]
     );
 
-    const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter}...`;
-    await choiceMsg.reply(`✅ **Choice Made:** ${choice.text}${rewardText}${completionText}`).catch(() => {});
+    const completionText = isCompleted ? "\n\nðŸ† **Adventure Completed!**" : `\n\nðŸ“– Continue to Chapter ${nextChapter} next time...`;
+    await choiceMsg.reply({ embeds: [new EmbedBuilder()
+      .setColor(isCompleted ? 0xf1c40f : 0x2ecc71)
+      .setTitle("âœ… Choice Made")
+      .setDescription(`**${choice.text}**${rewardText}${completionText}`)
+    ] }).catch(() => {});
   });
 
   collector.on('end', (collected, reason) => {
     if (reason === 'time') {
-      message.reply("⏰ Time's up! Adventure cancelled.").catch(() => {});
+      message.reply({ embeds: [{ color: 0x95a5a6, description: "â° Time's up! Adventure paused â€” use the command again to continue." }] }).catch(() => {});
     }
   });
 }
@@ -604,36 +599,36 @@ async function cmdAdventure(message, args, util) {
 
 async function cmdExplore(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-  
+
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
-  // Check for exploration cooldown (10 minutes)
   const lastExplore = await getCmd(
     `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='exploration' AND stat_name='last_explore'`,
     [message.guild.id, message.author.id]
   );
 
   const now = Date.now();
-  const cooldown = 600000; // 10 minutes
+  const cooldown = 600000;
   if (lastExplore?.last_played && (now - lastExplore.last_played) < cooldown) {
     const timeLeft = cooldown - (now - lastExplore.last_played);
     const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`🌿 You're still recovering from your last expedition! Come back in ${minutes} minutes.`).catch(() => {});
+    const seconds = Math.floor((timeLeft % 60000) / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `ðŸŒ¿ You're still recovering! Come back in **${minutes}m ${seconds}s**.` }] }).catch(() => {});
     return;
   }
 
-  // Random event
   const event = SWAMP_EVENTS[Math.floor(Math.random() * SWAMP_EVENTS.length)];
-  const choicesText = event.choices.map((choice, i) => 
-    `${i + 1}. ${choice.text}`
-  ).join('\n');
+  const choicesText = event.choices.map((choice, i) => `**${i + 1}.** ${choice.text}`).join('\n');
 
-  await message.reply(`🗺️ **Swamp Exploration**\n\n${event.title}\n${event.description}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0x27ae60)
+    .setTitle(`ðŸ—ºï¸ ${event.title}`)
+    .setDescription(`${event.description}\n\n**Choices:**\n${choicesText}\n\n*Reply with the number of your choice within 30 seconds!*`)
+  ] }).catch(() => {});
 
-  // Set up choice collector
   const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
   const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
 
@@ -642,49 +637,44 @@ async function cmdExplore(message, args, util) {
     const choice = event.choices[choiceIndex];
 
     if (!choice) {
-      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
+      await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, description: "âŒ Invalid choice number!" }] }).catch(() => {});
       return;
     }
 
-    // Check requirements
     if (choice.requires) {
       const hasItem = await getCmd(
         `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
         [message.guild.id, message.author.id, choice.requires]
       );
       if (!hasItem) {
-        await choiceMsg.reply(`❌ You need **${choice.requires.replace(/_/g, ' ').toUpperCase()}** for this action!`).catch(() => {});
+        await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, description: `âŒ You need a **${choice.requires.replace(/_/g, ' ')}** for this!` }] }).catch(() => {});
         return;
       }
     }
 
-    // Check success
     const success = Math.random() < choice.success;
     if (!success) {
-      await choiceMsg.reply(`❌ **Failed:** ${choice.consequence}`).catch(() => {});
+      await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, title: "âŒ Failed", description: choice.consequence }] }).catch(() => {});
     } else {
       let rewardText = "";
       if (choice.reward) {
         await giveReward(message, choice.reward, util);
-        rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
+        rewardText = `\n\nðŸŽ **Reward:** ${choice.reward.replace(/_/g, ' ')}!`;
       }
-
-      await choiceMsg.reply(`✅ **Success:** ${choice.consequence}${rewardText}`).catch(() => {});
+      await choiceMsg.reply({ embeds: [{ color: 0x2ecc71, title: "âœ… Success!", description: `${choice.consequence}${rewardText}` }] }).catch(() => {});
     }
 
-    // Update exploration stats
     await runCmd(
       `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
        VALUES (?, ?, 'exploration', 'last_explore', 1, ?)
-       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET
-       stat_value=stat_value+1, last_played=?`,
+       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=stat_value+1, last_played=?`,
       [message.guild.id, message.author.id, now, now]
     );
   });
 
   collector.on('end', (collected, reason) => {
     if (reason === 'time') {
-      message.reply("⏰ Time's up! Exploration cancelled.").catch(() => {});
+      message.reply({ embeds: [{ color: 0x95a5a6, description: "â° Time's up! Exploration cancelled." }] }).catch(() => {});
     }
   });
 }
@@ -694,7 +684,6 @@ async function cmdExplore(message, args, util) {
 async function handleDeath(message, util, deathMessage) {
   const { run: runCmd, get: getCmd } = util;
 
-  // Check for revival items
   for (const revival of REVIVAL_METHODS) {
     const item = await getCmd(
       `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
@@ -702,23 +691,23 @@ async function handleDeath(message, util, deathMessage) {
     );
 
     if (item) {
-      // Consume the item and revive
       await runCmd(
         `UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`,
         [message.guild.id, message.author.id, revival.item]
       );
-
-      await message.reply(`💀 ${deathMessage}\n\nBut... **${revival.name}** saves you!\n\n${revival.description}`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x9b59b6, title: "ðŸ’€ Near Death...", description: `${deathMessage}\n\nBut... **${revival.name}** saves you!\n${revival.description}` }] }).catch(() => {});
       return;
     }
   }
 
-  // No revival - actual death
-  await message.reply(`💀 ${deathMessage}\n\n**You have died!**\n\n💡 **Ways to revive:**\n${REVIVAL_METHODS.map(r => `• ${r.name} (${r.description})`).join('\n')}\n\nBuy revival items from the shop!`).catch(() => {});
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0x2c2c2c)
+    .setTitle("ðŸ’€ You Have Died!")
+    .setDescription(`${deathMessage}\n\n**You lost half your wallet!**\n\nðŸ’¡ **Ways to revive in future:**\n${REVIVAL_METHODS.map(r => `â€¢ ${r.name} â€” ${r.description}`).join('\n')}\n\nBuy revival items from the shop!`)
+  ] }).catch(() => {});
 
-  // Reset some progress (but keep items)
   await runCmd(
-    `UPDATE user_economy SET balance=balance*0.5 WHERE guild_id=? AND user_id=?`,
+    `UPDATE user_economy SET balance=FLOOR(balance*0.5) WHERE guild_id=? AND user_id=?`,
     [message.guild.id, message.author.id]
   );
 }
@@ -729,7 +718,6 @@ async function giveReward(message, rewardType, util) {
   const { economySettings, run: runCmd } = util;
 
   const rewards = {
-    // Story rewards
     "frog_kiss": { money: 100, item: "frog_blessing" },
     "royal_blessing": { money: 500, item: "crown_jewel" },
     "prince_gold": { money: 1000 },
@@ -740,267 +728,6 @@ async function giveReward(message, rewardType, util) {
     "dragon_gold": { money: 2000 },
     "dragon_scales": { item: "dragon_scales" },
     "dragon_friendship": { item: "dragon_egg" },
-
-    // Event rewards
-    "mosquito_wings": { money: 50, item: "insect_wings" },
-    "mosquito_slaughter": { money: 150, item: "bug_spray" },
-    "croc_teeth": { item: "crocodile_teeth" },
-    "croc_skin": { item: "crocodile_hide" },
-    "croc_ride": { item: "crocodile_whistle" },
-    "random_treasure": { money: Math.floor(Math.random() * 500) + 100 },
-    "broken_treasure": { money: Math.floor(Math.random() * 300) + 50 }
-  };
-
-  const reward = rewards[rewardType];
-  if (!reward) return;
-
-  if (reward.money) {
-    await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
-      [reward.money, message.guild.id, message.author.id]);
-  }
-
-  if (reward.item) {
-    await runCmd(
-      `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
-       VALUES (?, ?, ?, 1)
-       ON CONFLICT (guild_id, user_id, item_id)
-       DO UPDATE SET quantity = user_inventory.quantity + 1`,
-      [message.guild.id, message.author.id, reward.item]
-    );
-  }
-}
-
-// ==================== SWAMP ADVENTURE SYSTEM ====================
-
-async function cmdAdventure(message, args, util) {
-  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-  
-  if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
-    return;
-  }
-
-  const storyId = args[0]?.toLowerCase();
-  if (!storyId || !SWAMP_STORIES[storyId]) {
-    const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) => 
-      `**${id}**: ${story.title}`
-    ).join('\n');
-    
-    await message.reply(`🗺️ **Swamp Adventures**\n\nChoose your adventure:\n${availableStories}\n\nUsage: \`${ecoPrefix}adventure <story_id>\``).catch(() => {});
-    return;
-  }
-
-  const story = SWAMP_STORIES[storyId];
-  const progress = await getCmd(
-    `SELECT * FROM story_progress WHERE guild_id=? AND user_id=? AND story_id=?`,
-    [message.guild.id, message.author.id, storyId]
-  );
-
-  const currentChapter = progress?.chapter || 1;
-  const chapter = story.chapters[currentChapter];
-
-  if (!chapter) {
-    await message.reply(`✅ **${story.title}**\n\nYou have completed this adventure!`).catch(() => {});
-    return;
-  }
-
-  const choicesText = chapter.choices.map((choice, i) => 
-    `${i + 1}. ${choice.text}`
-  ).join('\n');
-
-  await message.reply(`📖 **${story.title} - Chapter ${currentChapter}**\n\n${chapter.text}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
-
-  // Set up choice collector
-  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
-  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
-
-  collector.on('collect', async (choiceMsg) => {
-    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
-    const choice = chapter.choices[choiceIndex];
-
-    if (!choice) {
-      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
-      return;
-    }
-
-    // Check death chance
-    if (choice.death_chance && Math.random() < choice.death_chance) {
-      await handleDeath(message, util, `You died during **${story.title}**! ${DEATH_SCENARIOS[Math.floor(Math.random() * DEATH_SCENARIOS.length)]}`);
-      return;
-    }
-
-    // Apply consequence
-    let rewardText = "";
-    if (choice.reward) {
-      await giveReward(message, choice.reward, util);
-      rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
-    }
-
-    // Update progress
-    const nextChapter = currentChapter + 1;
-    const isCompleted = !story.chapters[nextChapter];
-
-    await runCmd(
-      `INSERT INTO story_progress (guild_id, user_id, story_id, chapter, completed, last_updated)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET
-       chapter=?, completed=?, last_updated=?`,
-      [message.guild.id, message.author.id, storyId, nextChapter, isCompleted ? 1 : 0, Date.now(), nextChapter, isCompleted ? 1 : 0, Date.now()]
-    );
-
-    const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter}...`;
-    await choiceMsg.reply(`✅ **Choice Made:** ${choice.text}${rewardText}${completionText}`).catch(() => {});
-  });
-
-  collector.on('end', (collected, reason) => {
-    if (reason === 'time') {
-      message.reply("⏰ Time's up! Adventure cancelled.").catch(() => {});
-    }
-  });
-}
-
-// ==================== RANDOM SWAMP EVENTS ====================
-
-async function cmdExplore(message, args, util) {
-  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-  
-  if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
-    return;
-  }
-
-  // Check for exploration cooldown (10 minutes)
-  const lastExplore = await getCmd(
-    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='exploration' AND stat_name='last_explore'`,
-    [message.guild.id, message.author.id]
-  );
-
-  const now = Date.now();
-  const cooldown = 600000; // 10 minutes
-  if (lastExplore?.last_played && (now - lastExplore.last_played) < cooldown) {
-    const timeLeft = cooldown - (now - lastExplore.last_played);
-    const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`🌿 You're still recovering from your last expedition! Come back in ${minutes} minutes.`).catch(() => {});
-    return;
-  }
-
-  // Random event
-  const event = SWAMP_EVENTS[Math.floor(Math.random() * SWAMP_EVENTS.length)];
-  const choicesText = event.choices.map((choice, i) => 
-    `${i + 1}. ${choice.text}`
-  ).join('\n');
-
-  await message.reply(`🗺️ **Swamp Exploration**\n\n${event.title}\n${event.description}\n\n**Choices:**\n${choicesText}\n\nReply with the number of your choice!`).catch(() => {});
-
-  // Set up choice collector
-  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
-  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
-
-  collector.on('collect', async (choiceMsg) => {
-    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
-    const choice = event.choices[choiceIndex];
-
-    if (!choice) {
-      await choiceMsg.reply("❌ Invalid choice number!").catch(() => {});
-      return;
-    }
-
-    // Check requirements
-    if (choice.requires) {
-      const hasItem = await getCmd(
-        `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
-        [message.guild.id, message.author.id, choice.requires]
-      );
-      if (!hasItem) {
-        await choiceMsg.reply(`❌ You need **${choice.requires.replace(/_/g, ' ').toUpperCase()}** for this action!`).catch(() => {});
-        return;
-      }
-    }
-
-    // Check success
-    const success = Math.random() < choice.success;
-    if (!success) {
-      await choiceMsg.reply(`❌ **Failed:** ${choice.consequence}`).catch(() => {});
-    } else {
-      let rewardText = "";
-      if (choice.reward) {
-        await giveReward(message, choice.reward, util);
-        rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ').toUpperCase()}!`;
-      }
-
-      await choiceMsg.reply(`✅ **Success:** ${choice.consequence}${rewardText}`).catch(() => {});
-    }
-
-    // Update exploration stats
-    await runCmd(
-      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
-       VALUES (?, ?, 'exploration', 'last_explore', 1, ?)
-       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET
-       stat_value=stat_value+1, last_played=?`,
-      [message.guild.id, message.author.id, now, now]
-    );
-  });
-
-  collector.on('end', (collected, reason) => {
-    if (reason === 'time') {
-      message.reply("⏰ Time's up! Exploration cancelled.").catch(() => {});
-    }
-  });
-}
-
-// ==================== DEATH AND REVIVAL SYSTEM ====================
-
-async function handleDeath(message, util, deathMessage) {
-  const { run: runCmd, get: getCmd } = util;
-
-  // Check for revival items
-  for (const revival of REVIVAL_METHODS) {
-    const item = await getCmd(
-      `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
-      [message.guild.id, message.author.id, revival.item]
-    );
-
-    if (item) {
-      // Consume the item and revive
-      await runCmd(
-        `UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`,
-        [message.guild.id, message.author.id, revival.item]
-      );
-
-      await message.reply(`💀 ${deathMessage}\n\nBut... **${revival.name}** saves you!\n\n${revival.description}`).catch(() => {});
-      return;
-    }
-  }
-
-  // No revival - actual death
-  await message.reply(`💀 ${deathMessage}\n\n**You have died!**\n\n💡 **Ways to revive:**\n${REVIVAL_METHODS.map(r => `• ${r.name} (${r.description})`).join('\n')}\n\nBuy revival items from the shop!`).catch(() => {});
-
-  // Reset some progress (but keep items)
-  await runCmd(
-    `UPDATE user_economy SET balance=balance*0.5 WHERE guild_id=? AND user_id=?`,
-    [message.guild.id, message.author.id]
-  );
-}
-
-// ==================== REWARD SYSTEM ====================
-
-async function giveReward(message, rewardType, util) {
-  const { economySettings, run: runCmd } = util;
-
-  const rewards = {
-    // Story rewards
-    "frog_kiss": { money: 100, item: "frog_blessing" },
-    "royal_blessing": { money: 500, item: "crown_jewel" },
-    "prince_gold": { money: 1000 },
-    "prince_scales": { item: "lizard_scales" },
-    "strength_elixir": { item: "strength_potion" },
-    "youth_serum": { item: "youth_potion" },
-    "witch_herbs": { item: "magical_herbs" },
-    "dragon_gold": { money: 2000 },
-    "dragon_scales": { item: "dragon_scales" },
-    "dragon_friendship": { item: "dragon_egg" },
-
-    // Event rewards
     "mosquito_wings": { money: 50, item: "insect_wings" },
     "mosquito_slaughter": { money: 150, item: "bug_spray" },
     "croc_teeth": { item: "crocodile_teeth" },
@@ -1034,7 +761,7 @@ async function giveReward(message, rewardType, util) {
 const MURK_CATALOG = [
   {
     item_id: "fishing_rod",
-    name: "🎣 Fishing Rod",
+    name: "ðŸŽ£ Fishing Rod",
     price: 300,
     item_type: "tool",
     description: "A gnarled rod carved from swamp oak. Required to fish in the murky waters.",
@@ -1044,7 +771,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "shovel",
-    name: "⛏️ Rusty Shovel",
+    name: "â›ï¸ Rusty Shovel",
     price: 250,
     item_type: "tool",
     description: "A well-worn shovel caked with dried mud. Required for digging in the swamp.",
@@ -1054,7 +781,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "swamp_tonic",
-    name: "🧪 Swamp Tonic",
+    name: "ðŸ§ª Swamp Tonic",
     price: 200,
     item_type: "consumable",
     description: "A bubbling green brew. Boosts all earnings by 20% for 1 hour.",
@@ -1064,7 +791,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "revival_potion",
-    name: "💜 Revival Potion",
+    name: "ðŸ’œ Revival Potion",
     price: 500,
     item_type: "consumable",
     description: "A violet vial that revives you from near-death. Fully restores lost coins on death.",
@@ -1074,7 +801,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "padlock",
-    name: "🔒 Padlock",
+    name: "ðŸ”’ Padlock",
     price: 250,
     item_type: "consumable",
     description: "Secures your wallet from thieves. Grants 4-hour robbery immunity when used.",
@@ -1084,7 +811,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "trap_kit",
-    name: "🪤 Trap Kit",
+    name: "ðŸª¤ Trap Kit",
     price: 350,
     item_type: "consumable",
     description: "Sets an invisible trap. The next person to rob you loses 20% of their wallet instead.",
@@ -1094,17 +821,17 @@ const MURK_CATALOG = [
   },
   {
     item_id: "fortune_scroll",
-    name: "📜 Fortune Scroll",
+    name: "ðŸ“œ Fortune Scroll",
     price: 400,
     item_type: "consumable",
-    description: "An ancient parchment. Reading it grants a random coin bonus of 50–500.",
+    description: "An ancient parchment. Reading it grants a random coin bonus of 50â€“500.",
     item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f4dc.png",
     use_effect: "fortune_scroll",
     lore: "The ink moves on its own. The scholars say it's just the humidity."
   },
   {
     item_id: "murk_map",
-    name: "🗺️ Murk Map",
+    name: "ðŸ—ºï¸ Murk Map",
     price: 600,
     item_type: "consumable",
     description: "A hand-drawn map of the deep swamp. Doubles your explore loot for 2 hours.",
@@ -1114,17 +841,17 @@ const MURK_CATALOG = [
   },
   {
     item_id: "void_essence",
-    name: "🌑 Void Essence",
+    name: "ðŸŒ‘ Void Essence",
     price: 750,
     item_type: "consumable",
-    description: "A vial of pure void energy. Use it to crystallize 3–8 free Murk Shards.",
+    description: "A vial of pure void energy. Use it to crystallize 3â€“8 free Murk Shards.",
     item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f311.png",
     use_effect: "void_essence",
     lore: "It hums with a frequency that makes animals flee. Most animals."
   },
   {
     item_id: "ancient_coin",
-    name: "🪙 Ancient Coin",
+    name: "ðŸª™ Ancient Coin",
     price: 450,
     item_type: "consumable",
     description: "A pre-Murk currency. Sell it to a merchant for 1.5x its purchase value.",
@@ -1134,7 +861,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "murk_shard",
-    name: "🔷 Murk Shard",
+    name: "ðŸ”· Murk Shard",
     price: 150,
     item_type: "material",
     description: "A crystallized fragment of the Murk's dark energy. Core crafting material.",
@@ -1144,7 +871,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "shadow_cloak",
-    name: "🌑 Shadow Cloak",
+    name: "ðŸŒ‘ Shadow Cloak",
     price: 900,
     item_type: "consumable",
     description: "A cloak woven from Murk shadows. Makes you completely unrobbable for 2 hours.",
@@ -1154,7 +881,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "lucky_charm",
-    name: "🍀 Lucky Charm",
+    name: "ðŸ€ Lucky Charm",
     price: 700,
     item_type: "consumable",
     description: "A four-leaf clover in swamp resin. +20% earnings boost for 6 hours.",
@@ -1164,17 +891,17 @@ const MURK_CATALOG = [
   },
   {
     item_id: "gamblers_dice",
-    name: "🎲 Gambler's Dice",
+    name: "ðŸŽ² Gambler's Dice",
     price: 800,
     item_type: "consumable",
-    description: "Cursed dice from a lost game. 40% chance to triple your wallet — or lose 40%.",
+    description: "Cursed dice from a lost game. 40% chance to triple your wallet â€” or lose 40%.",
     item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3b2.png",
     use_effect: "gamblers_dice",
     lore: "The losing player is never seen again. The winning player wishes they weren't."
   },
   {
     item_id: "merchants_lens",
-    name: "🔍 Merchant's Lens",
+    name: "ðŸ” Merchant's Lens",
     price: 550,
     item_type: "consumable",
     description: "A magnifying glass that reveals another user's exact wallet & bank balance.",
@@ -1184,7 +911,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "frog_amulet",
-    name: "🐸 Frog Amulet",
+    name: "ðŸ¸ Frog Amulet",
     price: 650,
     item_type: "single",
     description: "A carved frog totem from the Murk. Permanently boosts daily rewards by 15%.",
@@ -1194,7 +921,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "lizard_totem",
-    name: "🦎 Lizard Totem",
+    name: "ðŸ¦Ž Lizard Totem",
     price: 850,
     item_type: "single",
     description: "An ancient carved totem. Passively regenerates +50 coins per hour forever.",
@@ -1204,7 +931,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "witch_brew",
-    name: "🫖 Witch's Brew",
+    name: "ðŸ«– Witch's Brew",
     price: 650,
     item_type: "consumable",
     description: "Unstable brew from Baba Murk. 50/50: DOUBLES your wallet or halves it.",
@@ -1214,7 +941,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "prestige_token",
-    name: "⭐ Prestige Token",
+    name: "â­ Prestige Token",
     price: 2000,
     item_type: "single",
     description: "A glowing token of exceptional status. Required for the Prestige Ascension ritual.",
@@ -1224,7 +951,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "dragon_scale",
-    name: "🐉 Dragon Scale",
+    name: "ðŸ‰ Dragon Scale",
     price: 1200,
     item_type: "consumable",
     description: "A mythical scale from the Murk Serpent. 2x ALL earnings for 3 hours.",
@@ -1234,7 +961,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "trophy",
-    name: "🏆 Swamp Trophy",
+    name: "ðŸ† Swamp Trophy",
     price: 1000,
     item_type: "collectible",
     description: "A prestigious collectible awarded to Murk survivors. Pure bragging rights.",
@@ -1244,7 +971,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "frog_crown",
-    name: "👑 Frog Crown",
+    name: "ðŸ‘‘ Frog Crown",
     price: 1500,
     item_type: "single",
     description: "The legendary crown of the Murk Frog King. +25% daily & weekly bonus permanently.",
@@ -1254,7 +981,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "black_market_pass",
-    name: "🎭 Black Market Pass",
+    name: "ðŸŽ­ Black Market Pass",
     price: 1800,
     item_type: "single",
     description: "A forged pass to The Dark Bazaar. Permanently unlocks dark market trades.",
@@ -1264,7 +991,7 @@ const MURK_CATALOG = [
   },
   {
     item_id: "murk_lantern",
-    name: "🏮 Murk Lantern",
+    name: "ðŸ® Murk Lantern",
     price: 500,
     item_type: "consumable",
     description: "A lantern burning swamp gas. Doubles explore loot for 2 hours when lit.",
@@ -1274,10 +1001,10 @@ const MURK_CATALOG = [
   },
   {
     item_id: "cursed_compass",
-    name: "🧭 Cursed Compass",
+    name: "ðŸ§­ Cursed Compass",
     price: 750,
     item_type: "consumable",
-    description: "Points to buried treasure... or danger. 65% chance for a 200–1000 coin jackpot.",
+    description: "Points to buried treasure... or danger. 65% chance for a 200â€“1000 coin jackpot.",
     item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ed.png",
     use_effect: "cursed_compass",
     lore: "It always points north. Unfortunately, north is where the screaming comes from."
@@ -1308,11 +1035,11 @@ module.exports = {
 };
 
 const FISH_TYPES = [
-  { name: "Goldfish", emoji: "🐠", value: 50, rarity: "common", weight: 0.2 },
-  { name: "Salmon", emoji: "🐟", value: 150, rarity: "uncommon", weight: 0.3 },
-  { name: "Tuna", emoji: "🐟", value: 300, rarity: "rare", weight: 0.2 },
-  { name: "Legendary Trout", emoji: "✨🐟", value: 1000, rarity: "legendary", weight: 0.15 },
-  { name: "Golden Koi", emoji: "🪙🐟", value: 2000, rarity: "mythic", weight: 0.15 }
+  { name: "Goldfish", emoji: "ðŸ ", value: 50, rarity: "common", weight: 0.2 },
+  { name: "Salmon", emoji: "ðŸŸ", value: 150, rarity: "uncommon", weight: 0.3 },
+  { name: "Tuna", emoji: "ðŸŸ", value: 300, rarity: "rare", weight: 0.2 },
+  { name: "Legendary Trout", emoji: "âœ¨ðŸŸ", value: 1000, rarity: "legendary", weight: 0.15 },
+  { name: "Golden Koi", emoji: "ðŸª™ðŸŸ", value: 2000, rarity: "mythic", weight: 0.15 }
 ];
 
 function getRandomFish() {
@@ -1329,7 +1056,7 @@ async function cmdFish(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -1343,7 +1070,7 @@ async function cmdFish(message, args, util) {
   );
 
   if (!rod) {
-    await message.reply(`❌ You don't have a fishing rod! Buy one from the shop.\n\n💡 **Tip:** \`${ecoPrefix}buy fishing_rod\``).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `⏳ Your line is still wet! Come back in **${seconds}s**.` }] }).catch(() => {});
     return;
   }
 
@@ -1358,7 +1085,7 @@ async function cmdFish(message, args, util) {
   if (stats?.last_played && (now - stats.last_played) < cooldown) {
     const timeLeft = cooldown - (now - stats.last_played);
     const seconds = Math.floor(timeLeft / 1000);
-    await message.reply(`⏳ Your line is still wet! Come back in ${seconds}s.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `⏳ Your line is still wet! Come back in **${seconds}s**.` }] }).catch(() => {});
     return;
   }
 
@@ -1378,7 +1105,7 @@ async function cmdFish(message, args, util) {
        ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET last_played=?`,
       [message.guild.id, message.author.id, now, now]
     );
-    await message.reply("🎣 You cast your line... but nothing bites! Come back later.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: '🎣 You cast your line... but nothing bites! Come back later.' }] }).catch(() => {});
     return;
   }
 
@@ -1404,7 +1131,7 @@ async function cmdFish(message, args, util) {
     [message.guild.id, message.author.id, "fishing", fish.value, `Caught a ${fish.name}`]
   );
 
-  await message.reply(`🎣 **You caught a ${fish.emoji} ${fish.name}!**\n\n**Value:** ${fish.value} ${economySettings.currency_name}\n**Rarity:** ${fish.rarity}\n**Total caught:** ${totalCaught}`).catch(() => {});
+  await message.reply({ embeds: [new EmbedBuilder().setColor(0x3498db).setTitle(`🎣 You caught a ${fish.emoji} ${fish.name}!`).addFields({ name: 'Value', value: `${fish.value} ${economySettings.currency_name}`, inline: true }, { name: 'Rarity', value: fish.rarity, inline: true }, { name: 'Total Caught', value: `${totalCaught}`, inline: true })] }).catch(() => {});
 }
 
 // ==================== DIGGING ====================
@@ -1431,7 +1158,7 @@ async function cmdDig(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -1445,7 +1172,7 @@ async function cmdDig(message, args, util) {
   );
 
   if (!shovel) {
-    await message.reply(`❌ You don't have a shovel! Buy one from the shop.\n\n💡 **Tip:** \`${ecoPrefix}buy shovel\``).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `⏳ You're catching your breath! Come back in **${seconds}s**.` }] }).catch(() => {});
     return;
   }
 
@@ -1460,7 +1187,7 @@ async function cmdDig(message, args, util) {
   if (stats?.last_played && (now - stats.last_played) < cooldown) {
     const timeLeft = cooldown - (now - stats.last_played);
     const seconds = Math.floor(timeLeft / 1000);
-    await message.reply(`⏳ You're catching your breath... come back in ${seconds}s.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `⏳ You're catching your breath! Come back in **${seconds}s**.` }] }).catch(() => {});
     return;
   }
 
@@ -1502,8 +1229,8 @@ async function cmdDig(message, args, util) {
     [message.guild.id, message.author.id, "digging", totalValveGain, `Dug up ${reward.item}`]
   );
 
-  const mapBonus = treasureMap ? "\n✨ **Treasure map bonus: 2x rewards!**" : "";
-  await message.reply(`⛏️ **You dug and found:** ${reward.item.toUpperCase()}!\n\n**Value:** ${totalValveGain} ${economySettings.currency_name}\n**Total dug:** ${digCount}${mapBonus}`).catch(() => {});
+  const mapBonus = treasureMap ? "\nâœ¨ **Treasure map bonus: 2x rewards!**" : "";
+  await message.reply({ embeds: [new EmbedBuilder().setColor(0xe67e22).setTitle(`⛏️ You dug and found: ${reward.item.replace(/_/g,' ').toUpperCase()}!`).setDescription(`**Value:** ${totalValveGain} ${economySettings.currency_name}\n**Total dug:** ${digCount}${mapBonus ? '\n\n✨ **Treasure map bonus: 2x rewards!**' : ''}`)] }).catch(() => {});
 }
 
 // ==================== ROBBERY SYSTEM ====================
@@ -1512,7 +1239,7 @@ async function cmdRobBank(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -1528,7 +1255,7 @@ async function cmdRobBank(message, args, util) {
   if (robber.last_bank_rob && (now - robber.last_bank_rob) < cooldown) {
     const timeLeft = cooldown - (now - robber.last_bank_rob);
     const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`❌ Cops are still on high alert! Wait ${minutes} more minutes.`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, title: '🎁 Gift Sent!', description: `You gifted **${inventoryItem.name}** to **${target.username}**! They'll find it in their inventory.` }] }).catch(() => {});
     return;
   }
 
@@ -1549,7 +1276,7 @@ async function cmdRobBank(message, args, util) {
       [message.guild.id, message.author.id, 0, now]
     );
 
-    await message.reply(`🚔 **BANK ROBBERY FAILED!**\n\nYou got caught by the police and paid a fine of ${fine} ${economySettings.currency_name}!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, title: '🚔 BANK ROBBERY FAILED!', description: `You got caught by the police and paid a fine of **${fine} ${economySettings.currency_name}**!` }] }).catch(() => {});
     return;
   }
 
@@ -1563,7 +1290,7 @@ async function cmdRobBank(message, args, util) {
     [message.guild.id, message.author.id, amount, now]
   );
 
-  await message.reply(`💰 **BANK ROBBERY SUCCESS!**\n\n🚨 You made off with ${amount} ${economySettings.currency_name}!\n*sirens in the distance...*`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, title: '💰 BANK ROBBERY SUCCESS!', description: `🚨 You made off with **${amount} ${economySettings.currency_name}**!\n\n*sirens in the distance...*` }] }).catch(() => {});
 }
 
 // ==================== PHONE SYSTEM ====================
@@ -1572,7 +1299,7 @@ async function cmdPhone(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
   
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
@@ -1583,7 +1310,7 @@ async function cmdPhone(message, args, util) {
   );
 
   if (!phone) {
-    await message.reply(`📱 You don't have a phone! Buy one from the shop.\n\n\`${ecoPrefix}buy phone\``).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, title: '❌ No Phone', description: `You don't have a phone! Buy one from the shop.\n\n\`${ecoPrefix}buy phone\`` }] }).catch(() => {});
     return;
   }
 
@@ -1598,7 +1325,7 @@ async function cmdPhone(message, args, util) {
       [message.guild.id, message.author.id, Date.now(), Date.now()]
     );
     
-    await message.reply(`📞 **Police Called!**\n\n🚔 Officers are patrolling your area for the next hour.\n✅ Bank robberies against you will fail if attempted within the hour.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, title: '📞 Police Called!', description: '🚔 Officers are patrolling your area for the next hour.\n✅ Bank robberies against you will fail if attempted within the hour.' }] }).catch(() => {});
     return;
   }
 
@@ -1612,7 +1339,7 @@ async function cmdPhone(message, args, util) {
     ];
     
     const randomStory = stories[Math.floor(Math.random() * stories.length)];
-    await message.reply(`🚕 **Taxi Ride**\n\n${randomStory}`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, title: '🚕 Taxi Ride', description: randomStory }] }).catch(() => {});
     return;
   }
 
@@ -1622,11 +1349,11 @@ async function cmdPhone(message, args, util) {
 
     const foodPrice = 50;
     if (economy.balance < foodPrice) {
-      await message.reply(`❌ Not enough money for takeout! (costs ${foodPrice} ${economySettings.currency_name})`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ Not enough money for takeout! (costs **${foodPrice} ${economySettings.currency_name}**)` }] }).catch(() => {});
       return;
     }
 
-    const foods = ["Pizza 🍕", "Burger 🍔", "Sushi 🍣", "Tacos 🌮", "Ramen 🍜"];
+    const foods = ["Pizza ðŸ•", "Burger ðŸ”", "Sushi ðŸ£", "Tacos ðŸŒ®", "Ramen ðŸœ"];
     const randomFood = foods[Math.floor(Math.random() * foods.length)];
 
     const newBalance = economy.balance - foodPrice;
@@ -1638,11 +1365,11 @@ async function cmdPhone(message, args, util) {
       [message.guild.id, message.author.id, "takeout", -foodPrice, "Ordered food"]
     );
 
-    await message.reply(`📱 **Takeout Delivered!**\n\n${randomFood} has arrived!\n*nom nom nom* 😋\n\nCost: ${foodPrice} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, title: '📱 Takeout Delivered!', description: `${randomFood} has arrived!\n*nom nom nom* 😋\n\nCost: **${foodPrice} ${economySettings.currency_name}**` }] }).catch(() => {});
     return;
   }
 
-  await message.reply(`📱 **Phone Services**\n\n\`${ecoPrefix}phone police\` - Call the police (1h protection)\n\`${ecoPrefix}phone taxi\` - Order a taxi (funny stories)\n\`${ecoPrefix}phone takeout\` - Order food (${50} ${economySettings.currency_name})`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x3498db, title: '📱 Phone Services', description: `\`${ecoPrefix}phone police\` — Call the police *(1h robbery protection)*\n\`${ecoPrefix}phone taxi\` — Order a taxi *(funny stories)*\n\`${ecoPrefix}phone takeout\` — Order food *(${50} ${economySettings.currency_name})*` }] }).catch(() => {});
 }
 
 // ==================== ITEM USE SYSTEM ====================
@@ -1652,12 +1379,12 @@ async function cmdUse(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
 
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
   if (!args[0]) {
-    await message.reply(`📦 **Usage:** \`${ecoPrefix}use <item_name>\`\nCheck your inventory with \`${ecoPrefix}inventory\``).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x95a5a6, description: `📦 **Usage:** \`${ecoPrefix}use <item_name>\`\nCheck your inventory with \`${ecoPrefix}inventory\`` }] }).catch(() => {});
     return;
   }
 
@@ -1675,12 +1402,12 @@ async function cmdUse(message, args, util) {
   `, [guildId, userId, `%${itemName}%`, `%${itemName}%`]);
 
   if (!inventoryItem) {
-    await message.reply(`❌ You don't have **${args.filter(a => !a.startsWith("<@")).join(" ")}** in your inventory!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have **${args.filter(a => !a.startsWith('<@')).join(' ')}** in your inventory!` }] }).catch(() => {});
     return;
   }
 
   if (!inventoryItem.use_effect) {
-    await message.reply(`❌ **${inventoryItem.name}** cannot be used — it's a ${inventoryItem.item_type}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ **${inventoryItem.name}** cannot be used — it's a ${inventoryItem.item_type}.` }] }).catch(() => {});
     return;
   }
 
@@ -1696,36 +1423,36 @@ async function cmdUse(message, args, util) {
   if (effect === "fishing_rod" || effect === "shovel") {
     consumed = false;
     const cmd = effect === "fishing_rod" ? "fish" : "dig";
-    await message.reply(`🔧 **${inventoryItem.name}** is a tool — having it in your inventory is enough! Try \`${ecoPrefix}${cmd}\`.`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x3498db, description: `🔧 **${inventoryItem.name}** is a tool — having it in your inventory is enough! Try \`${ecoPrefix}${cmd}\`.` }] }).catch(() => {});
     return;
 
   } else if (effect === "prestige_use") {
     consumed = false;
-    await message.reply(`⭐ The Prestige Token is used during \`${ecoPrefix}prestige ascend\` — keep it in your inventory!`).catch(() => {});
+    await message.reply(`â­ The Prestige Token is used during \`${ecoPrefix}prestige ascend\` â€” keep it in your inventory!`).catch(() => {});
     return;
 
   } else if (effect === "swamp_tonic") {
     const expires = now + 3600000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "earnings_boost_20", expires, expires]);
-    embedTitle = "🧪 Swamp Tonic — CONSUMED";
-    embedDesc = "The green liquid burns going down. Your vision goes swampy for a moment, then clears.\n\n✅ **+20% earnings boost** for the next **1 hour**!";
+    embedTitle = "ðŸ§ª Swamp Tonic â€” CONSUMED";
+    embedDesc = "The green liquid burns going down. Your vision goes swampy for a moment, then clears.\n\nâœ… **+20% earnings boost** for the next **1 hour**!";
     embedColor = 0x00ff88;
 
   } else if (effect === "padlock") {
     const expires = now + 14400000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "robbery_immune", expires, expires]);
-    embedTitle = "🔒 Padlock — ACTIVATED";
-    embedDesc = "You snap the padlock shut on your wallet.\n\n✅ **Robbery immunity** for **4 hours**!";
+    embedTitle = "ðŸ”’ Padlock â€” ACTIVATED";
+    embedDesc = "You snap the padlock shut on your wallet.\n\nâœ… **Robbery immunity** for **4 hours**!";
     embedColor = 0xffd700;
 
   } else if (effect === "trap_kit") {
     const expires = now + 86400000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "trap_set", expires, expires]);
-    embedTitle = "🪤 Trap Kit — SET";
-    embedDesc = "You carefully set the trap around your coin pouch. The next person to attempt a robbery will trigger it and *lose* 20% of their wallet.\n\n✅ **Robbery trap** active for **24 hours**!";
+    embedTitle = "ðŸª¤ Trap Kit â€” SET";
+    embedDesc = "You carefully set the trap around your coin pouch. The next person to attempt a robbery will trigger it and *lose* 20% of their wallet.\n\nâœ… **Robbery trap** active for **24 hours**!";
     embedColor = 0xff6600;
 
   } else if (effect === "fortune_scroll") {
@@ -1738,8 +1465,8 @@ async function cmdUse(message, args, util) {
       "A crude map appears then fades. But the coins remain.",
       "The runes spell out a number. That number is your blessing."
     ];
-    embedTitle = "📜 Fortune Scroll — READ";
-    embedDesc = `${fortunes[Math.floor(Math.random() * fortunes.length)]}\n\n✅ You received **+${bonus}** ${economySettings.currency_name}!`;
+    embedTitle = "ðŸ“œ Fortune Scroll â€” READ";
+    embedDesc = `${fortunes[Math.floor(Math.random() * fortunes.length)]}\n\nâœ… You received **+${bonus}** ${economySettings.currency_name}!`;
     embedColor = 0xffeedd;
 
   } else if (effect === "murk_map" || effect === "murk_lantern") {
@@ -1747,12 +1474,12 @@ async function cmdUse(message, args, util) {
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "explore_double", expires, expires]);
     if (effect === "murk_map") {
-      embedTitle = "🗺️ Murk Map — ACTIVATED";
-      embedDesc = "You trace the hand-drawn paths to a hidden clearing deep in the swamp.\n\n✅ **Explore loot doubled** for **2 hours**!";
+      embedTitle = "ðŸ—ºï¸ Murk Map â€” ACTIVATED";
+      embedDesc = "You trace the hand-drawn paths to a hidden clearing deep in the swamp.\n\nâœ… **Explore loot doubled** for **2 hours**!";
       embedColor = 0x6699ff;
     } else {
-      embedTitle = "🏮 Murk Lantern — LIT";
-      embedDesc = "The lantern flickers green. Hidden paths glow before you.\n\n✅ **Explore loot doubled** for **2 hours**!";
+      embedTitle = "ðŸ® Murk Lantern â€” LIT";
+      embedDesc = "The lantern flickers green. Hidden paths glow before you.\n\nâœ… **Explore loot doubled** for **2 hours**!";
       embedColor = 0x99ff66;
     }
 
@@ -1760,16 +1487,16 @@ async function cmdUse(message, args, util) {
     const expires = now + 7200000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "robbery_immune", expires, expires]);
-    embedTitle = "🌑 Shadow Cloak — WORN";
-    embedDesc = "Your form flickers and becomes indistinct. No one can rob what they can't see.\n\n✅ **Unrobbable** for **2 hours**!";
+    embedTitle = "ðŸŒ‘ Shadow Cloak â€” WORN";
+    embedDesc = "Your form flickers and becomes indistinct. No one can rob what they can't see.\n\nâœ… **Unrobbable** for **2 hours**!";
     embedColor = 0x222244;
 
   } else if (effect === "lucky_charm") {
     const expires = now + 21600000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "earnings_boost_20", expires, expires]);
-    embedTitle = "🍀 Lucky Charm — ACTIVATED";
-    embedDesc = "The four-leaf clover glows with a soft golden light as you hold it.\n\n✅ **+20% earnings boost** for **6 hours**!";
+    embedTitle = "ðŸ€ Lucky Charm â€” ACTIVATED";
+    embedDesc = "The four-leaf clover glows with a soft golden light as you hold it.\n\nâœ… **+20% earnings boost** for **6 hours**!";
     embedColor = 0x33cc66;
 
   } else if (effect === "gamblers_dice") {
@@ -1777,42 +1504,42 @@ async function cmdUse(message, args, util) {
     if (win) {
       const gain = balance * 2;
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + gain, guildId, userId]);
-      embedTitle = "🎲 Gambler's Dice — JACKPOT!";
-      embedDesc = `The dice clatter and land on **TRIPLE**. The table erupts in disbelief.\n\n🎉 You **TRIPLED** your wallet! **+${gain}** ${economySettings.currency_name}!`;
+      embedTitle = "ðŸŽ² Gambler's Dice â€” JACKPOT!";
+      embedDesc = `The dice clatter and land on **TRIPLE**. The table erupts in disbelief.\n\nðŸŽ‰ You **TRIPLED** your wallet! **+${gain}** ${economySettings.currency_name}!`;
       embedColor = 0xffdd00;
     } else {
       const loss = Math.floor(balance * 0.4);
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [Math.max(0, balance - loss), guildId, userId]);
-      embedTitle = "🎲 Gambler's Dice — BUST";
-      embedDesc = `The dice clatter. The room goes quiet. You lose.\n\n💸 Lost **${loss}** ${economySettings.currency_name}. The dice roll away into the dark.`;
+      embedTitle = "ðŸŽ² Gambler's Dice â€” BUST";
+      embedDesc = `The dice clatter. The room goes quiet. You lose.\n\nðŸ’¸ Lost **${loss}** ${economySettings.currency_name}. The dice roll away into the dark.`;
       embedColor = 0xff3333;
     }
 
   } else if (effect === "merchants_lens") {
     const target = message.mentions.users.first();
     if (!target) {
-      await message.reply(`❌ You need to mention a user: \`${ecoPrefix}use lens @user\``).catch(() => {});
+      await message.reply(`âŒ You need to mention a user: \`${ecoPrefix}use lens @user\``).catch(() => {});
       return;
     }
     const targetEconomy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, target.id]);
     const tBal = targetEconomy?.balance || 0;
     const tBank = targetEconomy?.bank || 0;
-    embedTitle = "🔍 Merchant's Lens — USED";
-    embedDesc = `You peer through the lens at **${target.username}**.\n\n👛 **Wallet:** ${tBal} ${economySettings.currency_name}\n🏦 **Bank:** ${tBank} ${economySettings.currency_name}\n💰 **Total:** ${tBal + tBank} ${economySettings.currency_name}\n\n*The lens shatters after revealing this truth.*`;
+    embedTitle = "ðŸ” Merchant's Lens â€” USED";
+    embedDesc = `You peer through the lens at **${target.username}**.\n\nðŸ‘› **Wallet:** ${tBal} ${economySettings.currency_name}\nðŸ¦ **Bank:** ${tBank} ${economySettings.currency_name}\nðŸ’° **Total:** ${tBal + tBank} ${economySettings.currency_name}\n\n*The lens shatters after revealing this truth.*`;
     embedColor = 0xaaddff;
 
   } else if (effect === "witch_brew") {
     const win = Math.random() < 0.5;
     if (win) {
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance * 2, guildId, userId]);
-      embedTitle = "🫖 Witch's Brew — BLESSED!";
-      embedDesc = `The brew tastes like copper and nightmares. Then the room spins...\n\n✨ **DOUBLED!** You gained **+${balance}** ${economySettings.currency_name}!`;
+      embedTitle = "ðŸ«– Witch's Brew â€” BLESSED!";
+      embedDesc = `The brew tastes like copper and nightmares. Then the room spins...\n\nâœ¨ **DOUBLED!** You gained **+${balance}** ${economySettings.currency_name}!`;
       embedColor = 0xff88ff;
     } else {
       const loss = Math.floor(balance / 2);
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [loss, guildId, userId]);
-      embedTitle = "🫖 Witch's Brew — CURSED!";
-      embedDesc = `The brew tastes like copper and nightmares. Your coins vanish...\n\n💀 **HALVED!** Lost **${balance - loss}** ${economySettings.currency_name}.`;
+      embedTitle = "ðŸ«– Witch's Brew â€” CURSED!";
+      embedDesc = `The brew tastes like copper and nightmares. Your coins vanish...\n\nðŸ’€ **HALVED!** Lost **${balance - loss}** ${economySettings.currency_name}.`;
       embedColor = 0x660066;
     }
 
@@ -1820,8 +1547,8 @@ async function cmdUse(message, args, util) {
     const expires = now + 10800000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "earnings_boost_100", expires, expires]);
-    embedTitle = "🐉 Dragon Scale — INFUSED";
-    embedDesc = "You hold the scale and feel ancient power surge through you. The air crackles.\n\n⚡ **2x ALL earnings** for **3 hours**!";
+    embedTitle = "ðŸ‰ Dragon Scale â€” INFUSED";
+    embedDesc = "You hold the scale and feel ancient power surge through you. The air crackles.\n\nâš¡ **2x ALL earnings** for **3 hours**!";
     embedColor = 0xff4400;
 
   } else if (effect === "cursed_compass") {
@@ -1829,38 +1556,38 @@ async function cmdUse(message, args, util) {
     if (success) {
       const bonus = Math.floor(Math.random() * 800) + 200;
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
-      embedTitle = "🧭 Cursed Compass — TREASURE FOUND!";
-      embedDesc = `The compass needle spins wildly then locks. You dig exactly where it points.\n\n💎 **Treasure found! +${bonus}** ${economySettings.currency_name}!`;
+      embedTitle = "ðŸ§­ Cursed Compass â€” TREASURE FOUND!";
+      embedDesc = `The compass needle spins wildly then locks. You dig exactly where it points.\n\nðŸ’Ž **Treasure found! +${bonus}** ${economySettings.currency_name}!`;
       embedColor = 0xffd700;
     } else {
       const loss = Math.min(balance, Math.floor(Math.random() * 200) + 50);
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance - loss, guildId, userId]);
-      embedTitle = "🧭 Cursed Compass — DANGER!";
-      embedDesc = `The compass leads you straight into a bog trap.\n\n💸 Lost **${loss}** ${economySettings.currency_name} in the chaos.`;
+      embedTitle = "ðŸ§­ Cursed Compass â€” DANGER!";
+      embedDesc = `The compass leads you straight into a bog trap.\n\nðŸ’¸ Lost **${loss}** ${economySettings.currency_name} in the chaos.`;
       embedColor = 0x994400;
     }
 
   } else if (effect === "ancient_coin") {
     const value = Math.floor(450 * 1.5);
     await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + value, guildId, userId]);
-    embedTitle = "🪙 Ancient Coin — SOLD";
-    embedDesc = `A shady merchant materialized from the shadows. "Ah, a Pre-Murk sovereign!"\n\n💰 Sold for **${value}** ${economySettings.currency_name} (1.5x value)!`;
+    embedTitle = "ðŸª™ Ancient Coin â€” SOLD";
+    embedDesc = `A shady merchant materialized from the shadows. "Ah, a Pre-Murk sovereign!"\n\nðŸ’° Sold for **${value}** ${economySettings.currency_name} (1.5x value)!`;
     embedColor = 0xddaa00;
 
   } else if (effect === "void_essence") {
     const shards = Math.floor(Math.random() * 6) + 3;
     await runCmd(`INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + ?`,
       [guildId, userId, "murk_shard", shards, shards]);
-    embedTitle = "🌑 Void Essence — CONSUMED";
-    embedDesc = `You uncork the vial. The void energy swirls out and crystallizes.\n\n⚫ The essence became **${shards} Murk Shards** in your inventory!`;
+    embedTitle = "ðŸŒ‘ Void Essence â€” CONSUMED";
+    embedDesc = `You uncork the vial. The void energy swirls out and crystallizes.\n\nâš« The essence became **${shards} Murk Shards** in your inventory!`;
     embedColor = 0x110022;
 
   } else if (effect === "frog_amulet") {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "daily_boost_15", expires, expires]);
-    embedTitle = "🐸 Frog Amulet — ATTUNED";
-    embedDesc = "You slip the amulet over your neck. One of the carvings blinks.\n\n✅ **+15% daily rewards** — permanent while owned!";
+    embedTitle = "ðŸ¸ Frog Amulet â€” ATTUNED";
+    embedDesc = "You slip the amulet over your neck. One of the carvings blinks.\n\nâœ… **+15% daily rewards** â€” permanent while owned!";
     embedColor = 0x33ff33;
     consumed = false; // single-use item persists in inventory
 
@@ -1868,8 +1595,8 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "passive_regen_50", expires, expires]);
-    embedTitle = "🦎 Lizard Totem — ACTIVATED";
-    embedDesc = "The totem vibrates in your palm. The lizard carving opens its eyes.\n\n✅ **+50 coin passive regen** every hour — permanent!";
+    embedTitle = "ðŸ¦Ž Lizard Totem â€” ACTIVATED";
+    embedDesc = "The totem vibrates in your palm. The lizard carving opens its eyes.\n\nâœ… **+50 coin passive regen** every hour â€” permanent!";
     embedColor = 0x55aaff;
     consumed = false;
 
@@ -1877,8 +1604,8 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "royal_boost", expires, expires]);
-    embedTitle = "👑 Frog Crown — CROWNED";
-    embedDesc = "You place the crown upon your head. The swamp falls silent.\n\n✅ **+25% daily & weekly bonus** — permanently bestowed!";
+    embedTitle = "ðŸ‘‘ Frog Crown â€” CROWNED";
+    embedDesc = "You place the crown upon your head. The swamp falls silent.\n\nâœ… **+25% daily & weekly bonus** â€” permanently bestowed!";
     embedColor = 0xffcc00;
     consumed = false;
 
@@ -1886,19 +1613,19 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "bazaar_access", expires, expires]);
-    embedTitle = "🎭 Black Market Pass — ACTIVATED";
-    embedDesc = "The pass glows with a dim red light. Somewhere in the Murk, a door unlocks.\n\n✅ **Dark Bazaar access** unlocked permanently!";
+    embedTitle = "ðŸŽ­ Black Market Pass â€” ACTIVATED";
+    embedDesc = "The pass glows with a dim red light. Somewhere in the Murk, a door unlocks.\n\nâœ… **Dark Bazaar access** unlocked permanently!";
     embedColor = 0x880000;
     consumed = false;
 
   } else if (effect === "revival_potion") {
     consumed = false;
-    await message.reply(`💜 **${inventoryItem.name}** is held in reserve — it automatically activates when you would die in an adventure or explore event!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x9b59b6, description: `🛡️ **${inventoryItem.name}** is held in reserve — it automatically activates when you would die in an adventure or explore event.` }] }).catch(() => {});
     return;
 
   } else {
     consumed = false;
-    await message.reply(`❓ This item doesn't have a defined interaction yet. Contact a server admin.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: "❓ This item doesn't have a defined interaction yet. Contact a server admin." }] }).catch(() => {});
     return;
   }
 
@@ -1926,12 +1653,12 @@ async function cmdItemInfo(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
 
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
   if (!args[0]) {
-    await message.reply(`📦 Usage: \`${ecoPrefix}item <item_name>\``).catch(() => {});
+    await message.reply(`ðŸ“¦ Usage: \`${ecoPrefix}item <item_name>\``).catch(() => {});
     return;
   }
 
@@ -1940,7 +1667,7 @@ async function cmdItemInfo(message, args, util) {
     [message.guild.id, `%${itemName}%`, `%${itemName}%`]);
 
   if (!item) {
-    await message.reply(`❌ Item not found: **${args.join(" ")}**\nCheck the shop with \`${ecoPrefix}shop\``).catch(() => {});
+    await message.reply(`âŒ Item not found: **${args.join(" ")}**\nCheck the shop with \`${ecoPrefix}shop\``).catch(() => {});
     return;
   }
 
@@ -1958,13 +1685,13 @@ async function cmdItemInfo(message, args, util) {
     .setColor(typeColors[item.item_type] || 0x888888)
     .setThumbnail(item.item_image_url || null)
     .addFields(
-      { name: "💰 Price", value: `${item.price} ${economySettings.currency_name}`, inline: true },
-      { name: "🏷️ Type", value: item.item_type.charAt(0).toUpperCase() + item.item_type.slice(1), inline: true },
-      { name: "🎒 You Own", value: owned ? `${owned.quantity}x` : "None", inline: true }
+      { name: "ðŸ’° Price", value: `${item.price} ${economySettings.currency_name}`, inline: true },
+      { name: "ðŸ·ï¸ Type", value: item.item_type.charAt(0).toUpperCase() + item.item_type.slice(1), inline: true },
+      { name: "ðŸŽ’ You Own", value: owned ? `${owned.quantity}x` : "None", inline: true }
     );
 
   if (item.use_effect && item.use_effect !== "fishing_rod" && item.use_effect !== "shovel" && item.use_effect !== "prestige_use" && item.use_effect !== "revival_potion") {
-    embed.addFields({ name: "⚡ Use Command", value: `\`${ecoPrefix}use ${item.item_id}\``, inline: true });
+    embed.addFields({ name: "âš¡ Use Command", value: `\`${ecoPrefix}use ${item.item_id}\``, inline: true });
   }
   embed.setFooter({ text: "THE MURK | Item Compendium" });
 
@@ -1977,18 +1704,18 @@ async function cmdGift(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
 
   if (!economySettings?.enabled) {
-    await message.reply("❌ Economy system is disabled.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
   }
 
   const target = message.mentions.users.first();
   if (!target || args.length < 2) {
-    await message.reply(`❌ Usage: \`${ecoPrefix}gift @user <item_name>\``).catch(() => {});
+    await message.reply(`âŒ Usage: \`${ecoPrefix}gift @user <item_name>\``).catch(() => {});
     return;
   }
 
   if (target.id === message.author.id) {
-    await message.reply("❌ You can't gift items to yourself.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You can't gift items to yourself." }] }).catch(() => {});
     return;
   }
 
@@ -2004,7 +1731,7 @@ async function cmdGift(message, args, util) {
   `, [message.guild.id, message.author.id, `%${itemName}%`, `%${itemName}%`]);
 
   if (!inventoryItem) {
-    await message.reply(`❌ You don't have **${args.slice(1).filter(a => !a.startsWith("<@")).join(" ")}** in your inventory!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have **${args.slice(1).filter(a => !a.startsWith('<@')).join(' ')}** in your inventory!` }] }).catch(() => {});
     return;
   }
 
@@ -2015,5 +1742,5 @@ async function cmdGift(message, args, util) {
   await runCmd(`INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, 1) ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + 1`,
     [message.guild.id, target.id, inventoryItem.item_id]);
 
-  await message.reply(`🎁 You gifted **${inventoryItem.name}** to **${target.username}**! They'll find it in their inventory.`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, title: '🎁 Gift Sent!', description: `You gifted **${inventoryItem.name}** to **${target.username}**! They'll find it in their inventory.` }] }).catch(() => {});
 }

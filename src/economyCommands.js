@@ -72,7 +72,7 @@ async function getEconomySettings(guildId) {
 async function cmdBalance(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -100,7 +100,7 @@ async function cmdBalance(message, args) {
 async function cmdDaily(message) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -119,7 +119,7 @@ async function cmdDaily(message) {
     const timeLeft = dayInMs - (now - economy.last_daily);
     const hours = Math.floor(timeLeft / 3600000);
     const minutes = Math.floor((timeLeft % 3600000) / 60000);
-    await message.reply(`⏰ You already claimed your daily reward! Come back in ${hours}h ${minutes}m.\n🔥 Current streak: **${economy.daily_streak || 0}** days`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `⏰ You already claimed your daily reward! Come back in ${hours}h ${minutes}m.\n🔥 Current streak: **${economy.daily_streak || 0}** days` }] }).catch(() => {});
     return;
   }
 
@@ -161,7 +161,7 @@ async function cmdDaily(message) {
 async function cmdWeekly(message) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -180,7 +180,7 @@ async function cmdWeekly(message) {
     const timeLeft = weekInMs - (now - economy.last_weekly);
     const days = Math.floor(timeLeft / 86400000);
     const hours = Math.floor((timeLeft % 86400000) / 3600000);
-    await message.reply(`⏰ You already claimed your weekly reward! Come back in ${days}d ${hours}h.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `⏰ You already claimed your weekly reward! Come back in ${days}d ${hours}h.` }] }).catch(() => {});
     return;
   }
 
@@ -190,13 +190,13 @@ async function cmdWeekly(message) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "weekly", economySettings.weekly_amount, "Weekly reward"]);
 
-  await message.reply(`✅ You claimed your weekly reward of ${economySettings.weekly_amount} ${economySettings.currency_name}! ${economySettings.currency_symbol}`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You claimed your weekly reward of ${economySettings.weekly_amount} ${economySettings.currency_name}! ${economySettings.currency_symbol}` }] }).catch(() => {});
 }
 
 async function cmdPay(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -205,26 +205,26 @@ async function cmdPay(message, args) {
 
   if (args.length < 2) {
     const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`💸 **Pay Another User**\n\nTransfer money from your wallet to another user.\n\n**Usage:** \`${ecoPrefix}pay @user <amount>\`\n**Example:** \`${ecoPrefix}pay @John 500\`\n\n**Your Balance:** ${senderEcon.balance} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x2ecc71).setTitle('💸 Pay Another User').setDescription(`Transfer money from your wallet to another user.\n\n**Usage:** \`${ecoPrefix}pay @user <amount>\`\n**Example:** \`${ecoPrefix}pay @John 500\`\n\n**Your Balance:** ${senderEcon.balance} ${economySettings.currency_name}`)] }).catch(() => {});
     return;
   }
 
   const target = await pickUserSmart(message, args[0]);
   if (!target || target.ambiguous || target.member.user.bot) {
-    await message.reply("❌ Invalid user or cannot pay bots.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid user or cannot pay bots." }] }).catch(() => {});
     return;
   }
 
   const amount = Number.parseInt(args[1], 10);
   if (!Number.isFinite(amount) || amount <= 0) {
-    await message.reply("❌ Invalid amount.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid amount." }] }).catch(() => {});
     return;
   }
 
   await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.member.id]);
 
   if (senderEcon.balance < amount) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
 
@@ -236,13 +236,13 @@ async function cmdPay(message, args) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, target.member.id, "pay_received", amount, `Received from ${message.author.tag}`]);
 
-  await message.reply(`✅ You paid ${amount} ${economySettings.currency_name} to ${target.member}! ${economySettings.currency_symbol}`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You paid ${amount} ${economySettings.currency_name} to ${target.member}! ${economySettings.currency_symbol}` }] }).catch(() => {});
 }
 
 async function cmdEcoLeaderboard(message) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -255,7 +255,7 @@ async function cmdEcoLeaderboard(message) {
   `, [message.guild.id]);
 
   if (top.length === 0) {
-    await message.reply("No economy data yet!").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "No economy data yet!" }] }).catch(() => {});
     return;
   }
 
@@ -279,7 +279,7 @@ async function cmdEcoLeaderboard(message) {
 async function cmdDeposit(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -288,7 +288,7 @@ async function cmdDeposit(message, args) {
 
   if (!args[0]) {
     const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`💰 **Deposit Money to Bank**\n\nMove money from your wallet to your bank for safekeeping.\n\n**Usage:**\n\`${ecoPrefix}deposit <amount>\` - Deposit specific amount\n\`${ecoPrefix}deposit all\` - Deposit everything\n\n**Your Balance:**\n💵 Wallet: ${economy.balance} ${economySettings.currency_name}\n🏦 Bank: ${economy.bank} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x3498db).setTitle('💰 Deposit Money to Bank').setDescription(`Move money from your wallet to your bank for safekeeping.\n\n**Usage:**\n\`${ecoPrefix}deposit <amount>\`\n\`${ecoPrefix}deposit all\`\n\n**Your Wallet:** ${economy.balance} ${economySettings.currency_name}\n**Your Bank:** ${economy.bank} ${economySettings.currency_name}`)] }).catch(() => {});
     return;
   }
 
@@ -298,13 +298,13 @@ async function cmdDeposit(message, args) {
   } else {
     amount = parseInt(args[0]);
     if (isNaN(amount) || amount <= 0) {
-      await message.reply("❌ Please specify a valid amount or 'all'.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid amount or 'all'." }] }).catch(() => {});
       return;
     }
   }
 
   if (economy.balance < amount) {
-    await message.reply(`❌ You only have ${economy.balance} ${economySettings.currency_name} in your wallet!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You only have ${economy.balance} ${economySettings.currency_name} in your wallet!` }] }).catch(() => {});
     return;
   }
 
@@ -313,13 +313,13 @@ async function cmdDeposit(message, args) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "deposit", amount, "Bank deposit"]);
 
-  await message.reply(`✅ Deposited ${amount} ${economySettings.currency_name} to your bank. 🏦`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Deposited ${amount} ${economySettings.currency_name} to your bank. 🏦` }] }).catch(() => {});
 }
 
 async function cmdWithdraw(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -328,7 +328,7 @@ async function cmdWithdraw(message, args) {
 
   if (!args[0]) {
     const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`💰 **Withdraw Money from Bank**\n\nMove money from your bank to your wallet.\n\n**Usage:**\n\`${ecoPrefix}withdraw <amount>\` - Withdraw specific amount\n\`${ecoPrefix}withdraw all\` - Withdraw everything\n\n**Your Balance:**\n💵 Wallet: ${economy.balance} ${economySettings.currency_name}\n🏦 Bank: ${economy.bank} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x3498db).setTitle('💵 Withdraw Money from Bank').setDescription(`Move money from your bank to your wallet.\n\n**Usage:**\n\`${ecoPrefix}withdraw <amount>\`\n\`${ecoPrefix}withdraw all\`\n\n**Your Wallet:** ${economy.balance} ${economySettings.currency_name}\n**Your Bank:** ${economy.bank} ${economySettings.currency_name}`)] }).catch(() => {});
     return;
   }
 
@@ -338,13 +338,13 @@ async function cmdWithdraw(message, args) {
   } else {
     amount = parseInt(args[0]);
     if (isNaN(amount) || amount <= 0) {
-      await message.reply("❌ Please specify a valid amount or 'all'.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid amount or 'all'." }] }).catch(() => {});
       return;
     }
   }
 
   if (economy.bank < amount) {
-    await message.reply(`❌ You only have ${economy.bank} ${economySettings.currency_name} in your bank!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You only have ${economy.bank} ${economySettings.currency_name} in your bank!` }] }).catch(() => {});
     return;
   }
 
@@ -353,7 +353,7 @@ async function cmdWithdraw(message, args) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "withdraw", amount, "Bank withdrawal"]);
 
-  await message.reply(`✅ Withdrew ${amount} ${economySettings.currency_name} from your bank. 💵`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Withdrew ${amount} ${economySettings.currency_name} from your bank. 💵` }] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -363,20 +363,20 @@ async function cmdWithdraw(message, args) {
 async function cmdRob(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled || !economySettings.rob_enabled) {
-    await message.reply("❌ Robbing is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Robbing is disabled on this server." }] }).catch(() => {});
     return;
   }
 
   if (!args[0]) {
     const ecoPrefix = economySettings.economy_prefix || "$";
     const cooldownMins = Math.floor((economySettings.rob_cooldown || 3600) / 60);
-    await message.reply(`💰 **Rob Another User**\n\nAttempt to steal money from another user's wallet! (50% success rate)\n\n**Usage:** \`${ecoPrefix}rob @user\`\n\n**Rules:**\n• 50% chance to succeed\n• If caught, you pay a fine\n• Users with 🔒 Padlock are protected\n• Cooldown: ${cooldownMins} minutes\n• Target must have at least 50 ${economySettings.currency_name}\n\n**Tip:** Buy a padlock from the shop to protect yourself!`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xe67e22).setTitle('💰 Rob Another User').setDescription(`Attempt to steal money from another user's wallet! (50% success rate)\n\n**Usage:** \`${ecoPrefix}rob @user\`\n\n**Risk:** You pay a fine if caught!\n**Cooldown:** ${economySettings.rob_cooldown || 60} minutes`)] }).catch(() => {});
     return;
   }
 
   const targetResult = parseUserMentionSimple(message, args[0]);
   if (!targetResult.found || targetResult.member.user.bot || targetResult.member.id === message.author.id) {
-    await message.reply("❌ Please mention a valid user to rob.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please mention a valid user to rob." }] }).catch(() => {});
     return;
   }
   const target = targetResult;
@@ -392,7 +392,7 @@ async function cmdRob(message, args) {
   if (robber.last_normal_rob && (now - robber.last_normal_rob) < cooldown) {
     const timeLeft = cooldown - (now - robber.last_normal_rob);
     const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`❌ You must wait ${minutes} minutes before robbing again!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You must wait ${minutes} minutes before robbing again!` }] }).catch(() => {});
     return;
   }
 
@@ -401,13 +401,13 @@ async function cmdRob(message, args) {
   if (padlock) {
     await run(`UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id='padlock'`,
       [message.guild.id, target.member.id]);
-    await message.reply(`❌ ${target.member} had a 🔒 **Padlock** protecting their wallet! It broke when you tried to rob them.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ ${target.member} had a 🔒 **Padlock** protecting their wallet! It broke when you tried to rob them.` }] }).catch(() => {});
     await run(`UPDATE user_economy SET last_normal_rob=? WHERE guild_id=? AND user_id=?`, [now, message.guild.id, message.author.id]);
     return;
   }
 
   if (victim.balance < 50) {
-    await message.reply(`❌ ${target.member} is too poor to rob! (less than 50 ${economySettings.currency_name})`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ ${target.member} is too poor to rob! (less than 50 ${economySettings.currency_name})` }] }).catch(() => {});
     return;
   }
 
@@ -418,7 +418,7 @@ async function cmdRob(message, args) {
       [robber.balance - fine, now, message.guild.id, message.author.id]);
     await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
       [message.guild.id, message.author.id, "rob_failed", -fine, `Failed to rob ${target.member.user.tag}`]);
-    await message.reply(`❌ You got caught trying to rob ${target.member}! You paid a fine of ${fine} ${economySettings.currency_name}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You got caught trying to rob ${target.member}! You paid a fine of ${fine} ${economySettings.currency_name}.` }] }).catch(() => {});
     return;
   }
 
@@ -432,7 +432,7 @@ async function cmdRob(message, args) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, target.member.id, "robbed", -stolen, `Robbed by ${message.author.tag}`]);
 
-  await message.reply(`✅ You successfully robbed ${stolen} ${economySettings.currency_name} from ${target.member}! 💰`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You successfully robbed ${stolen} ${economySettings.currency_name} from ${target.member}! 💰` }] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -442,7 +442,7 @@ async function cmdRob(message, args) {
 async function cmdSlots(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -451,18 +451,18 @@ async function cmdSlots(message, args) {
 
   if (!args[0]) {
     const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`🎰 **Slot Machine**\n\nSpin the slots and win big!\n\n**Usage:** \`${ecoPrefix}slots <bet>\`\n\n**Payouts:**\n🎉 Triple Match: 3x\n💎 Triple Diamonds: 5x\n7️⃣ Triple Sevens: 10x (JACKPOT!)\n🎯 Double Match: 1.5x\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x9b59b6).setTitle('🎰 Slot Machine').setDescription(`Spin the slots and win big!\n\n**Usage:** \`${ecoPrefix}slots <bet>\`\n\n**Payouts:**\n🎉 Triple Match: 3x\n💎 Triple Diamonds: 5x\n7️⃣ Triple Sevens: 10x (JACKPOT!)\n🎯 Double Match: 1.5x\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`)] }).catch(() => {});
     return;
   }
 
   const bet = parseInt(args[0]);
   if (isNaN(bet) || bet <= 0) {
-    await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid bet amount." }] }).catch(() => {});
     return;
   }
 
   if (economy.balance < bet) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
 
@@ -510,7 +510,7 @@ async function cmdSlots(message, args) {
 async function cmdCoinflip(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -519,7 +519,7 @@ async function cmdCoinflip(message, args) {
 
   if (!args[0] || !args[1]) {
     const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`🪙 **Coinflip**\n\nBet on heads or tails! Double your money or lose it all.\n\n**Usage:** \`${ecoPrefix}coinflip <bet> <heads/tails>\`\n**Example:** \`${ecoPrefix}coinflip 100 h\`\n\n**Choices:** heads, tails, h, t\n**Payout:** 2x your bet\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xf1c40f).setTitle('🪙 Coinflip').setDescription(`Bet on heads or tails! Double your money or lose it all.\n\n**Usage:** \`${ecoPrefix}coinflip <bet> <heads/tails>\`\n**Example:** \`${ecoPrefix}coinflip 100 h\`\n\n**Choices:** heads, tails, h, t\n**Payout:** 2x your bet\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`)] }).catch(() => {});
     return;
   }
 
@@ -527,17 +527,17 @@ async function cmdCoinflip(message, args) {
   const choice = args[1]?.toLowerCase();
 
   if (isNaN(bet) || bet <= 0) {
-    await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid bet amount." }] }).catch(() => {});
     return;
   }
 
   if (!["heads", "tails", "h", "t"].includes(choice)) {
-    await message.reply("❌ Please choose heads (h) or tails (t).").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please choose heads (h) or tails (t)." }] }).catch(() => {});
     return;
   }
 
   if (economy.balance < bet) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
 
@@ -568,7 +568,7 @@ async function cmdCoinflip(message, args) {
 async function cmdDice(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -577,7 +577,7 @@ async function cmdDice(message, args) {
 
   if (!args[0] || !args[1]) {
     const ecoPrefix = economySettings.economy_prefix || "$";
-    await message.reply(`🎲 **Dice Roll**\n\nGuess the dice roll (1-6) and win 6x your bet!\n\n**Usage:** \`${ecoPrefix}dice <bet> <guess>\`\n**Example:** \`${ecoPrefix}dice 100 5\`\n\n**Payout:** 6x your bet if you guess correctly\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle('🎲 Dice Roll').setDescription(`Guess the dice roll (1-6) and win 6x your bet!\n\n**Usage:** \`${ecoPrefix}dice <bet> <guess>\`\n**Example:** \`${ecoPrefix}dice 100 5\`\n\n**Payout:** 6x your bet if you guess correctly\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`)] }).catch(() => {});
     return;
   }
 
@@ -585,17 +585,17 @@ async function cmdDice(message, args) {
   const guess = parseInt(args[1]);
 
   if (isNaN(bet) || bet <= 0) {
-    await message.reply("❌ Please specify a valid bet amount.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid bet amount." }] }).catch(() => {});
     return;
   }
 
   if (isNaN(guess) || guess < 1 || guess > 6) {
-    await message.reply("❌ Please guess a number between 1 and 6.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please guess a number between 1 and 6." }] }).catch(() => {});
     return;
   }
 
   if (economy.balance < bet) {
-    await message.reply(`❌ You don't have enough ${economySettings.currency_name}!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
 
@@ -629,7 +629,7 @@ async function cmdDice(message, args) {
 async function cmdJob(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -638,7 +638,7 @@ async function cmdJob(message, args) {
   if (!subcommand || subcommand === "list") {
     const jobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY pay_min ASC`, [message.guild.id]);
     if (jobs.length === 0) {
-      await message.reply("❌ No jobs available! Ask an admin to add some.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ No jobs available! Ask an admin to add some." }] }).catch(() => {});
       return;
     }
 
@@ -661,46 +661,46 @@ async function cmdJob(message, args) {
   if (subcommand === "apply") {
     const jobName = args.slice(1).join(" ");
     if (!jobName) {
-      await message.reply("❌ Please specify a job name.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a job name." }] }).catch(() => {});
       return;
     }
 
     const job = await get(`SELECT * FROM economy_jobs WHERE guild_id=? AND LOWER(name)=LOWER(?)`, [message.guild.id, jobName]);
     if (!job) {
-      await message.reply("❌ That job doesn't exist! Use `job list` to see available jobs.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ That job doesn't exist! Use `job list` to see available jobs." }] }).catch(() => {});
       return;
     }
 
     if (economy.job_id) {
-      await message.reply("❌ You already have a job! Use `job quit` first.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You already have a job! Use `job quit` first." }] }).catch(() => {});
       return;
     }
 
     if (economy.job_shifts_completed < job.required_shifts) {
-      await message.reply(`❌ You need ${job.required_shifts} total shifts completed to apply for this job! (You have ${economy.job_shifts_completed})`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need ${job.required_shifts} total shifts completed to apply for this job! (You have ${economy.job_shifts_completed})` }] }).catch(() => {});
       return;
     }
 
     await run(`UPDATE user_economy SET job_id=?, job_weekly_shifts=0, job_week_reset=? WHERE guild_id=? AND user_id=?`,
       [job.id, Date.now(), message.guild.id, message.author.id]);
 
-    await message.reply(`✅ Congratulations! You got the job as **${job.name}**! Start working with the \`work\` command.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, title: '✅ Hired!', description: `Congratulations! You got the job as **${job.name}**! Start working with the \`work\` command.` }] }).catch(() => {});
     return;
   }
 
   if (subcommand === "quit") {
     if (!economy.job_id) {
-      await message.reply("❌ You don't have a job!").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You don't have a job!" }] }).catch(() => {});
       return;
     }
     await run(`UPDATE user_economy SET job_id=NULL, job_weekly_shifts=0 WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-    await message.reply("✅ You quit your job.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: "✅ You quit your job." }] }).catch(() => {});
     return;
   }
 
   if (subcommand === "info") {
     if (!economy.job_id) {
-      await message.reply("❌ You don't have a job! Use `job list` to see available jobs.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You don't have a job! Use `job list` to see available jobs." }] }).catch(() => {});
       return;
     }
 
@@ -725,13 +725,13 @@ async function cmdJob(message, args) {
     return;
   }
 
-  await message.reply("❌ Usage: `job list`, `job apply <name>`, `job quit`, or `job info`").catch(() => {});
+  await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Usage: `job list`, `job apply <name>`, `job quit`, or `job info`" }] }).catch(() => {});
 }
 
 async function cmdWork(message) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -739,7 +739,7 @@ async function cmdWork(message) {
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (!economy.job_id) {
-    await message.reply("❌ You don't have a job! Use `job apply <name>` to get one.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You don't have a job! Use `job apply <name>` to get one." }] }).catch(() => {});
     return;
   }
 
@@ -748,7 +748,7 @@ async function cmdWork(message) {
   if (economy.job_last_shift && (now - economy.job_last_shift) < shiftCooldown) {
     const timeLeft = shiftCooldown - (now - economy.job_last_shift);
     const minutes = Math.floor(timeLeft / 60000);
-    await message.reply(`❌ You're tired! Rest for ${minutes} more minutes before your next shift.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You're tired! Rest for ${minutes} more minutes before your next shift.` }] }).catch(() => {});
     return;
   }
 
@@ -759,7 +759,7 @@ async function cmdWork(message) {
     if (economy.job_weekly_shifts < job.weekly_shifts_required) {
       await run(`UPDATE user_economy SET job_id=NULL, job_weekly_shifts=0, job_week_reset=NULL WHERE guild_id=? AND user_id=?`,
         [message.guild.id, message.author.id]);
-      await message.reply(`❌ You were fired from **${job.name}** for not completing ${job.weekly_shifts_required} shifts last week!`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You were fired from **${job.name}** for not completing ${job.weekly_shifts_required} shifts last week!` }] }).catch(() => {});
       return;
     }
     await run(`UPDATE user_economy SET job_weekly_shifts=0, job_week_reset=? WHERE guild_id=? AND user_id=?`,
@@ -772,11 +772,11 @@ async function cmdWork(message) {
   if (game === "typing") {
     const words = ["javascript", "programming", "computer", "keyboard", "algorithm", "database", "function", "variable", "discord", "economy"];
     const word = words[Math.floor(Math.random() * words.length)];
-    await message.reply(`⌨️ **Typing Challenge!**\nType the following word within 15 seconds:\n\`\`\`${word}\`\`\``).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, title: '⌨️ Typing Challenge!', description: `Type the following word within 15 seconds:\n\`\`\`${word}\`\`\`` }] }).catch(() => {});
     const filter = m => m.author.id === message.author.id && m.content.toLowerCase() === word.toLowerCase();
     const collected = await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ["time"] }).catch(() => null);
     if (!collected || collected.size === 0) {
-      await message.reply("❌ Time's up! You failed the shift.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Time's up! You failed the shift." }] }).catch(() => {});
       return;
     }
   } else if (game === "emoji") {
@@ -788,11 +788,11 @@ async function cmdWork(message) {
       if (!options.includes(random)) options.push(random);
     }
     options.sort(() => Math.random() - 0.5);
-    await message.reply(`🎯 **Emoji Challenge!**\nFind and type the **${target}** emoji within 15 seconds:\n${options.join(" ")}`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, description: `🎯 **Emoji Challenge!**\nFind and type the **${target}** emoji within 15 seconds:\n${options.join(" ")}` }] }).catch(() => {});
     const filter = m => m.author.id === message.author.id && m.content.includes(target);
     const collected = await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ["time"] }).catch(() => null);
     if (!collected || collected.size === 0) {
-      await message.reply("❌ Time's up! You failed the shift.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Time's up! You failed the shift." }] }).catch(() => {});
       return;
     }
   } else if (game === "math") {
@@ -804,11 +804,11 @@ async function cmdWork(message) {
     if (op === "+") answer = num1 + num2;
     else if (op === "-") answer = num1 - num2;
     else answer = num1 * num2;
-    await message.reply(`🔢 **Math Challenge!**\nSolve within 15 seconds:\n\`\`\`${num1} ${op} ${num2} = ?\`\`\``).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, title: '🔢 Math Challenge!', description: `Solve within 15 seconds:\n\`\`\`${num1} ${op} ${num2} = ?\`\`\`` }] }).catch(() => {});
     const filter = m => m.author.id === message.author.id && parseInt(m.content) === answer;
     const collected = await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ["time"] }).catch(() => null);
     if (!collected || collected.size === 0) {
-      await message.reply("❌ Time's up! You failed the shift.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Time's up! You failed the shift." }] }).catch(() => {});
       return;
     }
   }
@@ -819,7 +819,7 @@ async function cmdWork(message) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "work", pay, `Worked as ${job.name}`]);
 
-  await message.reply(`✅ Shift complete! You earned ${pay} ${economySettings.currency_name}. (${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} this week)`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Shift complete! You earned ${pay} ${economySettings.currency_name}. (${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} this week)` }] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -829,13 +829,13 @@ async function cmdWork(message) {
 async function cmdShop(message) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
   const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [message.guild.id]);
   if (items.length === 0) {
-    await message.reply("❌ The shop is empty! Ask an admin to add items.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ The shop is empty! Ask an admin to add items." }] }).catch(() => {});
     return;
   }
 
@@ -876,7 +876,7 @@ async function cmdShop(message) {
 async function cmdBuy(message, args) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -887,14 +887,14 @@ async function cmdBuy(message, args) {
 
   const itemIndex = parseInt(args[0]) - 1;
   if (isNaN(itemIndex)) {
-    await message.reply("❌ Please specify an item number from the shop.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify an item number from the shop." }] }).catch(() => {});
     return;
   }
 
   const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [message.guild.id]);
   const item = items[itemIndex];
   if (!item) {
-    await message.reply("❌ Invalid item number!").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid item number!" }] }).catch(() => {});
     return;
   }
 
@@ -902,7 +902,7 @@ async function cmdBuy(message, args) {
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (economy.balance < item.price) {
-    await message.reply(`❌ You need ${item.price} ${economySettings.currency_name} to buy this! You have ${economy.balance}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need ${item.price} ${economySettings.currency_name} to buy this! You have ${economy.balance}.` }] }).catch(() => {});
     return;
   }
 
@@ -910,7 +910,7 @@ async function cmdBuy(message, args) {
     const owned = await get(`SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=?`,
       [message.guild.id, message.author.id, item.item_id]);
     if (owned && owned.quantity > 0) {
-      await message.reply("❌ You already own this item!").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You already own this item!" }] }).catch(() => {});
       return;
     }
   }
@@ -926,13 +926,13 @@ async function cmdBuy(message, args) {
     DO UPDATE SET quantity = user_inventory.quantity + 1
   `, [message.guild.id, message.author.id, item.item_id]);
 
-  await message.reply(`✅ You bought **${item.name}** for ${item.price} ${economySettings.currency_name}!`).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You bought **${item.name}** for ${item.price} ${economySettings.currency_name}!` }] }).catch(() => {});
 }
 
 async function cmdInventory(message) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
-    await message.reply("❌ Economy system is disabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -944,7 +944,7 @@ async function cmdInventory(message) {
   `, [message.guild.id, message.author.id]);
 
   if (items.length === 0) {
-    await message.reply("🎒 Your inventory is empty!").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, description: "🎒 Your inventory is empty!" }] }).catch(() => {});
     return;
   }
 
@@ -977,7 +977,7 @@ async function cmdEcoAdmin(message, args) {
   const settings = await get(`SELECT mod_role_id FROM guild_settings WHERE guild_id=?`, [message.guild.id]);
   const isManager = settings?.mod_role_id && member.roles?.cache?.has(settings.mod_role_id);
   if (!isAdmin && !isManager) {
-    await message.reply("You need admin/manager permissions to use `ecoadmin`.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: "You need admin/manager permissions to use `ecoadmin`." }] }).catch(() => {});
     return;
   }
 
@@ -988,13 +988,13 @@ async function cmdEcoAdmin(message, args) {
   const sym = ecoSettings?.currency_symbol || "🪙";
 
   if (!["give", "take", "set", "reset"].includes(sub)) {
-    await message.reply("Usage: `!ecoadmin give|take|set|reset <@user> [amount]`").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!ecoadmin give|take|set|reset <@user> [amount]`" }] }).catch(() => {});
     return;
   }
 
   const found = await pickUserSmart(message, args[1]);
   if (!found?.member) {
-    await message.reply("User not found. Please mention or provide a valid username/ID.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "User not found. Please mention or provide a valid username/ID." }] }).catch(() => {});
     return;
   }
   const target = found.member;
@@ -1009,31 +1009,31 @@ async function cmdEcoAdmin(message, args) {
 
   if (sub === "reset") {
     await run(`UPDATE user_economy SET balance=0, bank=0 WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
-    await message.reply(`✅ Reset economy for ${target.user.tag}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Reset economy for ${target.user.tag}.` }] }).catch(() => {});
     return;
   }
 
   const amount = parseInt(args[2], 10);
   if (!amount || amount < 0) {
-    await message.reply("Please provide a valid positive amount.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, description: "Please provide a valid positive amount." }] }).catch(() => {});
     return;
   }
 
   if (sub === "give") {
     await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
-    await message.reply(`✅ Gave ${sym}${amount.toLocaleString()} to ${target.user.tag}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Gave ${sym}${amount.toLocaleString()} to ${target.user.tag}.` }] }).catch(() => {});
     return;
   }
 
   if (sub === "take") {
     await run(`UPDATE user_economy SET balance=GREATEST(0, balance-?) WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
-    await message.reply(`✅ Removed ${sym}${amount.toLocaleString()} from ${target.user.tag}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Removed ${sym}${amount.toLocaleString()} from ${target.user.tag}.` }] }).catch(() => {});
     return;
   }
 
   if (sub === "set") {
     await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
-    await message.reply(`✅ Set ${target.user.tag}'s wallet to ${sym}${amount.toLocaleString()}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Set ${target.user.tag}'s wallet to ${sym}${amount.toLocaleString()}.` }] }).catch(() => {});
     return;
   }
 }
@@ -1049,7 +1049,7 @@ async function cmdTrade(message, args) {
 
   const ecoSettings = await getEconomySettings(guildId);
   if (!ecoSettings?.enabled) {
-    await message.reply("Economy is not enabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, description: "Economy is not enabled on this server." }] }).catch(() => {});
     return;
   }
 
@@ -1058,24 +1058,24 @@ async function cmdTrade(message, args) {
     // e.g. !trade offer @User iron_sword for gold_bar
     const forIdx = args.indexOf("for");
     if (forIdx === -1 || forIdx < 3) {
-      await message.reply("Usage: `!trade offer <@user> <your_item> for <their_item>`").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!trade offer <@user> <your_item> for <their_item>`" }] }).catch(() => {});
       return;
     }
     const found = await pickUserSmart(message, args[1]);
     if (!found?.member) {
-      await message.reply("Target user not found.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "Target user not found." }] }).catch(() => {});
       return;
     }
     const toUser = found.member;
     if (toUser.user.id === userId) {
-      await message.reply("You cannot trade with yourself.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: "You cannot trade with yourself." }] }).catch(() => {});
       return;
     }
 
     const fromItem = args.slice(2, forIdx).join(" ").trim().toLowerCase();
     const toItem = args.slice(forIdx + 1).join(" ").trim().toLowerCase();
     if (!fromItem || !toItem) {
-      await message.reply("Please specify both items for the trade.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: "Please specify both items for the trade." }] }).catch(() => {});
       return;
     }
 
@@ -1092,7 +1092,7 @@ async function cmdTrade(message, args) {
       [guildId, toItem, toItem]
     );
     if (!offeredItem || !wantedItem) {
-      await message.reply("One or both items were not found in the shop catalog. Use the item ID from the shop/inventory.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "One or both items were not found in the shop catalog. Use the item ID from the shop/inventory." }] }).catch(() => {});
       return;
     }
 
@@ -1101,7 +1101,7 @@ async function cmdTrade(message, args) {
       [guildId, userId, offeredItem.item_id]
     );
     if (!senderInv || senderInv.quantity < 1) {
-      await message.reply(`You don't have **${offeredItem.name || offeredItem.item_id}** in your inventory.`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: `You don't have **${offeredItem.name || offeredItem.item_id}** in your inventory.` }] }).catch(() => {});
       return;
     }
 
@@ -1112,18 +1112,14 @@ async function cmdTrade(message, args) {
     );
 
     const offer = await get(`SELECT id FROM trade_offers WHERE guild_id=? AND from_user_id=? AND status='pending' ORDER BY id DESC LIMIT 1`, [guildId, userId]);
-    await message.reply(
-      `✅ Trade offer #${offer?.id} sent to ${toUser.user.tag}!\n` +
-      `You offer: **${fromItem}** | You want: **${toItem}**\n` +
-      `They can accept with \`!trade accept ${offer?.id}\` or decline with \`!trade decline ${offer?.id}\`.`
-    ).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, title: '✅ Trade Offer Sent!', description: `Trade offer #${offer?.id} sent to ${toUser.user.tag}!\nYou offer: **${fromItem}** | You want: **${toItem}**\nThey can accept with \`!trade accept ${offer?.id}\` or decline with \`!trade decline ${offer?.id}\`.` }] }).catch(() => {});
     return;
   }
 
   if (sub === "accept") {
     const offerId = parseInt(args[1], 10);
     if (!offerId) {
-      await message.reply("Usage: `!trade accept <trade_id>`").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!trade accept <trade_id>`" }] }).catch(() => {});
       return;
     }
 
@@ -1132,7 +1128,7 @@ async function cmdTrade(message, args) {
       [offerId, guildId, userId]
     );
     if (!offer) {
-      await message.reply("Trade offer not found or not addressed to you.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "Trade offer not found or not addressed to you." }] }).catch(() => {});
       return;
     }
 
@@ -1141,7 +1137,7 @@ async function cmdTrade(message, args) {
       [guildId, userId, offer.to_item]
     );
     if (!receiverInv || receiverInv.quantity < 1) {
-      await message.reply(`You don't have **${offer.to_item}** in your inventory to complete this trade.`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: `You don't have **${offer.to_item}** in your inventory to complete this trade.` }] }).catch(() => {});
       return;
     }
 
@@ -1151,7 +1147,7 @@ async function cmdTrade(message, args) {
     );
     if (!senderInv || senderInv.quantity < 1) {
       await run(`UPDATE trade_offers SET status='cancelled', resolved_at=? WHERE id=?`, [Date.now(), offerId]);
-      await message.reply(`Trade cancelled — the other party no longer has **${offer.from_item}**.`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: `Trade cancelled — the other party no longer has **${offer.from_item}**.` }] }).catch(() => {});
       return;
     }
 
@@ -1172,14 +1168,14 @@ async function cmdTrade(message, args) {
     );
 
     await run(`UPDATE trade_offers SET status='completed', resolved_at=? WHERE id=?`, [Date.now(), offerId]);
-    await message.reply(`✅ Trade #${offerId} completed! You gave **${offer.to_item}** and received **${offer.from_item}**.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Trade #${offerId} completed! You gave **${offer.to_item}** and received **${offer.from_item}**.` }] }).catch(() => {});
     return;
   }
 
   if (sub === "decline") {
     const offerId = parseInt(args[1], 10);
     if (!offerId) {
-      await message.reply("Usage: `!trade decline <trade_id>`").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!trade decline <trade_id>`" }] }).catch(() => {});
       return;
     }
     const offer = await get(
@@ -1187,11 +1183,11 @@ async function cmdTrade(message, args) {
       [offerId, guildId, userId, userId]
     );
     if (!offer) {
-      await message.reply("Trade offer not found.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "Trade offer not found." }] }).catch(() => {});
       return;
     }
     await run(`UPDATE trade_offers SET status='declined', resolved_at=? WHERE id=?`, [Date.now(), offerId]);
-    await message.reply(`✅ Trade #${offerId} declined.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Trade #${offerId} declined.` }] }).catch(() => {});
     return;
   }
 
@@ -1203,7 +1199,7 @@ async function cmdTrade(message, args) {
       [guildId, userId, userId]
     );
     if (!rows.length) {
-      await message.reply("You have no pending trades.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: "You have no pending trades." }] }).catch(() => {});
       return;
     }
     const lines = rows.map(r => {
@@ -1218,7 +1214,7 @@ async function cmdTrade(message, args) {
     return;
   }
 
-  await message.reply("Usage: `!trade offer <@user> <item> for <item>` | `!trade accept <id>` | `!trade decline <id>` | `!trade list`").catch(() => {});
+  await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!trade offer <@user> <item> for <item>` | `!trade accept <id>` | `!trade decline <id>` | `!trade list`" }] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -1232,7 +1228,7 @@ async function cmdLottery(message, args) {
 
   const ecoSettings = await getEconomySettings(guildId);
   if (!ecoSettings?.enabled) {
-    await message.reply("Economy is not enabled on this server.").catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, description: "Economy is not enabled on this server." }] }).catch(() => {});
     return;
   }
   const sym = ecoSettings.currency_symbol || "🪙";
@@ -1268,7 +1264,7 @@ async function cmdLottery(message, args) {
   if (sub === "buy") {
     const count = Math.max(1, parseInt(args[1], 10) || 1);
     if (count > 100) {
-      await message.reply("You can buy at most 100 tickets at once.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: "You can buy at most 100 tickets at once." }] }).catch(() => {});
       return;
     }
     const cost = ticketPrice * count;
@@ -1280,7 +1276,7 @@ async function cmdLottery(message, args) {
     );
     const eco = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
     if ((eco?.balance || 0) < cost) {
-      await message.reply(`You need ${sym}${cost.toLocaleString()} but only have ${sym}${(eco?.balance || 0).toLocaleString()}.`).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: `You need ${sym}${cost.toLocaleString()} but only have ${sym}${(eco?.balance || 0).toLocaleString()}.` }] }).catch(() => {});
       return;
     }
 
@@ -1291,7 +1287,7 @@ async function cmdLottery(message, args) {
       [guildId, userId, count]
     );
 
-    await message.reply(`🎟️ Bought **${count}** ticket${count > 1 ? "s" : ""} for ${sym}${cost.toLocaleString()}! Good luck!`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `🎟️ Bought **${count}** ticket${count > 1 ? "s" : ""} for ${sym}${cost.toLocaleString()}! Good luck!` }] }).catch(() => {});
     return;
   }
 
@@ -1303,20 +1299,20 @@ async function cmdLottery(message, args) {
     const gsRow = await get(`SELECT mod_role_id FROM guild_settings WHERE guild_id=?`, [guildId]);
     const isManager = gsRow?.mod_role_id && member?.roles?.cache?.has(gsRow.mod_role_id);
     if (!isAdmin && !isManager) {
-      await message.reply("Only admins/managers can draw the lottery.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: "Only admins/managers can draw the lottery." }] }).catch(() => {});
       return;
     }
 
     const pot = pool?.pot || 0;
     if (pot === 0) {
-      await message.reply("The lottery pot is empty — no tickets sold yet.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: "The lottery pot is empty — no tickets sold yet." }] }).catch(() => {});
       return;
     }
 
     // Build weighted ticket pool
     const tickets = await all(`SELECT user_id, count FROM lottery_tickets WHERE guild_id=?`, [guildId]);
     if (!tickets.length) {
-      await message.reply("No tickets sold yet.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "No tickets sold yet." }] }).catch(() => {});
       return;
     }
 
@@ -1354,20 +1350,20 @@ async function cmdLottery(message, args) {
     const isAdmin = member?.permissions?.has(1n << 3n) ||
       member?.id === (process.env.BOT_MANAGER_ID || "900758140499398676");
     if (!isAdmin) {
-      await message.reply("Only admins can set the ticket price.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: "Only admins can set the ticket price." }] }).catch(() => {});
       return;
     }
     const price = parseInt(args[1], 10);
     if (!price || price < 1) {
-      await message.reply("Please provide a valid ticket price.").catch(() => {});
+      await message.reply({ embeds: [{ color: 0x3498db, description: "Please provide a valid ticket price." }] }).catch(() => {});
       return;
     }
     await run(`UPDATE lottery_pool SET ticket_price=? WHERE guild_id=?`, [price, guildId]);
-    await message.reply(`✅ Lottery ticket price set to ${sym}${price}.`).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Lottery ticket price set to ${sym}${price}.` }] }).catch(() => {});
     return;
   }
 
-  await message.reply("Usage: `!lottery` | `!lottery buy <amount>` | `!lottery draw` (admin) | `!lottery setprice <price>` (admin)").catch(() => {});
+  await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!lottery` | `!lottery buy <amount>` | `!lottery draw` (admin) | `!lottery setprice <price>` (admin)" }] }).catch(() => {});
 }
 
 module.exports = {

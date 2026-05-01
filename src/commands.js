@@ -4930,28 +4930,23 @@ async function registerSlashCommands(client) {
 async function ensureDefaultShopItems(guildId) {
   // Setup default economy shop items for minigames and features
   const defaultItems = [
-    // Tools (durable, single equipment pieces)
-    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'Essential tool for fishing. Use /fish to catch treasure from the sea!', price: 200, type: 'tool' },
-    { id: 'shovel', name: '⛏️ Shovel', description: 'Dig for treasures underground. Use /dig to start digging!', price: 200, type: 'tool' },
-    { id: 'padlock', name: '🔒 Padlock', description: 'Protects your wallet from robberies (single use)', price: 100, type: 'single' },
-    { id: 'phone', name: '📱 Phone', description: 'Call services - police (protection), taxi (explore), takeout (food)', price: 150, type: 'single' },
-    
-    // Consumables
-    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next /dig or increases /fish success!', price: 80, type: 'consumable' },
-    { id: 'food', name: '🍔 Food Item', description: 'A basic food item. Collect different types from takeout!', price: 25, type: 'consumable' },
-    
-    // Special Items
-    { id: 'lucky_charm', name: '✨ Lucky Charm', description: 'Increases luck in minigames by 10%', price: 300, type: 'cosmetic' },
-    { id: 'vip_pass', name: '🎫 VIP Pass', description: 'Unlock exclusive minigames and higher rewards', price: 500, type: 'single' }
+    { id: 'fishing_rod', name: '🎣 Fishing Rod', description: 'A gnarled rod carved from swamp oak. Required to fish in the murky waters.', price: 300, type: 'tool', use_effect: 'fishing_rod' },
+    { id: 'shovel', name: '⛏️ Rusty Shovel', description: 'A well-worn shovel caked with dried mud. Required for digging in the swamp.', price: 250, type: 'tool', use_effect: 'shovel' },
+    { id: 'padlock', name: '🔒 Padlock', description: 'Secures your wallet from thieves. Grants 4-hour robbery immunity when used.', price: 250, type: 'consumable', use_effect: 'padlock' },
+    { id: 'phone', name: '📱 Phone', description: 'Call services — police (protection), taxi (stories), takeout (food).', price: 150, type: 'single', use_effect: null },
+    { id: 'treasure_map', name: '🗺️ Treasure Map', description: 'Doubles rewards for your next dig or increases fish success rate.', price: 80, type: 'consumable', use_effect: null },
+    { id: 'swamp_tonic', name: '🧪 Swamp Tonic', description: 'A bubbling green brew. Boosts all earnings by 20% for 1 hour.', price: 200, type: 'consumable', use_effect: 'swamp_tonic' },
+    { id: 'fortune_scroll', name: '📜 Fortune Scroll', description: 'An ancient parchment. Reading it grants a random coin bonus of 50–500.', price: 400, type: 'consumable', use_effect: 'fortune_scroll' },
+    { id: 'revival_potion', name: '💜 Revival Potion', description: 'Automatically saves you from death in adventures. Keep it in your inventory.', price: 500, type: 'consumable', use_effect: 'revival_potion' },
   ];
 
   for (const item of defaultItems) {
-    const exists = await get(`SELECT id FROM economy_shop_items WHERE guild_id=? AND item_id=?`, [guildId, item.id]);
+    const exists = await get(`SELECT item_id FROM economy_shop_items WHERE guild_id=? AND item_id=?`, [guildId, item.id]);
     if (!exists) {
       await run(
-        `INSERT INTO economy_shop_items (id, guild_id, name, description, price, item_type)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [`${guildId}-${item.id}`, guildId, item.name, item.description, item.price, item.type]
+        `INSERT INTO economy_shop_items (id, guild_id, item_id, name, description, price, item_type, use_effect)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [`${guildId}-${item.id}`, guildId, item.id, item.name, item.description, item.price, item.type, item.use_effect || null]
       );
     }
   }

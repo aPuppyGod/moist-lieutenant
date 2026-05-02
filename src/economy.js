@@ -226,7 +226,7 @@ async function cmdCraft(message, args, util) {
 
     await message.reply({ embeds: [{
       color: 0x7b68ee,
-      title: "⚙️ Crafting Recipes",
+      title: "⚙️ ℂ𝕣𝕒𝕗𝕥𝕚𝕟𝕘 ℝ𝕖𝕔𝕚𝕡𝕖𝕤",
       description: recipes,
       footer: { text: `Use craft <recipe> to craft!` }
     }] }).catch(() => {});
@@ -344,7 +344,7 @@ async function cmdPrestige(message, args, util) {
 
   const embed = {
     color: 0xffd700,
-    title: "👑 Prestige Status",
+    title: "👑 ℙ𝕣𝕖𝕤𝕥𝕚𝕘𝕖 𝕊𝕥𝕒𝕥𝕦𝕤",
     fields: [
       { name: "Level", value: `${econ.prestige_level}`, inline: true },
       { name: "Lifetime Earnings", value: `${econ.total_earned}`, inline: true },
@@ -374,7 +374,7 @@ async function cmdClass(message, args, util) {
 
     await message.reply({ embeds: [{
       color: 0x00d4ff,
-      title: "⚔️ Murk Archetypes",
+      title: "⚔️ 𝕄𝕦𝕣𝕜 𝔸𝕣𝕔𝕙𝕖𝕥𝕪𝕡𝕖𝕤",
       description: classList,
       footer: { text: `Choose: class select <brigand|artificer|scholar|merchant>` }
     }] }).catch(() => {});
@@ -1095,7 +1095,7 @@ async function cmdFish(message, args, util) {
   );
 
   if (!rod) {
-    await message.reply({ embeds: [{ color: 0xf39c12, title: '🎣 No Fishing Rod', description: `You need a **Fishing Rod** to fish!\n\nBuy one from the shop: \`${ecoPrefix}buy 1\`` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, title: '🎣 ℕ𝕠 𝔽𝕚𝕤𝕙𝕚𝕟𝕘 ℝ𝕠𝕕', description: `You need a **Fishing Rod** to fish!\n\nBuy one from the shop: \`${ecoPrefix}buy 1\`` }] }).catch(() => {});
     return;
   }
 
@@ -1202,7 +1202,7 @@ async function cmdDig(message, args, util) {
   );
 
   if (!shovel) {
-    await message.reply({ embeds: [{ color: 0xf39c12, title: '⛏️ No Shovel', description: `You need a **Rusty Shovel** to dig!\n\nBuy one from the shop: \`${ecoPrefix}buy 2\`` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf39c12, title: '⛏️ ℕ𝕠 𝕊𝕙𝕠𝕧𝕖𝕝', description: `You need a **Rusty Shovel** to dig!\n\nBuy one from the shop: \`${ecoPrefix}buy 2\`` }] }).catch(() => {});
     return;
   }
 

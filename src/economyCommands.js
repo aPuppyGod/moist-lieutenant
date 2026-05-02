@@ -89,7 +89,7 @@ async function cmdBalance(message, args) {
 
   const embed = {
     color: 0xf1c40f,
-    title: `${economySettings.currency_symbol} Balance`,
+    title: `${economySettings.currency_symbol} 𝔹𝕒𝕝𝕒𝕟𝕔𝕖`,
     description: `💰 **Wallet:** ${economy.balance} ${economySettings.currency_name}\n🏦 **Bank:** ${economy.bank} ${economySettings.currency_name}\n💎 **Total:** ${economy.balance + economy.bank} ${economySettings.currency_name}`,
     footer: { text: userId === message.author.id ? "Your balance" : `Balance of ${targetUser.member.user.tag}` }
   };
@@ -495,7 +495,7 @@ async function cmdSlots(message, args) {
 
   const embed = {
     color: winnings > 0 ? 0x2ecc71 : 0xe74c3c,
-    title: "🎰 Slot Machine",
+    title: "🎰 𝕊𝕝𝕠𝕥 𝕄𝕒𝕔𝕙𝕚𝕟𝕖",
     description: `${reel1} | ${reel2} | ${reel3}\n\n${result}`,
     fields: [
       { name: "Bet", value: `${bet} ${economySettings.currency_name}`, inline: true },
@@ -553,7 +553,7 @@ async function cmdCoinflip(message, args) {
 
   const embed = {
     color: won ? 0x2ecc71 : 0xe74c3c,
-    title: "🪙 Coinflip",
+    title: "🪙 ℂ𝕠𝕚𝕟𝕗𝕝𝕚𝕡",
     description: `You chose **${userChoice}**\nThe coin landed on **${flip}**!\n\n${won ? "✅ You won!" : "❌ You lost!"}`,
     fields: [
       { name: "Bet", value: `${bet} ${economySettings.currency_name}`, inline: true },
@@ -610,7 +610,7 @@ async function cmdDice(message, args) {
 
   const embed = {
     color: won ? 0x2ecc71 : 0xe74c3c,
-    title: "🎲 Dice Roll",
+    title: "🎲 𝔻𝕚𝕔𝕖 ℝ𝕠𝕝𝕝",
     description: `You guessed **${guess}**\nThe dice rolled **${roll}**!\n\n${won ? "🎉 You won 6x your bet!" : "❌ You lost!"}`,
     fields: [
       { name: "Bet", value: `${bet} ${economySettings.currency_name}`, inline: true },
@@ -644,7 +644,7 @@ async function cmdJob(message, args) {
 
     const embed = {
       color: 0x3498db,
-      title: "💼 Available Jobs",
+      title: "💼 𝔸𝕧𝕒𝕚𝕝𝕒𝕓𝕝𝕖 𝕁𝕠𝕓𝕤",
       description: jobs.map(j =>
         `**${j.name}**\n💰 Pay: ${j.pay_min}-${j.pay_max} ${economySettings.currency_name}\n📊 Requires: ${j.required_shifts} total shifts\n⏰ Weekly: ${j.weekly_shifts_required} shifts/week`
       ).join("\n\n"),
@@ -1416,7 +1416,7 @@ async function cmdRoulette(message, args) {
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (!args[0] || !args[1]) {
-    await message.reply({ embeds: [new EmbedBuilder().setColor(0x8e44ad).setTitle("🎡 Roulette").setDescription(
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x8e44ad).setTitle("🎡 ℝ𝕠𝕦𝕝𝕖𝕥𝕥𝕖").setDescription(
       `Bet on a number (0-36), color (red/black), or group (even/odd/low/high)!\n\n**Usage:** \`${ecoPrefix}roulette <bet> <choice>\`\n\n**Payouts:**\n🔴/⚫ Red or Black → 2x\n🔢 Even/Odd → 2x\n📊 Low (1-18)/High (19-36) → 2x\n🎯 Single number (0-36) → 35x jackpot\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
     )] }).catch(() => {});
     return;
@@ -1481,7 +1481,7 @@ async function cmdRoulette(message, args) {
 
   const embed = {
     color: won ? 0x2ecc71 : 0xe74c3c,
-    title: "🎡 Roulette",
+    title: "🎡 ℝ𝕠𝕦𝕝𝕖𝕥𝕥𝕖",
     description: `The wheel spins...\n\n${spinEmoji} **${spin}** ${spinColor.toUpperCase()}\n\nYou bet on **${choiceDesc}**\n${won ? `✅ You won **${winnings} ${economySettings.currency_name}**!` : `❌ You lost **${bet} ${economySettings.currency_name}**.`}`,
     fields: [
       { name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true },
@@ -1534,7 +1534,7 @@ async function cmdBlackjack(message, args) {
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (!args[0]) {
-    await message.reply({ embeds: [new EmbedBuilder().setColor(0x2d6a4f).setTitle("🃏 Blackjack").setDescription(
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0x2d6a4f).setTitle("🃏 𝔹𝕝𝕒𝕔𝕜𝕛𝕒𝕔𝕜").setDescription(
       `Try to beat the dealer by getting closer to 21 without going over!\n\n**Usage:** \`${ecoPrefix}blackjack <bet>\`\n\n**Rules:**\n• Blackjack (Ace + 10-card on deal) = **2.5x**\n• Beat dealer = **2x**\n• Push (tie) = bet returned\n• Bust or lose = lose bet\n\n**Controls:** Type \`hit\` or \`stand\` in 30 seconds\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
     )] }).catch(() => {});
     return;
@@ -1565,7 +1565,7 @@ async function cmdBlackjack(message, args) {
     await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
     await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
       [message.guild.id, message.author.id, "blackjack", winnings, `Blackjack natural (bet ${bet})`]);
-    await message.reply({ embeds: [{ color: 0xf1c40f, title: "🃏 BLACKJACK!", description: `${showState(true)}\n\n🎉 Natural blackjack! You win **${winnings} ${economySettings.currency_name}** (2.5x)!` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xf1c40f, title: "🃏 𝔹𝕃𝔸ℂ𝕂𝕁𝔸ℂ𝕂!", description: `${showState(true)}\n\n🎉 Natural blackjack! You win **${winnings} ${economySettings.currency_name}** (2.5x)!` }] }).catch(() => {});
     return;
   }
 
@@ -1630,7 +1630,7 @@ async function cmdBlackjack(message, args) {
         [message.guild.id, message.author.id, "blackjack", winnings, `Blackjack (bet ${bet})`]);
     }
 
-    await message.reply({ embeds: [{ color, title: "🃏 Blackjack — Result", description: `${showState(true)}\n\n${result}`, fields: [{ name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }] }] }).catch(() => {});
+    await message.reply({ embeds: [{ color, title: "🃏 𝔹𝕝𝕒𝕔𝕜𝕛𝕒𝕔𝕜 — ℝ𝕖𝕤𝕦𝕝𝕥", description: `${showState(true)}\n\n${result}`, fields: [{ name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }] }] }).catch(() => {});
   });
 }
 
@@ -1650,7 +1650,7 @@ async function cmdHighLow(message, args) {
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (!args[0]) {
-    await message.reply({ embeds: [new EmbedBuilder().setColor(0xe67e22).setTitle("📈 High-Low").setDescription(
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xe67e22).setTitle("📈 ℍ𝕚𝕘𝕙-𝕃𝕠𝕨").setDescription(
       `Guess if the next number is higher or lower!\n\n**Usage:** \`${ecoPrefix}highlow <bet> <higher|lower>\`\n\n**Payout:** 1.9x (house edge: 10%)\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
     )] }).catch(() => {});
     return;
@@ -1685,7 +1685,7 @@ async function cmdHighLow(message, args) {
 
   await message.reply({ embeds: [{
     color: won ? 0x2ecc71 : 0xe74c3c,
-    title: "📈 High-Low",
+    title: "📈 ℍ𝕚𝕘𝕙-𝕃𝕠𝕨",
     description: `First number: **${first}**\nSecond number: **${second}**\n\nYou guessed **${guessHigher ? "higher" : "lower"}**\n${won ? `✅ Correct! +**${winnings} ${economySettings.currency_name}**` : `❌ Wrong! -**${bet} ${economySettings.currency_name}**`}`,
     fields: [{ name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }]
   }] }).catch(() => {});

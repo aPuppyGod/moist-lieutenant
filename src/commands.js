@@ -379,11 +379,11 @@ async function cmdEconomy(message) {
   const name = economySettings.currency_name || "coins";
 
   const embed = new EmbedBuilder()
-    .setTitle("💰 Economy Commands")
+    .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤")
     .setColor(0x1f8b4c)
     .addFields(
       {
-        name: "💵 Wallet & Bank",
+        name: "💵 𝕎𝕒𝕝𝕝𝕖𝕥 & 𝔹𝕒𝕟𝕜",
         value: [
           `\`${ecoPrefix}balance\` — Check your balance`,
           `\`${ecoPrefix}deposit <amount|all>\` — Deposit to bank`,
@@ -394,7 +394,7 @@ async function cmdEconomy(message) {
         inline: false
       },
       {
-        name: "🎁 Daily & Jobs",
+        name: "🎁 𝔻𝕒𝕚𝕝𝕪 & 𝕁𝕠𝕓𝕤",
         value: [
           `\`${ecoPrefix}daily\` — Claim daily reward`,
           `\`${ecoPrefix}weekly\` — Claim weekly reward`,
@@ -404,7 +404,7 @@ async function cmdEconomy(message) {
         inline: false
       },
       {
-        name: "🎰 Gambling",
+        name: "🎰 𝔾𝕒𝕞𝕓𝕝𝕚𝕟𝕘",
         value: [
           `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
           `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
@@ -416,7 +416,7 @@ async function cmdEconomy(message) {
         inline: false
       },
       {
-        name: "🦹 Crime",
+        name: "🦹 ℂ𝕣𝕚𝕞𝕖",
         value: [
           `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
           `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
@@ -424,7 +424,7 @@ async function cmdEconomy(message) {
         inline: false
       },
       {
-        name: "🎣 Minigames",
+        name: "🎣 𝕄𝕚𝕟𝕚𝕘𝕒𝕞𝕖𝕤",
         value: [
           `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
           `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
@@ -435,7 +435,7 @@ async function cmdEconomy(message) {
         inline: false
       },
       {
-        name: "🛒 Shop & Inventory",
+        name: "🛒 𝕊𝕙𝕠𝕡 & 𝕀𝕟𝕧𝕖𝕟𝕥𝕠𝕣𝕪",
         value: [
           `\`${ecoPrefix}shop\` — Browse the Murk Grand Bazaar`,
           `\`${ecoPrefix}buy <number>\` — Buy an item from the shop`,
@@ -447,7 +447,7 @@ async function cmdEconomy(message) {
         inline: false
       },
       {
-        name: "⭐ Progression",
+        name: "⭐ ℙ𝕣𝕠𝕘𝕣𝕖𝕤𝕤𝕚𝕠𝕟",
         value: [
           `\`${ecoPrefix}class\` — View/set your class (Brigand/Artificer/Scholar/Merchant)`,
           `\`${ecoPrefix}prestige\` — Prestige (requires Prestige Token)`,

@@ -1752,6 +1752,10 @@ client.once(Events.ClientReady, async () => {
           const channel = guild.channels.cache.get(settings.channel_id);
           if (!channel) continue;
           
+          // Skip if we already sent this birthday message this calendar year
+          const currentYear = now.getFullYear();
+          if (birthday.last_wished_year === currentYear) continue;
+
           const member = await guild.members.fetch(birthday.user_id).catch(() => null);
           if (!member) continue;
           
@@ -1762,6 +1766,8 @@ client.once(Events.ClientReady, async () => {
             .replace(/{channel:(\d+)}/g, (_, id) => `<#${id}>`);
           
           await channel.send(message).catch(() => {});
+          await run(`UPDATE birthdays SET last_wished_year=? WHERE guild_id=? AND user_id=?`,
+            [currentYear, birthday.guild_id, birthday.user_id]).catch(() => {});
           
           if (settings.role_id) {
             const role = guild.roles.cache.get(settings.role_id);

@@ -362,7 +362,7 @@ async function cmdPublicCommands(message) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle("🐸 Commands")
+    .setTitle("🐸 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤")
     .setDescription(lines.join("\n"))
     .setColor(0x2b2d31)
     .setFooter({ text: "Slash command equivalents available for most commands" });
@@ -853,7 +853,7 @@ async function cmdLeaderboard(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle(`🏆 ${message.guild.name} Leaderboard`)
+    .setTitle(`🏆 ${message.guild.name} 𝕃𝕖𝕒𝕕𝕖𝕣𝕓𝕠𝕒𝕣𝕕`)
     .setDescription(lines.join("\n"))
     .setFooter({ text: `Page ${page} • Use !leaderboard <page> to view other pages` })
     .setTimestamp();
@@ -1040,7 +1040,7 @@ async function cmd8Ball(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🎱 Magic 8-Ball")
+    .setTitle("🎱 𝕄𝕒𝕘𝕚𝕔 8-𝔹𝕒𝕝𝕝")
     .addFields(
       { name: "Question", value: question, inline: false },
       { name: "Answer", value: answer, inline: false }
@@ -1057,7 +1057,7 @@ async function cmdCoinFlip(message) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🪙 Coin Flip")
+    .setTitle("🪙 ℂ𝕠𝕚𝕟 𝔽𝕝𝕚𝕡")
     .setDescription(`${emoji} **${result}**!`)
     .setTimestamp();
   
@@ -1139,7 +1139,7 @@ async function cmdRoll(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🎲 Dice Roll")
+    .setTitle("🎲 𝔻𝕚𝕔𝕖 ℝ𝕠𝕝𝕝")
     .addFields(
       { name: "Configuration", value: `${count} × d${sides}`, inline: true },
       { name: "Results", value: rolls.join(", "), inline: false }
@@ -1164,7 +1164,7 @@ async function cmdChoose(message, args) {
   
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("🤔 I choose...")
+    .setTitle("🤔 𝕀 𝕔𝕙𝕠𝕠𝕤𝕖...")
     .setDescription(`**${choice}**`)
     .setTimestamp();
   
@@ -1218,7 +1218,7 @@ async function cmdSuggest(message, args) {
   const embed = new EmbedBuilder()
     .setColor("#7bc96f")
     .setAuthor({ name: message.author.tag, iconURL: message.author.displayAvatarURL() })
-    .setTitle(`💡 Suggestion #${suggestionId}`)
+    .setTitle(`💡 𝕊𝕦𝕘𝕘𝕖𝕤𝕥𝕚𝕠𝕟 #${suggestionId}`)
     .setDescription(suggestion)
     .addFields({ name: "Status", value: requireReview ? "🕵️ Under Review" : "🟡 Pending", inline: true })
     .setFooter({ text: requireReview ? "Awaiting staff review" : `👍 0 | 👎 0` })
@@ -1290,7 +1290,7 @@ async function cmdSuggestions(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
-    .setTitle(mode === "all" ? "💡 Server Suggestions" : "💡 Your Suggestions")
+    .setTitle(mode === "all" ? "💡 𝕊𝕖𝕣𝕧𝕖𝕣 𝕊𝕦𝕘𝕘𝕖𝕤𝕥𝕚𝕠𝕟𝕤" : "💡 𝕐𝕠𝕦𝕣 𝕊𝕦𝕘𝕘𝕖𝕤𝕥𝕚𝕠𝕟𝕤")
     .setDescription(lines.join("\n\n"))
     .setFooter({ text: "Use !suggestion-status <id> for full details." })
     .setTimestamp();
@@ -1339,7 +1339,7 @@ async function cmdSuggestionStatus(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle(`💡 Suggestion #${suggestion.id}`)
+    .setTitle(`💡 𝕊𝕦𝕘𝕘𝕖𝕤𝕥𝕚𝕠𝕟 #${suggestion.id}`)
     .setDescription(String(suggestion.content || "(no content)").slice(0, 4096))
     .addFields(fields)
     .setFooter({ text: createdTs ? `Created <t:${createdTs}:R>` : "Created time unknown" })
@@ -2120,7 +2120,7 @@ async function cmdProfile(message, args) {
     .setColor(target.displayColor || 0x1abc9c)
     .setAuthor({ name: target.displayName, iconURL: target.user.displayAvatarURL({ size: 128 }) })
     .setThumbnail(target.user.displayAvatarURL({ size: 256 }))
-    .setTitle("Profile Card")
+    .setTitle("ℙ𝕣𝕠𝕗𝕚𝕝𝕖 ℂ𝕒𝕣𝕕")
     .addFields(
       { name: "Level", value: `${level}`, inline: true },
       { name: "XP", value: `${xp.toLocaleString()}`, inline: true },
@@ -2166,7 +2166,7 @@ async function cmdSnipe(message) {
   })();
   const embed = new EmbedBuilder()
     .setColor(0x8b7355)
-    .setTitle("Recently Deleted Message")
+    .setTitle("ℝ𝕖𝕔𝕖𝕟𝕥𝕝𝕪 𝔻𝕖𝕝𝕖𝕥𝕖𝕕 𝕄𝕖𝕤𝕤𝕒𝕘𝕖")
     .setDescription(String(row.content || "(no text)"))
     .addFields(
       { name: "Author", value: author ? author.user.tag : String(row.author_id || "Unknown"), inline: true },
@@ -2187,7 +2187,7 @@ async function cmdEditSnipe(message) {
   const author = await message.guild.members.fetch(row.author_id).catch(() => null);
   const embed = new EmbedBuilder()
     .setColor(0x3498db)
-    .setTitle("Recently Edited Message")
+    .setTitle("ℝ𝕖𝕔𝕖𝕟𝕥𝕝𝕪 𝔼𝕕𝕚𝕥𝕖𝕕 𝕄𝕖𝕤𝕤𝕒𝕘𝕖")
     .addFields(
       { name: "Author", value: author ? author.user.tag : String(row.author_id || "Unknown"), inline: true },
       { name: "Edited", value: `<t:${Math.floor(Number(row.edited_at || Date.now()) / 1000)}:R>`, inline: true },
@@ -2246,7 +2246,7 @@ async function cmdWordFilter(message, args) {
     const lines = rows.map(r => `• \`${r.word}\` → **${r.action}**`).join("\n");
     const embed = new EmbedBuilder()
       .setColor(0xff4444)
-      .setTitle("Word Filter List")
+      .setTitle("𝕎𝕠𝕣𝕕 𝔽𝕚𝕝𝕥𝕖𝕣 𝕃𝕚𝕤𝕥")
       .setDescription(lines.slice(0, 4000));
     await message.reply({ embeds: [embed] }).catch(() => {});
     return;
@@ -2307,7 +2307,7 @@ async function cmdSchedule(message, args) {
     ).join("\n\n");
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
-      .setTitle("Scheduled Messages")
+      .setTitle("𝕊𝕔𝕙𝕖𝕕𝕦𝕝𝕖𝕕 𝕄𝕖𝕤𝕤𝕒𝕘𝕖𝕤")
       .setDescription(lines.slice(0, 4000));
     await message.reply({ embeds: [embed] }).catch(() => {});
     return;
@@ -2608,7 +2608,7 @@ async function cmdAuditSearch(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0xffaa55)
-    .setTitle("🔎 Audit Search Results")
+    .setTitle("🔎 𝔸𝕦𝕕𝕚𝕥 𝕊𝕖𝕒𝕣𝕔𝕙 ℝ𝕖𝕤𝕦𝕝𝕥𝕤")
     .setDescription(trimText(lines.join("\n"), 3900))
     .setFooter({ text: `Filters: action=${parsed.action || "any"}, days=${parsed.days}, limit=${parsed.limit}` })
     .setTimestamp();
@@ -2874,7 +2874,7 @@ async function cmdReactionRoleList(message) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle("Reaction Roles")
+    .setTitle("ℝ𝕖𝕒𝕔𝕥𝕚𝕠𝕟 ℝ𝕠𝕝𝕖𝕤")
     .setDescription(lines.join("\n"))
     .setColor(0x7bc96f);
 
@@ -3128,7 +3128,7 @@ async function cmdGiveaway(message, args) {
 
     const giveawayEmbed = {
       color: 0x00ff00,
-      title: "🎉 GIVEAWAY 🎉",
+      title: "🎉 𝔾𝕀𝕍𝔼𝔸𝕎𝔸𝕐 🎉",
       description: `**Prize:** ${prize}\n**Winners:** ${winners}\n**Ends:** <t:${Math.floor(endTime / 1000)}:R>\n\nReact with 🎉 to enter!`,
       footer: { text: `Hosted by ${message.author.tag}` },
       timestamp: new Date(endTime).toISOString()
@@ -3232,7 +3232,7 @@ async function cmdGiveaway(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(0x00ff99)
-      .setTitle("🎉 Active Giveaways")
+      .setTitle("🎉 𝔸𝕔𝕥𝕚𝕧𝕖 𝔾𝕚𝕧𝕖𝕒𝕨𝕒𝕪𝕤")
       .setDescription(lines.join("\n\n"))
       .setFooter({ text: "Use !giveaway end|reroll|cancel <message_id>" })
       .setTimestamp();
@@ -3265,7 +3265,7 @@ async function cmdGiveaway(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(Number(giveaway.ended || 0) === 1 ? 0x8b0000 : 0x00ff99)
-      .setTitle(`🎉 Giveaway #${giveaway.id}`)
+      .setTitle(`🎉 𝔾𝕚𝕧𝕖𝕒𝕨𝕒𝕪 #${giveaway.id}`)
       .addFields(
         { name: "Prize", value: String(giveaway.prize || "Unknown"), inline: false },
         { name: "Status", value: Number(giveaway.ended || 0) === 1 ? "Ended" : "Active", inline: true },
@@ -3298,7 +3298,7 @@ async function cancelGiveaway(client, giveaway, reason = "Canceled by staff.", c
 
   const cancelEmbed = {
     color: 0x808080,
-    title: "🚫 GIVEAWAY CANCELED",
+    title: "🚫 𝔾𝕀𝕍𝔼𝔸𝕎𝔸𝕐 ℂ𝔸ℕℂ𝔼𝕃𝔼𝔻",
     description: `**Prize:** ${giveaway.prize}\n**Reason:** ${reason}`,
     footer: { text: canceledBy ? `Canceled by ${canceledBy.tag}` : `Hosted by ${giveaway.host_id}` }
   };
@@ -3348,7 +3348,7 @@ async function endGiveaway(client, giveaway) {
 
   const endEmbed = {
     color: 0xff0000,
-    title: "🎉 GIVEAWAY ENDED 🎉",
+    title: "🎉 𝔾𝕀𝕍𝔼𝔸𝕎𝔸𝕐 𝔼ℕ𝔻𝔼𝔻 🎉",
     description: `**Prize:** ${giveaway.prize}\n**Winners:** ${winners.length > 0 ? winners.map(w => w.tag).join(", ") : "No winners"}`,
     footer: { text: `Hosted by ${giveaway.host_id}` }
   };
@@ -3429,7 +3429,7 @@ async function cmdAdvancedPoll(message, args) {
     
     const pollEmbed = {
       color: 0x3498db,
-      title: "📊 Poll",
+      title: "📊 ℙ𝕠𝕝𝕝",
       description: `**${question}**\n\n${options.map((opt, i) => `${emojis[i]} ${opt}`).join("\n")}`,
       footer: { text: `Created by ${message.author.tag}` },
       timestamp: new Date().toISOString()
@@ -3495,7 +3495,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(0x3498db)
-      .setTitle("📊 Active Polls")
+      .setTitle("📊 𝔸𝕔𝕥𝕚𝕧𝕖 ℙ𝕠𝕝𝕝𝕤")
       .setDescription(lines.join("\n\n"))
       .setFooter({ text: "Use !poll end <message_id> to close one." })
       .setTimestamp();
@@ -3530,7 +3530,7 @@ async function cmdAdvancedPoll(message, args) {
 
     const embed = new EmbedBuilder()
       .setColor(Number(poll.ended || 0) === 1 ? 0x2ecc71 : 0x3498db)
-      .setTitle(`📊 Poll #${poll.id}`)
+      .setTitle(`📊 ℙ𝕠𝕝𝕝 #${poll.id}`)
       .setDescription(`**${poll.question || "Untitled poll"}**`)
       .addFields(
         { name: "Status", value: Number(poll.ended || 0) === 1 ? "Ended" : "Active", inline: true },
@@ -3573,7 +3573,7 @@ async function endPoll(client, poll) {
 
   const resultsEmbed = {
     color: 0x2ecc71,
-    title: "📊 Poll Results",
+    title: "📊 ℙ𝕠𝕝𝕝 ℝ𝕖𝕤𝕦𝕝𝕥𝕤",
     description: `**${poll.question}**\n\n${results.map((r, i) => `${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "•"} **${r.option}**: ${r.votes} vote${r.votes !== 1 ? "s" : ""} (${totalVotes > 0 ? Math.round((r.votes / totalVotes) * 100) : 0}%)`).join("\n")}\n\n**Total Votes:** ${totalVotes}`,
     footer: { text: "Poll ended" },
     timestamp: new Date().toISOString()
@@ -3654,7 +3654,7 @@ async function cmdReminders(message, args) {
 
   const embed = new EmbedBuilder()
     .setColor(0x2b2d31)
-    .setTitle("⏰ Your Pending Reminders")
+    .setTitle("⏰ 𝕐𝕠𝕦𝕣 ℙ𝕖𝕟𝕕𝕚𝕟𝕘 ℝ𝕖𝕞𝕚𝕟𝕕𝕖𝕣𝕤")
     .setDescription(lines.join("\n\n"))
     .setFooter({ text: `Use !remindcancel <id> to cancel one.` })
     .setTimestamp();
@@ -3804,7 +3804,7 @@ async function cmdBirthday(message, args) {
 
     const embed = {
       color: 0xe91e63,
-      title: "🎂 Birthday List",
+      title: "🎂 𝔹𝕚𝕣𝕥𝕙𝕕𝕒𝕪 𝕃𝕚𝕤𝕥",
       description: birthdays.map(b => `<@${b.user_id}>: ${b.birth_month}/${b.birth_day}${b.birth_year ? `/${b.birth_year}` : ""}`).join("\n"),
       footer: { text: `${birthdays.length} birthday${birthdays.length !== 1 ? "s" : ""} registered` }
     };

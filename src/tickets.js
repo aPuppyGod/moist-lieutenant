@@ -102,7 +102,7 @@ async function saveTicketTranscript(guild, channel, ticket, actorUser) {
 
   const transcriptEmbed = new EmbedBuilder()
     .setColor(0x8b7355)
-    .setTitle("📜 Ticket Transcript")
+    .setTitle("📜 𝕋𝕚𝕔𝕜𝕖𝕥 𝕋𝕣𝕒𝕟𝕤𝕔𝕣𝕚𝕡𝕥")
     .addFields(
       { name: "Ticket", value: `#${channel.name}`, inline: true },
       { name: "Opened By", value: opener ? `${opener.user.tag}` : `Unknown (${ticket.opener_id})`, inline: true },
@@ -117,7 +117,7 @@ async function saveTicketTranscript(guild, channel, ticket, actorUser) {
 
   const logEmbed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("📜 Ticket Transcript Saved")
+    .setTitle("📜 𝕋𝕚𝕔𝕜𝕖𝕥 𝕋𝕣𝕒𝕟𝕤𝕔𝕣𝕚𝕡𝕥 𝕊𝕒𝕧𝕖𝕕")
     .addFields(
       { name: "Ticket", value: `#${channel.name}`, inline: true },
       {
@@ -176,7 +176,7 @@ async function sendTicketPanel(guild) {
 
   const embed = new EmbedBuilder()
     .setColor(0x7bc96f)
-    .setTitle("Support Tickets")
+    .setTitle("𝕊𝕦𝕡𝕡𝕠𝕣𝕥 𝕋𝕚𝕔𝕜𝕖𝕥𝕤")
     .setDescription("Need help? Click **Open Ticket** below. A private channel will be created for you and staff.")
     .setTimestamp(new Date());
 
@@ -277,7 +277,7 @@ async function createTicketChannel(guild, openerId) {
 
   const firstEmbed = new EmbedBuilder()
     .setColor(0xa8d5a8)
-    .setTitle("Ticket Opened")
+    .setTitle("𝕋𝕚𝕔𝕜𝕖𝕥 𝕆𝕡𝕖𝕟𝕖𝕕")
     .setDescription(`Hello ${opener}, support will be with you shortly.`)
     .addFields(
       { name: "Opened By", value: `${opener.user.tag}`, inline: true },
@@ -295,7 +295,7 @@ async function createTicketChannel(guild, openerId) {
   // Log ticket opening
   const logEmbed = new EmbedBuilder()
     .setColor(0xa8d5a8)
-    .setTitle("🎫 Ticket Opened")
+    .setTitle("🎫 𝕋𝕚𝕔𝕜𝕖𝕥 𝕆𝕡𝕖𝕟𝕖𝕕")
     .setDescription(`A new ticket has been created.`)
     .addFields(
       { name: "Ticket", value: `<#${channel.id}>`, inline: true },
@@ -326,7 +326,7 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
   // Log ticket closure
   const logEmbed = new EmbedBuilder()
     .setColor(0x8b7355)
-    .setTitle("🔒 Ticket Closed")
+    .setTitle("🔒 𝕋𝕚𝕔𝕜𝕖𝕥 ℂ𝕝𝕠𝕤𝕖𝕕")
     .addFields(
       { name: "Ticket", value: `#${channel.name}`, inline: true },
       { name: "Opened By", value: opener ? `${opener.user.tag} (${opener.id})` : `Unknown (${ticket.opener_id})`, inline: true },
@@ -345,7 +345,7 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
       embeds: [
         new EmbedBuilder()
           .setColor(0x8b7355)
-          .setTitle("Ticket Closed")
+          .setTitle("𝕋𝕚𝕔𝕜𝕖𝕥 ℂ𝕝𝕠𝕤𝕖𝕕")
           .setDescription("This ticket has been closed and will now be deleted.")
           .setTimestamp(new Date())
       ]
@@ -370,7 +370,7 @@ async function closeTicketChannel(guild, channelId, closedByUserId) {
       embeds: [
         new EmbedBuilder()
           .setColor(0x8b7355)
-          .setTitle("Ticket Closed")
+          .setTitle("𝕋𝕚𝕔𝕜𝕖𝕥 ℂ𝕝𝕠𝕤𝕖𝕕")
           .setDescription("This ticket has been closed. Use the buttons below to save a transcript or delete the ticket.")
           .setTimestamp(new Date())
       ],
@@ -484,7 +484,7 @@ async function handleTicketInteraction(interaction) {
       const opener = guild.members.cache.get(ticket.opener_id) || await guild.members.fetch(ticket.opener_id).catch(() => null);
       const logEmbed = new EmbedBuilder()
         .setColor(0xff4444)
-        .setTitle("🗑️ Ticket Deleted")
+        .setTitle("🗑️ 𝕋𝕚𝕔𝕜𝕖𝕥 𝔻𝕖𝕝𝕖𝕥𝕖𝕕")
         .addFields(
           { name: "Ticket", value: `#${channel.name}`, inline: true },
           { name: "Opened By", value: opener ? `${opener.user.tag} (${opener.id})` : `Unknown (${ticket.opener_id})`, inline: true },

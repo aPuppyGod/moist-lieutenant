@@ -697,13 +697,23 @@ async function cmdJob(message, args) {
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
   if (subcommand === "apply") {
-    const jobName = args.slice(1).join(" ");
+    const jobName = args.slice(1).join(" ").trim();
     if (!jobName) {
       await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a job name." }] }).catch(() => {});
       return;
     }
 
-    const job = await get(`SELECT * FROM economy_jobs WHERE guild_id=? AND LOWER(name)=LOWER(?)`, [message.guild.id, jobName]);
+    // Strip leading emoji characters so users can type 'Swamp Sweeper' or '🧹 Swamp Sweeper'
+    const stripEmoji = s => s.replace(/^[\p{Emoji}\s]+/u, "").trim();
+
+    // Try exact match first, then emoji-stripped match
+    let job = await get(`SELECT * FROM economy_jobs WHERE guild_id=? AND LOWER(name)=LOWER(?)`, [message.guild.id, jobName]);
+    if (!job) {
+      // Match against name with leading emoji stripped from DB value
+      const allJobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=?`, [message.guild.id]);
+      job = allJobs.find(j => stripEmoji(j.name).toLowerCase() === jobName.toLowerCase())
+             || allJobs.find(j => stripEmoji(j.name).toLowerCase().includes(jobName.toLowerCase()));
+    }
     if (!job) {
       await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ That job doesn't exist! Use `job list` to see available jobs." }] }).catch(() => {});
       return;

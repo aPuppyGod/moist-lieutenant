@@ -4036,12 +4036,12 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "daily") {
+  if (cmd === "daily" || cmd === "day") {
     await cmdDaily(message);
     return true;
   }
 
-  if (cmd === "weekly") {
+  if (cmd === "weekly" || cmd === "week" || cmd === "wk") {
     await cmdWeekly(message);
     return true;
   }
@@ -4051,22 +4051,22 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "baltop" || cmd === "richest") {
+  if (cmd === "baltop" || cmd === "richest" || cmd === "lb" || cmd === "leaderboard") {
     await cmdEcoLeaderboard(message);
     return true;
   }
 
-  if (cmd === "deposit" || cmd === "dep") {
+  if (cmd === "deposit" || cmd === "dep" || cmd === "d") {
     await cmdDeposit(message, args);
     return true;
   }
 
-  if (cmd === "withdraw" || cmd === "with") {
+  if (cmd === "withdraw" || cmd === "with" || cmd === "wd" || cmd === "w") {
     await cmdWithdraw(message, args);
     return true;
   }
 
-  if (cmd === "rob") {
+  if (cmd === "rob" || cmd === "steal") {
     await cmdRob(message, args);
     return true;
   }
@@ -4079,7 +4079,7 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "fish" || cmd === "fishing") {
+  if (cmd === "fish" || cmd === "fishing" || cmd === "f") {
     const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
@@ -4111,7 +4111,7 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "invest" || cmd === "investment") {
+  if (cmd === "invest" || cmd === "investment" || cmd === "stock") {
     const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get, all };
@@ -4119,7 +4119,7 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "networth" || cmd === "wealth" || cmd === "net-worth") {
+  if (cmd === "networth" || cmd === "wealth" || cmd === "net-worth" || cmd === "nw") {
     const economySettings = await getEconomySettingsRow(message.guild.id);
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get, all };
@@ -4151,7 +4151,7 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "slots" || cmd === "slot") {
+  if (cmd === "slots" || cmd === "slot" || cmd === "s") {
     await cmdSlots(message, args);
     return true;
   }
@@ -4166,7 +4166,7 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "roulette") {
+  if (cmd === "roulette" || cmd === "rl" || cmd === "rou") {
     await cmdRoulette(message, args);
     return true;
   }
@@ -4181,27 +4181,27 @@ async function executeCommand(message, cmd, args, prefix) {
     return true;
   }
 
-  if (cmd === "job" || cmd === "jobs") {
+  if (cmd === "job" || cmd === "jobs" || cmd === "j") {
     await cmdJob(message, args);
     return true;
   }
 
-  if (cmd === "work" || cmd === "shift") {
+  if (cmd === "work" || cmd === "shift" || cmd === "wrk") {
     await cmdWork(message);
     return true;
   }
 
-  if (cmd === "shop" || cmd === "store") {
+  if (cmd === "shop" || cmd === "store" || cmd === "sh") {
     await cmdShop(message);
     return true;
   }
 
-  if (cmd === "buy" || cmd === "purchase") {
+  if (cmd === "buy" || cmd === "purchase" || cmd === "b") {
     await cmdBuy(message, args);
     return true;
   }
 
-  if (cmd === "inventory" || cmd === "inv") {
+  if (cmd === "inventory" || cmd === "inv" || cmd === "i") {
     await cmdInventory(message);
     return true;
   }

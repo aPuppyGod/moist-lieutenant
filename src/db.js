@@ -1018,6 +1018,14 @@ async function initDb() {
   // Migrations: Add missing columns to existing tables
   try {
     await run(`ALTER TABLE birthdays ADD COLUMN IF NOT EXISTS last_wished_year INTEGER DEFAULT NULL`);
+    // Seed last_wished_year for today's birthdays so a fresh deploy doesn't re-send messages already sent today
+    await run(`
+      UPDATE birthdays
+      SET last_wished_year = EXTRACT(YEAR FROM NOW())::INTEGER
+      WHERE last_wished_year IS NULL
+        AND birth_month = EXTRACT(MONTH FROM NOW())::INTEGER
+        AND birth_day   = EXTRACT(DAY   FROM NOW())::INTEGER
+    `);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarborder INTEGER DEFAULT 3`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS avatarbordercolor TEXT DEFAULT '#7bc96f'`);
     await run(`ALTER TABLE user_rankcard_customizations ADD COLUMN IF NOT EXISTS borderglow TEXT DEFAULT 'none'`);

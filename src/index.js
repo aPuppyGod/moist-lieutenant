@@ -462,7 +462,7 @@ async function ensureModmailThread(guild, user) {
     embeds: [
       new EmbedBuilder()
         .setColor(0x7bc96f)
-        .setTitle("Modmail Opened")
+        .setTitle("𝕄𝕠𝕕𝕞𝕒𝕚𝕝 𝕆𝕡𝕖𝕟𝕖𝕕")
         .setDescription(`DM bridge opened for ${user.tag}. Staff messages in this channel are forwarded to the user.`)
         .addFields(
           { name: "User", value: `${user.tag} (${user.id})`, inline: true },
@@ -494,7 +494,7 @@ async function forwardUserDmToModmail(message) {
     embeds: [
       new EmbedBuilder()
         .setColor(0x3498db)
-        .setTitle(threadResult.reused ? "Modmail Reply" : "New Modmail Message")
+        .setTitle(threadResult.reused ? "𝕄𝕠𝕕𝕞𝕒𝕚𝕝 ℝ𝕖𝕡𝕝𝕪" : "ℕ𝕖𝕨 𝕄𝕠𝕕𝕞𝕒𝕚𝕝 𝕄𝕖𝕤𝕤𝕒𝕘𝕖")
         .setDescription(content)
         .addFields(
           { name: "From", value: `${message.author.tag} (${message.author.id})`, inline: true },
@@ -2179,7 +2179,7 @@ client.on(Events.MessageCreate, async (message) => {
 
         const warningEmbed = new EmbedBuilder()
           .setColor("#ff4444")
-          .setTitle("⚠️ Auto-Moderation")
+          .setTitle("⚠️ 𝔸𝕦𝕥𝕠-𝕄𝕠𝕕𝕖𝕣𝕒𝕥𝕚𝕠𝕟")
           .setDescription(`${message.author}, your message was moderated: **${violationReason}** (action: **${violationAction}**)`)
           .setTimestamp();
         

@@ -7696,7 +7696,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           const embed = new EmbedBuilder()
             .setColor("#7bc96f")
             .setAuthor({ name: suggestion.user_id, iconURL: guild.iconURL() || undefined })
-            .setTitle(`💡 Suggestion #${suggestion.id}`)
+            .setTitle(`💡 𝕊𝕦𝕘𝕘𝕖𝕤𝕥𝕚𝕠𝕟 #${suggestion.id}`)
             .setDescription(suggestion.content)
             .addFields({ name: "Status", value: statusText, inline: true })
             .setFooter({ text: `👍 ${suggestion.upvotes || 0} | 👎 ${suggestion.downvotes || 0}` })

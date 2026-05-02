@@ -338,7 +338,7 @@ async function cmdPrestige(message, args, util) {
       [awardedBalance, message.guild.id, message.author.id]
     );
 
-    await message.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle("👑 ASCENDED!").setDescription(`You've become a Murk God!\n\n💰 **Prestige Reward:** ${awardedBalance} ${economySettings.currency_name}\n📊 **Multiplier:** ${multiplier}x your lifetime earnings`)] }).catch(() => {});
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle("👑 𝔸𝕊ℂ𝔼ℕ𝔻𝔼𝔻!").setDescription(`You've become a Murk God!\n\n💰 **Prestige Reward:** ${awardedBalance} ${economySettings.currency_name}\n📊 **Multiplier:** ${multiplier}x your lifetime earnings`)] }).catch(() => {});
     return;
   }
 
@@ -536,7 +536,7 @@ async function cmdAdventure(message, args, util) {
 
     await message.reply({ embeds: [new EmbedBuilder()
       .setColor(0x2d6a4f)
-      .setTitle("🗺️ Swamp Adventures")
+      .setTitle("🗺️ 𝕊𝕨𝕒𝕞𝕡 𝔸𝕕𝕧𝕖𝕟𝕥𝕦𝕣𝕖𝕤")
       .setDescription(`Choose an adventure to begin:\n\n${availableStories}\n\n**Usage:** \`${ecoPrefix}adventure <story_id>\``)
     ] }).catch(() => {});
     return;
@@ -608,7 +608,7 @@ async function cmdAdventure(message, args, util) {
     const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter} next time...`;
     await choiceMsg.reply({ embeds: [new EmbedBuilder()
       .setColor(isCompleted ? 0xf1c40f : 0x2ecc71)
-      .setTitle("✅ Choice Made")
+      .setTitle("✅ ℂ𝕙𝕠𝕚𝕔𝕖 𝕄𝕒𝕕𝕖")
       .setDescription(`**${choice.text}**${rewardText}${completionText}`)
     ] }).catch(() => {});
   });
@@ -727,7 +727,7 @@ async function handleDeath(message, util, deathMessage) {
 
   await message.reply({ embeds: [new EmbedBuilder()
     .setColor(0x2c2c2c)
-    .setTitle("💀 You Have Died!")
+    .setTitle("💀 𝕐𝕠𝕦 ℍ𝕒𝕧𝕖 𝔻𝕚𝕖𝕕!")
     .setDescription(`${deathMessage}\n\n**You lost half your wallet!**\n\n💡 **Ways to revive in future:**\n${REVIVAL_METHODS.map(r => `• ${r.name} — ${r.description}`).join('\n')}\n\nBuy revival items from the shop!`)
   ] }).catch(() => {});
 
@@ -1400,11 +1400,11 @@ async function cmdPhone(message, args, util) {
       [message.guild.id, message.author.id, "takeout", -foodPrice, "Ordered food"]
     );
 
-    await message.reply({ embeds: [{ color: 0x2ecc71, title: '📱 Takeout Delivered!', description: `${randomFood} has arrived!\n*nom nom nom* 😋\n\nCost: **${foodPrice} ${economySettings.currency_name}**` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, title: '📱 𝕋𝕒𝕜𝕖𝕠𝕦𝕥 𝔻𝕖𝕝𝕚𝕧𝕖𝕣𝕖𝕕!', description: `${randomFood} has arrived!\n*nom nom nom* 😋\n\nCost: **${foodPrice} ${economySettings.currency_name}**` }] }).catch(() => {});
     return;
   }
 
-  await message.reply({ embeds: [{ color: 0x3498db, title: '📱 Phone Services', description: `\`${ecoPrefix}phone police\` � Call the police *(1h robbery protection)*\n\`${ecoPrefix}phone taxi\` � Order a taxi *(funny stories)*\n\`${ecoPrefix}phone takeout\` � Order food *(${50} ${economySettings.currency_name})*` }] }).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x3498db, title: '📱 ℙ𝕙𝕠𝕟𝕖 𝕊𝕖𝕣𝕧𝕚𝕔𝕖𝕤', description: `\`${ecoPrefix}phone police\` � Call the police *(1h robbery protection)*\n\`${ecoPrefix}phone taxi\` � Order a taxi *(funny stories)*\n\`${ecoPrefix}phone takeout\` � Order food *(${50} ${economySettings.currency_name})*` }] }).catch(() => {});
 }
 
 // ==================== ITEM USE SYSTEM ====================
@@ -1470,7 +1470,7 @@ async function cmdUse(message, args, util) {
     const expires = now + 3600000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "earnings_boost_20", expires, expires]);
-    embedTitle = "🧪 Swamp Tonic — CONSUMED";
+    embedTitle = "🧪 𝕊𝕨𝕒𝕞𝕡 𝕋𝕠𝕟𝕚𝕔 — ℂ𝕆ℕ𝕊𝕌𝕄𝔼𝔻";
     embedDesc = "The green liquid burns going down. Your vision goes swampy for a moment, then clears.\n\n✅ **+20% earnings boost** for the next **1 hour**!";
     embedColor = 0x00ff88;
 
@@ -1478,7 +1478,7 @@ async function cmdUse(message, args, util) {
     const expires = now + 14400000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "robbery_immune", expires, expires]);
-    embedTitle = "🔒 Padlock — ACTIVATED";
+    embedTitle = "🔒 ℙ𝕒𝕕𝕝𝕠𝕔𝕜 — 𝔸ℂ𝕋𝕀𝕍𝔸𝕋𝔼𝔻";
     embedDesc = "You snap the padlock shut on your wallet.\n\n✅ **Robbery immunity** for **4 hours**!";
     embedColor = 0xffd700;
 
@@ -1486,7 +1486,7 @@ async function cmdUse(message, args, util) {
     const expires = now + 86400000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "trap_set", expires, expires]);
-    embedTitle = "🪤 Trap Kit — SET";
+    embedTitle = "🪤 𝕋𝕣𝕒𝕡 𝕂𝕚𝕥 — 𝕊𝔼𝕋";
     embedDesc = "You carefully set the trap around your coin pouch. The next person to attempt a robbery will trigger it and *lose* 20% of their wallet.\n\n✅ **Robbery trap** active for **24 hours**!";
     embedColor = 0xff6600;
 
@@ -1500,7 +1500,7 @@ async function cmdUse(message, args, util) {
       "A crude map appears then fades. But the coins remain.",
       "The runes spell out a number. That number is your blessing."
     ];
-    embedTitle = "📜 Fortune Scroll — READ";
+    embedTitle = "📜 𝔽𝕠𝕣𝕥𝕦𝕟𝕖 𝕊𝕔𝕣𝕠𝕝𝕝 — ℝ𝔼𝔸𝔻";
     embedDesc = `${fortunes[Math.floor(Math.random() * fortunes.length)]}\n\n✅ You received **+${bonus}** ${economySettings.currency_name}!`;
     embedColor = 0xffeedd;
 
@@ -1509,11 +1509,11 @@ async function cmdUse(message, args, util) {
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "explore_double", expires, expires]);
     if (effect === "murk_map") {
-      embedTitle = "🗺️ Murk Map — ACTIVATED";
+      embedTitle = "🗺️ 𝕄𝕦𝕣𝕜 𝕄𝕒𝕡 — 𝔸ℂ𝕋𝕀𝕍𝔸𝕋𝔼𝔻";
       embedDesc = "You trace the hand-drawn paths to a hidden clearing deep in the swamp.\n\n✅ **Explore loot doubled** for **2 hours**!";
       embedColor = 0x6699ff;
     } else {
-      embedTitle = "🏮 Murk Lantern — LIT";
+      embedTitle = "🏮 𝕄𝕦𝕣𝕜 𝕃𝕒𝕟𝕥𝕖𝕣𝕟 — 𝕃𝕀𝕋";
       embedDesc = "The lantern flickers green. Hidden paths glow before you.\n\n✅ **Explore loot doubled** for **2 hours**!";
       embedColor = 0x99ff66;
     }
@@ -1522,7 +1522,7 @@ async function cmdUse(message, args, util) {
     const expires = now + 7200000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "robbery_immune", expires, expires]);
-    embedTitle = "🌑 Shadow Cloak — WORN";
+    embedTitle = "🌑 𝕊𝕙𝕒𝕕𝕠𝕨 ℂ𝕝𝕠𝕒𝕜 — 𝕎𝕆ℝℕ";
     embedDesc = "Your form flickers and becomes indistinct. No one can rob what they can't see.\n\n✅ **Unrobbable** for **2 hours**!";
     embedColor = 0x222244;
 
@@ -1530,7 +1530,7 @@ async function cmdUse(message, args, util) {
     const expires = now + 21600000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "earnings_boost_20", expires, expires]);
-    embedTitle = "🍀 Lucky Charm — ACTIVATED";
+    embedTitle = "🍀 𝕃𝕦𝕔𝕜𝕪 ℂ𝕙𝕒𝕣𝕞 — 𝔸ℂ𝕋𝕀𝕍𝔸𝕋𝔼𝔻";
     embedDesc = "The four-leaf clover glows with a soft golden light as you hold it.\n\n✅ **+20% earnings boost** for **6 hours**!";
     embedColor = 0x33cc66;
 
@@ -1539,13 +1539,13 @@ async function cmdUse(message, args, util) {
     if (win) {
       const gain = balance * 2;
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + gain, guildId, userId]);
-      embedTitle = "🎲 Gambler's Dice — JACKPOT!";
+      embedTitle = "🎲 𝔾𝕒𝕞𝕓𝕝𝕖𝕣'𝕤 𝔻𝕚𝕔𝕖 — 𝕁𝔸ℂ𝕂ℙ𝕆𝕋!";
       embedDesc = `The dice clatter and land on **TRIPLE**. The table erupts in disbelief.\n\n🎉 You **TRIPLED** your wallet! **+${gain}** ${economySettings.currency_name}!`;
       embedColor = 0xffdd00;
     } else {
       const loss = Math.floor(balance * 0.4);
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [Math.max(0, balance - loss), guildId, userId]);
-      embedTitle = "🎲 Gambler's Dice — BUST";
+      embedTitle = "🎲 𝔾𝕒𝕞𝕓𝕝𝕖𝕣'𝕤 𝔻𝕚𝕔𝕖 — 𝔹𝕌𝕊𝕋";
       embedDesc = `The dice clatter. The room goes quiet. You lose.\n\n💸 Lost **${loss}** ${economySettings.currency_name}. The dice roll away into the dark.`;
       embedColor = 0xff3333;
     }
@@ -1559,7 +1559,7 @@ async function cmdUse(message, args, util) {
     const targetEconomy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, target.id]);
     const tBal = targetEconomy?.balance || 0;
     const tBank = targetEconomy?.bank || 0;
-    embedTitle = "🔍 Merchant's Lens — USED";
+    embedTitle = "🔍 𝕄𝕖𝕣𝕔𝕙𝕒𝕟𝕥'𝕤 𝕃𝕖𝕟𝕤 — 𝕌𝕊𝔼𝔻";
     embedDesc = `You peer through the lens at **${target.username}**.\n\n👛 **Wallet:** ${tBal} ${economySettings.currency_name}\n🏦 **Bank:** ${tBank} ${economySettings.currency_name}\n💰 **Total:** ${tBal + tBank} ${economySettings.currency_name}\n\n*The lens shatters after revealing this truth.*`;
     embedColor = 0xaaddff;
 
@@ -1567,13 +1567,13 @@ async function cmdUse(message, args, util) {
     const win = Math.random() < 0.5;
     if (win) {
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance * 2, guildId, userId]);
-      embedTitle = "🫖 Witch's Brew — BLESSED!";
+      embedTitle = "🫖 𝕎𝕚𝕥𝕔𝕙'𝕤 𝔹𝕣𝕖𝕨 — 𝔹𝕃𝔼𝕊𝕊𝔼𝔻!";
       embedDesc = `The brew tastes like copper and nightmares. Then the room spins...\n\n✨ **DOUBLED!** You gained **+${balance}** ${economySettings.currency_name}!`;
       embedColor = 0xff88ff;
     } else {
       const loss = Math.floor(balance / 2);
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [loss, guildId, userId]);
-      embedTitle = "🫖 Witch's Brew — CURSED!";
+      embedTitle = "🫖 𝕎𝕚𝕥𝕔𝕙'𝕤 𝔹𝕣𝕖𝕨 — ℂ𝕌ℝ𝕊𝔼𝔻!";
       embedDesc = `The brew tastes like copper and nightmares. Your coins vanish...\n\n💀 **HALVED!** Lost **${balance - loss}** ${economySettings.currency_name}.`;
       embedColor = 0x660066;
     }
@@ -1582,7 +1582,7 @@ async function cmdUse(message, args, util) {
     const expires = now + 10800000;
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "earnings_boost_100", expires, expires]);
-    embedTitle = "🐉 Dragon Scale — INFUSED";
+    embedTitle = "🐉 𝔻𝕣𝕒𝕘𝕠𝕟 𝕊𝕔𝕒𝕝𝕖 — 𝕀ℕ𝔽𝕌𝕊𝔼𝔻";
     embedDesc = "You hold the scale and feel ancient power surge through you. The air crackles.\n\n⚡ **2x ALL earnings** for **3 hours**!";
     embedColor = 0xff4400;
 
@@ -1591,13 +1591,13 @@ async function cmdUse(message, args, util) {
     if (success) {
       const bonus = Math.floor(Math.random() * 800) + 200;
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
-      embedTitle = "🧭 Cursed Compass — TREASURE FOUND!";
+      embedTitle = "🧭 ℂ𝕦𝕣𝕤𝕖𝕕 ℂ𝕠𝕞𝕡𝕒𝕤𝕤 — 𝕋ℝ𝔼𝔸𝕊𝕌ℝ𝔼 𝔽𝕆𝕌ℕ𝔻!";
       embedDesc = `The compass needle spins wildly then locks. You dig exactly where it points.\n\n💎 **Treasure found! +${bonus}** ${economySettings.currency_name}!`;
       embedColor = 0xffd700;
     } else {
       const loss = Math.min(balance, Math.floor(Math.random() * 200) + 50);
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance - loss, guildId, userId]);
-      embedTitle = "🧭 Cursed Compass — DANGER!";
+      embedTitle = "🧭 ℂ𝕦𝕣𝕤𝕖𝕕 ℂ𝕠𝕞𝕡𝕒𝕤𝕤 — 𝔻𝔸ℕ𝔾𝔼ℝ!";
       embedDesc = `The compass leads you straight into a bog trap.\n\n💸 Lost **${loss}** ${economySettings.currency_name} in the chaos.`;
       embedColor = 0x994400;
     }
@@ -1605,7 +1605,7 @@ async function cmdUse(message, args, util) {
   } else if (effect === "ancient_coin") {
     const value = Math.floor(450 * 1.5);
     await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + value, guildId, userId]);
-    embedTitle = "🪙 Ancient Coin — SOLD";
+    embedTitle = "🪙 𝔸𝕟𝕔𝕚𝕖𝕟𝕥 ℂ𝕠𝕚𝕟 — 𝕊𝕆𝕃𝔻";
     embedDesc = `A shady merchant materialized from the shadows. "Ah, a Pre-Murk sovereign!"\n\n💰 Sold for **${value}** ${economySettings.currency_name} (1.5x value)!`;
     embedColor = 0xddaa00;
 
@@ -1613,7 +1613,7 @@ async function cmdUse(message, args, util) {
     const shards = Math.floor(Math.random() * 6) + 3;
     await runCmd(`INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + ?`,
       [guildId, userId, "murk_shard", shards, shards]);
-    embedTitle = "🌑 Void Essence — CONSUMED";
+    embedTitle = "🌑 𝕍𝕠𝕚𝕕 𝔼𝕤𝕤𝕖𝕟𝕔𝕖 — ℂ𝕆ℕ𝕊𝕌𝕄𝔼𝔻";
     embedDesc = `You uncork the vial. The void energy swirls out and crystallizes.\n\n⚫ The essence became **${shards} Murk Shards** in your inventory!`;
     embedColor = 0x110022;
 
@@ -1621,7 +1621,7 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "daily_boost_15", expires, expires]);
-    embedTitle = "🐸 Frog Amulet — ATTUNED";
+    embedTitle = "🐸 𝔽𝕣𝕠𝕘 𝔸𝕞𝕦𝕝𝕖𝕥 — 𝔸𝕋𝕋𝕌ℕ𝔼𝔻";
     embedDesc = "You slip the amulet over your neck. One of the carvings blinks.\n\n✅ **+15% daily rewards** — permanent while owned!";
     embedColor = 0x33ff33;
     consumed = false; // single-use item persists in inventory
@@ -1630,7 +1630,7 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "passive_regen_50", expires, expires]);
-    embedTitle = "🦎 Lizard Totem — ACTIVATED";
+    embedTitle = "🦎 𝕃𝕚𝕫𝕒𝕣𝕕 𝕋𝕠𝕥𝕖𝕞 — 𝔸ℂ𝕋𝕀𝕍𝔸𝕋𝔼𝔻";
     embedDesc = "The totem vibrates in your palm. The lizard carving opens its eyes.\n\n✅ **+50 coin passive regen** every hour — permanent!";
     embedColor = 0x55aaff;
     consumed = false;
@@ -1639,7 +1639,7 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "royal_boost", expires, expires]);
-    embedTitle = "👑 Frog Crown — CROWNED";
+    embedTitle = "👑 𝔽𝕣𝕠𝕘 ℂ𝕣𝕠𝕨𝕟 — ℂℝ𝕆𝕎ℕ𝔼𝔻";
     embedDesc = "You place the crown upon your head. The swamp falls silent.\n\n✅ **+25% daily & weekly bonus** — permanently bestowed!";
     embedColor = 0xffcc00;
     consumed = false;
@@ -1648,7 +1648,7 @@ async function cmdUse(message, args, util) {
     const expires = now + (365 * 24 * 3600000);
     await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
       [guildId, userId, "bazaar_access", expires, expires]);
-    embedTitle = "🎭 Black Market Pass — ACTIVATED";
+    embedTitle = "🎭 𝔹𝕝𝕒𝕔𝕜 𝕄𝕒𝕣𝕜𝕖𝕥 ℙ𝕒𝕤𝕤 — 𝔸ℂ𝕋𝕀𝕍𝔸𝕋𝔼𝔻";
     embedDesc = "The pass glows with a dim red light. Somewhere in the Murk, a door unlocks.\n\n✅ **Dark Bazaar access** unlocked permanently!";
     embedColor = 0x880000;
     consumed = false;

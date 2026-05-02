@@ -743,23 +743,23 @@ async function giveReward(message, rewardType, util) {
   const { economySettings, run: runCmd } = util;
 
   const rewards = {
-    "frog_kiss": { money: 100, item: "frog_blessing" },
-    "royal_blessing": { money: 500, item: "crown_jewel" },
-    "prince_gold": { money: 1000 },
-    "prince_scales": { item: "lizard_scales" },
-    "strength_elixir": { item: "strength_potion" },
-    "youth_serum": { item: "youth_potion" },
-    "witch_herbs": { item: "magical_herbs" },
-    "dragon_gold": { money: 2000 },
-    "dragon_scales": { item: "dragon_scales" },
-    "dragon_friendship": { item: "dragon_egg" },
-    "mosquito_wings": { money: 50, item: "insect_wings" },
-    "mosquito_slaughter": { money: 150, item: "bug_spray" },
-    "croc_teeth": { item: "crocodile_teeth" },
-    "croc_skin": { item: "crocodile_hide" },
-    "croc_ride": { item: "crocodile_whistle" },
-    "random_treasure": { money: Math.floor(Math.random() * 500) + 100 },
-    "broken_treasure": { money: Math.floor(Math.random() * 300) + 50 }
+    "frog_kiss":          { money: 400,   item: "frog_blessing" },
+    "royal_blessing":     { money: 1500,  item: "crown_jewel" },
+    "prince_gold":        { money: 3500  },
+    "prince_scales":      { item: "lizard_scales" },
+    "strength_elixir":    { item: "strength_potion" },
+    "youth_serum":        { item: "youth_potion" },
+    "witch_herbs":        { item: "magical_herbs" },
+    "dragon_gold":        { money: 8000  },
+    "dragon_scales":      { item: "dragon_scales" },
+    "dragon_friendship":  { item: "dragon_egg",  money: 2000 },
+    "mosquito_wings":     { money: 250,  item: "insect_wings" },
+    "mosquito_slaughter": { money: 600,  item: "bug_spray" },
+    "croc_teeth":         { item: "crocodile_teeth", money: 500 },
+    "croc_skin":          { item: "crocodile_hide",  money: 800 },
+    "croc_ride":          { item: "crocodile_whistle", money: 300 },
+    "random_treasure":    { money: Math.floor(Math.random() * 2000) + 500 },
+    "broken_treasure":    { money: Math.floor(Math.random() * 1000) + 200 }
   };
 
   const reward = rewards[rewardType];
@@ -1041,6 +1041,8 @@ const MURK_CATALOG = [
 module.exports = {
   cmdFish,
   cmdDig,
+  cmdMine,
+  cmdHunt,
   cmdRobBank,
   cmdPhone,
   cmdAdventure,
@@ -1059,13 +1061,20 @@ module.exports = {
   generateDailyBazaar
 };
 
+// ==================== FISH / DIG / MINE / HUNT LOOT TABLES ====================
+// Weights must sum to exactly 1.0 per table.
+// EV math is included in comments for balance reference.
+
 const FISH_TYPES = [
-  { name: "Goldfish", emoji: "🐠", value: 50, rarity: "common", weight: 0.2 },
-  { name: "Salmon", emoji: "🐟", value: 150, rarity: "uncommon", weight: 0.3 },
-  { name: "Tuna", emoji: "🐟", value: 300, rarity: "rare", weight: 0.2 },
-  { name: "Legendary Trout", emoji: "✨🐟", value: 1000, rarity: "legendary", weight: 0.15 },
-  { name: "Golden Koi", emoji: "🪙🐟", value: 2000, rarity: "mythic", weight: 0.15 }
+  { name: "Pebble Koi",       emoji: "🐠",    value: 80,    rarity: "common",    weight: 0.35 },
+  { name: "Swamp Catfish",    emoji: "🐟",    value: 220,   rarity: "uncommon",  weight: 0.28 },
+  { name: "Ghost Eel",        emoji: "🫧🐟",  value: 550,   rarity: "rare",      weight: 0.18 },
+  { name: "Bog Serpent",      emoji: "🐍",    value: 1400,  rarity: "epic",      weight: 0.10 },
+  { name: "Crystal Bass",     emoji: "💎🐟",  value: 4000,  rarity: "legendary", weight: 0.06 },
+  { name: "Murk Leviathan",   emoji: "🌊🦕",  value: 14000, rarity: "mythic",    weight: 0.025 },
+  { name: "Void Ray",         emoji: "✨🌀",  value: 60000, rarity: "void",      weight: 0.005 },
 ];
+// EV per catch ≈ 1219. With 70% success rate → ~853 avg per attempt (5min CD → ~10,200/hr max)
 
 function getRandomFish() {
   const rand = Math.random();
@@ -1161,18 +1170,54 @@ async function cmdFish(message, args, util) {
     [message.guild.id, message.author.id, "fishing", fish.value, `Caught a ${fish.name}`]
   );
 
-  await message.reply({ embeds: [new EmbedBuilder().setColor(0x3498db).setTitle(`🎣 You caught a ${fish.emoji} ${fish.name}!`).addFields({ name: 'Value', value: `${fish.value} ${economySettings.currency_name}`, inline: true }, { name: 'Rarity', value: fish.rarity, inline: true }, { name: 'Total Caught', value: `${totalCaught}`, inline: true })] }).catch(() => {});
+  const rarityColors2 = { common: 0x3498db, uncommon: 0x2ecc71, rare: 0x9b59b6, epic: 0xe74c3c, legendary: 0xffd700, mythic: 0xff1493, void: 0x8b00ff };
+  const fishColor = rarityColors2[fish.rarity] || 0x3498db;
+  const fishEmbed = new EmbedBuilder()
+    .setColor(fishColor)
+    .setTitle(`🎣 𝔽𝕚𝕤𝕙𝕚𝕟𝕘 ℝ𝕖𝕤𝕦𝕝𝕥`)
+    .setDescription(`${fish.emoji} **${fish.name}** [${fish.rarity.toUpperCase()}]`)
+    .addFields(
+      { name: '💰 Value', value: `+${fish.value} ${economySettings.currency_name}`, inline: true },
+      { name: '⭐ Rarity', value: fish.rarity, inline: true },
+      { name: '🎣 Total Caught', value: `${totalCaught}`, inline: true }
+    );
+  await message.reply({ embeds: [fishEmbed] }).catch(() => {});
 }
 
 // ==================== DIGGING ====================
 
 const DIG_REWARDS = [
-  { item: "old_coin", value: 30, chance: 0.3 },
-  { item: "gem", value: 100, chance: 0.25 },
-  { item: "gold_bar", value: 300, chance: 0.2 },
-  { item: "treasure", value: 1000, chance: 0.15 },
-  { item: "legendary_artifact", value: 5000, chance: 0.1 }
+  { item: "Rusted Copper",    emoji: "🟤", value: 50,    chance: 0.32 },
+  { item: "Iron Fragment",    emoji: "⚙️", value: 180,   chance: 0.26 },
+  { item: "Silver Chunk",     emoji: "🥈", value: 550,   chance: 0.20 },
+  { item: "Gold Nugget",      emoji: "🥇", value: 1600,  chance: 0.13 },
+  { item: "Murk Crystal",     emoji: "💎", value: 5000,  chance: 0.07 },
+  { item: "Void Ore",         emoji: "🌑", value: 18000, chance: 0.025 },
+  { item: "Ancient Relic",    emoji: "🏺", value: 75000, chance: 0.005 },
 ];
+// EV per dig ≈ 1556. Dig always succeeds. (3min CD → ~31,100/hr max)
+
+const MINE_REWARDS = [
+  { item: "Coal",             emoji: "🪨", value: 70,    chance: 0.35 },
+  { item: "Iron Ore",         emoji: "🔩", value: 200,   chance: 0.25 },
+  { item: "Silver Ore",       emoji: "🥈", value: 500,   chance: 0.18 },
+  { item: "Gold Ore",         emoji: "🥇", value: 1200,  chance: 0.12 },
+  { item: "Diamond",          emoji: "💎", value: 3500,  chance: 0.07 },
+  { item: "Void Crystal",     emoji: "🌌", value: 12000, chance: 0.025 },
+  { item: "Eternal Gemstone", emoji: "✨", value: 45000, chance: 0.005 },
+];
+// EV per mine ≈ 1079. Mine always succeeds. (4min CD → ~16,200/hr max)
+
+const HUNT_REWARDS = [
+  { item: "Bog Rat",          emoji: "🐀", value: 60,    chance: 0.30 },
+  { item: "Swamp Hare",       emoji: "🐇", value: 180,   chance: 0.25 },
+  { item: "Murk Fox",         emoji: "🦊", value: 450,   chance: 0.20 },
+  { item: "Bog Boar",         emoji: "🐗", value: 1200,  chance: 0.13 },
+  { item: "Shadow Wolf",      emoji: "🐺", value: 3800,  chance: 0.08 },
+  { item: "Murk Drake",       emoji: "🐉", value: 12000, chance: 0.03 },
+  { item: "Void Stag",        emoji: "🦌", value: 40000, chance: 0.01 },
+];
+// EV per hunt ≈ 1373. 80% success rate. (6min CD → ~11,000/hr max)
 
 function getDigReward() {
   const rand = Math.random();
@@ -1182,6 +1227,26 @@ function getDigReward() {
     if (rand < cumChance) return reward;
   }
   return DIG_REWARDS[0];
+}
+
+function getMineReward() {
+  const rand = Math.random();
+  let cum = 0;
+  for (const r of MINE_REWARDS) {
+    cum += r.chance;
+    if (rand < cum) return r;
+  }
+  return MINE_REWARDS[0];
+}
+
+function getHuntReward() {
+  const rand = Math.random();
+  let cum = 0;
+  for (const r of HUNT_REWARDS) {
+    cum += r.chance;
+    if (rand < cum) return r;
+  }
+  return HUNT_REWARDS[0];
 }
 
 async function cmdDig(message, args, util) {
@@ -1264,8 +1329,159 @@ async function cmdDig(message, args, util) {
     [message.guild.id, message.author.id, "digging", totalValveGain, `Dug up ${reward.item}`]
   );
 
-  const mapBonus = treasureMap ? "\n✨ **Treasure map bonus: 2x rewards!**" : "";
-  await message.reply({ embeds: [new EmbedBuilder().setColor(0xe67e22).setTitle(`⛏️ You dug and found: ${reward.item.replace(/_/g,' ').toUpperCase()}!`).setDescription(`**Value:** ${totalValveGain} ${economySettings.currency_name}\n**Total dug:** ${digCount}${mapBonus ? '\n\n✨ **Treasure map bonus: 2x rewards!**' : ''}`)] }).catch(() => {});
+  const rarityColors = { common: 0xa0522d, uncommon: 0x7ccd7c, rare: 0x4169e1, epic: 0x9b59b6, legendary: 0xffd700, mythic: 0xff69b4, ancient: 0xff4500 };
+  const mapBonus = treasureMap ? "\n\n✨ **Treasure map bonus: 2x value!**" : "";
+  const embed = new EmbedBuilder()
+    .setColor(rarityColors[reward.rarity] || 0xe67e22)
+    .setTitle(`⛏️ 𝔻𝕚𝕘 ℝ𝕖𝕤𝕦𝕝𝕥`)
+    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${totalValveGain} ${economySettings.currency_name}${mapBonus}`)
+    .addFields({ name: "Total Digs", value: `${digCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + totalValveGain} ${economySettings.currency_name}`, inline: true });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ==================== MINING SYSTEM ====================
+
+async function cmdMine(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+    [message.guild.id, message.author.id]);
+
+  const pickaxe = await getCmd(
+    `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id='pickaxe' AND quantity > 0`,
+    [message.guild.id, message.author.id]
+  );
+  if (!pickaxe) {
+    await message.reply({ embeds: [{ color: 0xf39c12, title: '⛏️ ℕ𝕠 ℙ𝕚𝕔𝕜𝕒𝕩𝕖', description: `You need a **Pickaxe** to mine!\n\nBuy one from the shop: \`${ecoPrefix}shop\`` }] }).catch(() => {});
+    return;
+  }
+
+  const stats = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='mining' AND stat_name='last_mine'`,
+    [message.guild.id, message.author.id]
+  );
+  const now = Date.now();
+  const cooldown = 240000; // 4 minutes
+  if (stats?.last_played && (now - stats.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - stats.last_played);
+    const seconds = Math.floor(timeLeft / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `⛏️ Your arms are tired! Rest for **${seconds}s** more.` }] }).catch(() => {});
+    return;
+  }
+
+  const reward = getMineReward();
+  const mineCount = (stats?.stat_value || 0) + 1;
+
+  await runCmd(
+    `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+     VALUES (?, ?, 'mining', 'last_mine', ?, ?)
+     ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=minigames_stats.stat_value+1, last_played=?`,
+    [message.guild.id, message.author.id, mineCount, now, now]
+  );
+
+  const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
+    [message.guild.id, message.author.id]);
+  if (!economy) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: '❌ Economy data missing. Try again.' }] }).catch(() => {});
+    return;
+  }
+
+  // Check void_key buff (3x mine rewards)
+  const voidBuff = await getCmd(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='void_triple' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+  const mult = voidBuff ? 3 : 1;
+  const value = reward.value * mult;
+
+  await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+    [value, message.guild.id, message.author.id]);
+  await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "mining", value, `Mined ${reward.item}`]);
+
+  const rarityColors = { common: 0x607060, uncommon: 0x7ccd7c, rare: 0x4169e1, epic: 0x9b59b6, legendary: 0xffd700, mythic: 0xff69b4 };
+  const voidText = voidBuff ? "\n\n🔑 **Void Key active: 3x rewards!**" : "";
+  const embed = new EmbedBuilder()
+    .setColor(rarityColors[reward.rarity] || 0x607060)
+    .setTitle("⛏️ 𝕄𝕚𝕟𝕖 ℝ𝕖𝕤𝕦𝕝𝕥")
+    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${value} ${economySettings.currency_name}${voidText}`)
+    .addFields({ name: "Total Mines", value: `${mineCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + value} ${economySettings.currency_name}`, inline: true });
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
+// ==================== HUNTING SYSTEM ====================
+
+async function cmdHunt(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+    [message.guild.id, message.author.id]);
+
+  const net = await getCmd(
+    `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id='hunting_net' AND quantity > 0`,
+    [message.guild.id, message.author.id]
+  );
+  if (!net) {
+    await message.reply({ embeds: [{ color: 0xf39c12, title: '🕸️ ℕ𝕠 ℍ𝕦𝕟𝕥𝕚𝕟𝕘 ℕ𝕖𝕥', description: `You need a **Hunting Net** to hunt!\n\nBuy one from the shop: \`${ecoPrefix}shop\`` }] }).catch(() => {});
+    return;
+  }
+
+  const stats = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='hunting' AND stat_name='last_hunt'`,
+    [message.guild.id, message.author.id]
+  );
+  const now = Date.now();
+  const cooldown = 360000; // 6 minutes
+  if (stats?.last_played && (now - stats.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - stats.last_played);
+    const seconds = Math.floor(timeLeft / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🕸️ Your net is still drying! Come back in **${seconds}s**.` }] }).catch(() => {});
+    return;
+  }
+
+  const huntCount = (stats?.stat_value || 0) + 1;
+  await runCmd(
+    `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+     VALUES (?, ?, 'hunting', 'last_hunt', ?, ?)
+     ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=minigames_stats.stat_value+1, last_played=?`,
+    [message.guild.id, message.author.id, huntCount, now, now]
+  );
+
+  // 80% success rate for hunting
+  const success = Math.random() < 0.80;
+  if (!success) {
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: `🕸️ You set your net... but the swamp is empty tonight. Better luck next time!\n\n**Tip:** Even a failed hunt advances your hunt count.` }] }).catch(() => {});
+    return;
+  }
+
+  const reward = getHuntReward();
+  const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
+    [message.guild.id, message.author.id]);
+  if (!economy) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: '❌ Economy data missing. Try again.' }] }).catch(() => {});
+    return;
+  }
+
+  await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+    [reward.value, message.guild.id, message.author.id]);
+  await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "hunting", reward.value, `Hunted ${reward.item}`]);
+
+  const rarityColors = { common: 0x8b4513, uncommon: 0x228b22, rare: 0x4169e1, epic: 0x9b59b6, legendary: 0xffd700, mythic: 0xff69b4 };
+  const embed = new EmbedBuilder()
+    .setColor(rarityColors[reward.rarity] || 0x8b4513)
+    .setTitle("🕸️ ℍ𝕦𝕟𝕥 ℝ𝕖𝕤𝕦𝕝𝕥")
+    .setDescription(`${reward.emoji || '🐾'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${reward.value} ${economySettings.currency_name}`)
+    .addFields({ name: "Total Hunts", value: `${huntCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + reward.value} ${economySettings.currency_name}`, inline: true });
+  await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
 // ==================== ROBBERY SYSTEM ====================
@@ -1491,7 +1707,7 @@ async function cmdUse(message, args, util) {
     embedColor = 0xff6600;
 
   } else if (effect === "fortune_scroll") {
-    const bonus = Math.floor(Math.random() * 450) + 50;
+    const bonus = Math.floor(Math.random() * 1800) + 200;
     await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
     const fortunes = [
       "The scroll speaks of rivers of gold flowing from the east swamp.",
@@ -1589,7 +1805,7 @@ async function cmdUse(message, args, util) {
   } else if (effect === "cursed_compass") {
     const success = Math.random() < 0.65;
     if (success) {
-      const bonus = Math.floor(Math.random() * 800) + 200;
+      const bonus = Math.floor(Math.random() * 2500) + 500;
       await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
       embedTitle = "🧭 ℂ𝕦𝕣𝕤𝕖𝕕 ℂ𝕠𝕞𝕡𝕒𝕤𝕤 — 𝕋ℝ𝔼𝔸𝕊𝕌ℝ𝔼 𝔽𝕆𝕌ℕ𝔻!";
       embedDesc = `The compass needle spins wildly then locks. You dig exactly where it points.\n\n💎 **Treasure found! +${bonus}** ${economySettings.currency_name}!`;
@@ -1656,6 +1872,123 @@ async function cmdUse(message, args, util) {
   } else if (effect === "revival_potion") {
     consumed = false;
     await message.reply({ embeds: [{ color: 0x9b59b6, description: `🛡️ **${inventoryItem.name}** is held in reserve � it automatically activates when you would die in an adventure or explore event.` }] }).catch(() => {});
+    return;
+
+  } else if (effect === "bog_whistle") {
+    const success = Math.random() < 0.75;
+    if (success) {
+      const bonus = Math.floor(Math.random() * 1200) + 300;
+      await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [balance + bonus, guildId, userId]);
+      embedTitle = "🎵 𝔹𝕠𝕘 𝕎𝕙𝕚𝕤𝕥𝕝𝕖 — 𝕊𝕡𝕚𝕣𝕚𝕥𝕤 ℍ𝔼𝔸ℝ𝔻";
+      embedDesc = `The eerie call echoes across the swamp. The spirits answered.\n\n✅ **+${bonus}** ${economySettings.currency_name} dropped from the mist!`;
+      embedColor = 0x88ccff;
+    } else {
+      embedTitle = "🎵 𝔹𝕠𝕘 𝕎𝕙𝕚𝕤𝕥𝕝𝕖 — 𝕊𝕚𝕝𝕖𝕟𝕔𝕖";
+      embedDesc = `The whistle shrieks. The swamp goes quiet. No spirits came.\n\n💨 Nothing happened this time. The whistle is spent.`;
+      embedColor = 0x556677;
+    }
+
+  } else if (effect === "mana_potion") {
+    await runCmd(
+      `UPDATE minigames_stats SET last_played=0 WHERE guild_id=? AND user_id=? AND minigame IN ('fishing','digging','mining','hunting')`,
+      [guildId, userId]
+    );
+    embedTitle = "💙 𝕄𝕒𝕟𝕒 ℙ𝕠𝕥𝕚𝕠𝕟 — 𝔻ℝ𝔸𝕀ℕ𝔼𝔻";
+    embedDesc = "The crystalline liquid radiates cold light as you drink it. Your fatigue evaporates.\n\n✅ **All gathering cooldowns reset!** (fish, dig, mine, hunt)";
+    embedColor = 0x3399ff;
+
+  } else if (effect === "time_crystal") {
+    await runCmd(
+      `UPDATE minigames_stats SET last_played=0 WHERE guild_id=? AND user_id=?`,
+      [guildId, userId]
+    );
+    embedTitle = "⏱️ 𝕋𝕚𝕞𝕖 ℂ𝕣𝕪𝕤𝕥𝕒𝕝 — 𝕊𝕙𝕒𝕥𝕥𝕖𝕣𝕖𝕕";
+    embedDesc = "The crystal vibrates violently then explodes in a shiver of temporal energy.\n\n✅ **ALL cooldowns reset** — every activity is available immediately!";
+    embedColor = 0xaaeeff;
+
+  } else if (effect === "bone_charm") {
+    const expires = now + (4 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "work_bonus_25", expires, expires]);
+    embedTitle = "🦴 𝔹𝕠𝕘 ℂ𝕙𝕒𝕣𝕞 — 𝔸ℂ𝕋𝕀𝕍𝔸𝕋𝔼𝔻";
+    embedDesc = "The bone rattles as you snap it in half. A warm energy washes over you.\n\n✅ **+25% job pay** for **4 hours**!";
+    embedColor = 0xeecc99;
+
+  } else if (effect === "experience_vial") {
+    const expires = now + (2 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "work_boost_30", expires, expires]);
+    embedTitle = "⚗️ 𝔼𝕩𝕡𝕖𝕣𝕚𝕖𝕟𝕔𝕖 𝕍𝕚𝕒𝕝 — 𝔻ℝ𝕌ℕ𝕂";
+    embedDesc = "You swallow the shimmering fluid. Your mind sharpens with sudden clarity.\n\n✅ **+30% job pay** for **2 hours**!";
+    embedColor = 0x99ffcc;
+
+  } else if (effect === "bog_armor") {
+    const expires = now + (6 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "rob_resist_75", expires, expires]);
+    embedTitle = "🛡️ 𝔹𝕠𝕘 𝔸𝕣𝕞𝕠𝕣 — 𝔼ℕ𝔸𝔹𝕃𝔼𝔻";
+    embedDesc = "The thick bog-hide armor molds to your form, hardening like stone.\n\n✅ **Robbery fines reduced by 75%** for **6 hours**!";
+    embedColor = 0x886644;
+
+  } else if (effect === "void_key") {
+    const expires = now + (1 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "void_triple", expires, expires]);
+    embedTitle = "🗝️ 𝕍𝕠𝕚𝕕 𝕂𝕖𝕪 — 𝕀ℕ𝕊𝔼ℝ𝕋𝔼𝔻";
+    embedDesc = "The key dissolves into the air, leaving a faint void-haze around your hands.\n\n✅ **3x dig & mine rewards** for **1 hour**!";
+    embedColor = 0x6600aa;
+
+  } else if (effect === "chaos_stone") {
+    // Weighted random multiplier outcome
+    const roll = Math.random();
+    let mult;
+    let outcomeText;
+    if (roll < 0.30)      { mult = 0.20; outcomeText = "💀 The void consumes **80% of your coins!**"; }
+    else if (roll < 0.50) { mult = 0.60; outcomeText = "💸 The stone destabilizes — you lose **40%**."; }
+    else if (roll < 0.65) { mult = 1.50; outcomeText = "✨ The chaos ripples outward — **+50%!**"; }
+    else if (roll < 0.78) { mult = 2.00; outcomeText = "🔥 DOUBLED! The stone burns bright!"; }
+    else if (roll < 0.88) { mult = 3.50; outcomeText = "⚡ CHAOS SURGE! **×3.5x** your coins!"; }
+    else if (roll < 0.95) { mult = 5.00; outcomeText = "🌀 **VOID JACKPOT! ×5x!**"; }
+    else                   { mult = 8.00; outcomeText = "👑 **ABSOLUTE CHAOS! ×8x!!!** THE SWAMP TREMBLES!"; }
+
+    const newBal = Math.floor(balance * mult);
+    await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBal, guildId, userId]);
+    embedTitle = "🌀 ℂ𝕙𝕒𝕠𝕤 𝕊𝕥𝕠𝕟𝕖 — ℝ𝕆𝕃𝕃𝔼𝔻";
+    embedDesc = `The stone screams and shatters.\n\n${outcomeText}\n\n**${balance.toLocaleString()}** → **${newBal.toLocaleString()}** ${economySettings.currency_name}`;
+    embedColor = mult >= 2 ? 0xff9900 : 0x660033;
+
+  } else if (effect === "bankers_tome") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "bank_interest_3", expires, expires]);
+    embedTitle = "📚 𝔹𝕒𝕟𝕜𝕖𝕣'𝕤 𝕋𝕠𝕞𝕖 — 𝕃𝔼𝔸ℝℕ𝔼𝔻";
+    embedDesc = "The pages flutter of their own accord. The knowledge burns into your mind.\n\n✅ **+3% daily bank interest** — permanently!";
+    embedColor = 0xffcc44;
+    consumed = false;
+
+  } else if (effect === "murk_compass") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "global_boost_15", expires, expires]);
+    embedTitle = "🧿 𝕄𝕦𝕣𝕜 ℂ𝕠𝕞𝕡𝕒𝕤𝕤 — 𝔸𝕋𝕋𝕌ℕ𝔼𝔻";
+    embedDesc = "The compass needle spins then locks onto you. The swamp recognizes you as one of its own.\n\n✅ **+15% all income** — permanent!";
+    embedColor = 0x33ddff;
+    consumed = false;
+
+  } else if (effect === "dragon_heart") {
+    const expires = now + (365 * 24 * 3600000);
+    await runCmd(`INSERT INTO user_buffs (guild_id, user_id, buff_id, expires_at) VALUES (?, ?, ?, ?) ON CONFLICT (guild_id, user_id, buff_id) DO UPDATE SET expires_at=?`,
+      [guildId, userId, "passive_regen_600", expires, expires]);
+    embedTitle = "❤️‍🔥 𝔻𝕣𝕒𝕘𝕠𝕟 ℍ𝕖𝕒𝕣𝕥 — 𝔹𝔼𝔸𝕋𝕀ℕ𝔾";
+    embedDesc = "The heart pulses in your hands then merges with your chest. You feel ancient power flow through you.\n\n✅ **+600 coins/hr passive regen** — permanently!";
+    embedColor = 0xff4400;
+    consumed = false;
+
+  } else if (effect === "pickaxe" || effect === "hunting_net" || effect === "fishing_rod" || effect === "shovel") {
+    consumed = false;
+    const toolNames = { pickaxe: "⛏️ Iron Pickaxe", hunting_net: "🕸️ Hunting Net", fishing_rod: "🎣 Fishing Rod", shovel: "⛏️ Rusty Shovel" };
+    const toolUses = { pickaxe: "`mine`", hunting_net: "`hunt`", fishing_rod: "`fish`", shovel: "`dig`" };
+    await message.reply({ embeds: [{ color: 0x88aacc, description: `🛠️ **${toolNames[effect]}** is a tool — it's already active in your inventory! Use ${toolUses[effect]} to put it to work.` }] }).catch(() => {});
     return;
 
   } else {

@@ -874,9 +874,9 @@ async function initDb() {
       guild_id TEXT PRIMARY KEY,
       currency_name TEXT DEFAULT 'coins',
       currency_symbol TEXT DEFAULT '🪙',
-      daily_amount INTEGER DEFAULT 100,
-      daily_streak_bonus INTEGER DEFAULT 10,
-      weekly_amount INTEGER DEFAULT 500,
+      daily_amount INTEGER DEFAULT 300,
+      daily_streak_bonus INTEGER DEFAULT 50,
+      weekly_amount INTEGER DEFAULT 2500,
       rob_enabled INTEGER DEFAULT 1,
       rob_cooldown INTEGER DEFAULT 3600,
       economy_prefix TEXT DEFAULT '$',
@@ -1287,6 +1287,25 @@ async function initDb() {
         PRIMARY KEY (guild_id, user_id, buff_id)
       )
     `);
+
+    // Investment ventures system
+    await run(`
+      CREATE TABLE IF NOT EXISTS user_investments (
+        id BIGSERIAL PRIMARY KEY,
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        venture_id TEXT NOT NULL,
+        amount BIGINT NOT NULL,
+        invested_at BIGINT NOT NULL,
+        matures_at BIGINT NOT NULL,
+        collected INTEGER DEFAULT 0
+      )
+    `);
+
+    // Economy settings rebalancing migrations
+    await run(`UPDATE economy_settings SET daily_amount=300 WHERE daily_amount=100`).catch(() => {});
+    await run(`UPDATE economy_settings SET weekly_amount=2500 WHERE weekly_amount=500`).catch(() => {});
+    await run(`UPDATE economy_settings SET daily_streak_bonus=50 WHERE daily_streak_bonus=10`).catch(() => {});
 
   } catch (e) {
     // Columns might already exist, ignore error

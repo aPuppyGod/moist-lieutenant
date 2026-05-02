@@ -133,9 +133,31 @@ async function cmdDaily(message) {
     newStreak = 1;
   }
 
-  const baseAmount = economySettings.daily_amount || 100;
-  const streakBonus = Math.floor((newStreak - 1) * (economySettings.daily_streak_bonus || 10));
-  const totalAmount = baseAmount + streakBonus;
+  const baseAmount = economySettings.daily_amount || 300;
+  // Exponential streak scaling: grows faster at higher streaks
+  const bonusPerDay = economySettings.daily_streak_bonus || 50;
+  const streakBonus = Math.min(Math.floor(bonusPerDay * Math.sqrt(newStreak - 1) * (newStreak - 1) * 0.5 + bonusPerDay * (newStreak - 1)), 5000);
+
+  // Streak milestone bonuses
+  let milestoneBonus = 0;
+  let milestoneText = "";
+  if (newStreak === 7)   { milestoneBonus = 1000; milestoneText = "\n🔥 **7-day streak bonus! +1,000 bonus!**"; }
+  if (newStreak === 14)  { milestoneBonus = 2500; milestoneText = "\n🔥 **2-week streak bonus! +2,500 bonus!**"; }
+  if (newStreak === 30)  { milestoneBonus = 7500; milestoneText = "\n🌟 **30-day streak bonus! +7,500 bonus!**"; }
+  if (newStreak === 100) { milestoneBonus = 25000; milestoneText = "\n👑 **100-day streak! LEGENDARY +25,000 bonus!**"; }
+  if (newStreak > 100 && newStreak % 50 === 0) { milestoneBonus = 10000; milestoneText = `\n⚡ **${newStreak}-day streak bonus! +10,000 bonus!**`; }
+
+  // Check buffs that boost daily
+  const frogAmulet = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='daily_boost_15' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+  const frogCrown = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='royal_boost' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+
+  let buffMult = 1.0;
+  if (frogAmulet) buffMult += 0.15;
+  if (frogCrown)  buffMult += 0.25;
+
+  const totalAmount = Math.floor((baseAmount + streakBonus + milestoneBonus) * buffMult);
 
   const newBalance = economy.balance + totalAmount;
   await run(`UPDATE user_economy SET balance=?, last_daily=?, daily_streak=?, daily_streak_date=? WHERE guild_id=? AND user_id=?`,
@@ -144,15 +166,17 @@ async function cmdDaily(message) {
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "daily", totalAmount, `Daily reward (${newStreak} day streak)`]);
 
+  const buffText = buffMult > 1 ? `\n🍀 **Buff multiplier:** ${buffMult.toFixed(2)}x` : "";
   const embed = {
     color: 0x2ecc71,
-    title: `${economySettings.currency_symbol} Daily Reward`,
-    description: `**Base:** ${baseAmount} ${economySettings.currency_name}\n**Streak Bonus:** ${streakBonus} ${economySettings.currency_name} (${newStreak} days)\n**Total:** ${totalAmount} ${economySettings.currency_name}`,
+    title: `${economySettings.currency_symbol} 𝔻𝕒𝕚𝕝𝕪 ℝ𝕖𝕨𝕒𝕣𝕕`,
+    description: `**Base:** ${baseAmount} ${economySettings.currency_name}\n**Streak Bonus:** +${streakBonus} ${economySettings.currency_name}${milestoneBonus > 0 ? `\n**Milestone:** +${milestoneBonus}` : ""}${buffText}${milestoneText}`,
     fields: [
-      { name: "🔥 Current Streak", value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
-      { name: "💰 New Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
+      { name: "🔥 Streak", value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
+      { name: "💰 Earned", value: `+${totalAmount} ${economySettings.currency_name}`, inline: true },
+      { name: "💳 New Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
     ],
-    footer: { text: `Keep your streak going! Come back tomorrow for ${baseAmount + (newStreak * (economySettings.daily_streak_bonus || 10))} ${economySettings.currency_name}` }
+    footer: { text: `Next daily reward ≥ ${Math.floor((baseAmount + Math.min(Math.floor(bonusPerDay * Math.sqrt(newStreak) * newStreak * 0.5 + bonusPerDay * newStreak), 5000)) * buffMult)} ${economySettings.currency_name}` }
   };
 
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -184,13 +208,27 @@ async function cmdWeekly(message) {
     return;
   }
 
-  const newBalance = economy.balance + economySettings.weekly_amount;
+  const weeklyBase = economySettings.weekly_amount || 2500;
+
+  // Check buffs
+  const frogCrown2 = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='royal_boost' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+  const weeklyMult = frogCrown2 ? 1.25 : 1.0;
+  const weeklyTotal = Math.floor(weeklyBase * weeklyMult);
+
+  const newBalance = economy.balance + weeklyTotal;
   await run(`UPDATE user_economy SET balance=?, last_weekly=? WHERE guild_id=? AND user_id=?`, [newBalance, now, message.guild.id, message.author.id]);
 
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "weekly", economySettings.weekly_amount, "Weekly reward"]);
+    [message.guild.id, message.author.id, "weekly", weeklyTotal, "Weekly reward"]);
 
-  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You claimed your weekly reward of ${economySettings.weekly_amount} ${economySettings.currency_name}! ${economySettings.currency_symbol}` }] }).catch(() => {});
+  const buffLine = frogCrown2 ? "\n👑 **Frog Crown: +25% bonus applied!**" : "";
+  await message.reply({ embeds: [{
+    color: 0x2ecc71,
+    title: `${economySettings.currency_symbol} 𝕎𝕖𝕖𝕜𝕝𝕪 ℝ𝕖𝕨𝕒𝕣𝕕`,
+    description: `💰 **+${weeklyTotal} ${economySettings.currency_name}** collected!${buffLine}\n\n**New Balance:** ${newBalance} ${economySettings.currency_name}`,
+    footer: { text: "Come back in 7 days for another weekly reward!" }
+  }] }).catch(() => {});
 }
 
 async function cmdPay(message, args) {
@@ -813,13 +851,30 @@ async function cmdWork(message) {
     }
   }
 
-  const pay = Math.floor(job.pay_min + Math.random() * (job.pay_max - job.pay_min));
+  const basePay = Math.floor(job.pay_min + Math.random() * (job.pay_max - job.pay_min));
+
+  // Apply work buffs
+  const bonusBuff = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='work_bonus_25' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+  const boostBuff = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='work_boost_30' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+  const globalBoost = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='global_boost_15' AND expires_at>?`,
+    [message.guild.id, message.author.id, now]);
+
+  let payMult = 1.0;
+  if (bonusBuff)  payMult += 0.25;
+  if (boostBuff)  payMult += 0.30;
+  if (globalBoost) payMult += 0.15;
+
+  const pay = Math.floor(basePay * payMult);
+  const buffNote = payMult > 1 ? ` *(×${payMult.toFixed(2)} buff)*` : "";
+
   await run(`UPDATE user_economy SET balance=?, job_last_shift=?, job_shifts_completed=?, job_weekly_shifts=? WHERE guild_id=? AND user_id=?`,
     [economy.balance + pay, now, economy.job_shifts_completed + 1, economy.job_weekly_shifts + 1, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "work", pay, `Worked as ${job.name}`]);
 
-  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Shift complete! You earned ${pay} ${economySettings.currency_name}. (${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} this week)` }] }).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Shift complete! You earned **${pay}** ${economySettings.currency_name}${buffNote} (${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} this week)` }] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -1691,6 +1746,246 @@ async function cmdHighLow(message, args) {
   }] }).catch(() => {});
 }
 
+// ─── INVEST COMMAND ─────────────────────────────────────────────────────────
+// Usage: invest <amount> <venture> | invest collect | invest status
+const VENTURES = {
+  swamp_trade: {
+    name: "🌿 Swamp Trade",
+    risk: "Low",
+    color: 0x2ecc71,
+    desc: "Slow and steady. Low risk, modest returns.",
+    duration: 8 * 3600000,   // 8 hours
+    ranges: [
+      { chance: 0.15, mult: 0.85 },  // 15% small loss
+      { chance: 0.30, mult: 1.10 },  // 30% slight gain
+      { chance: 0.35, mult: 1.25 },  // 35% good gain
+      { chance: 0.15, mult: 1.45 },  // 15% great gain
+      { chance: 0.05, mult: 1.80 },  // 5% jackpot
+    ]
+  },
+  murk_mine: {
+    name: "⛏️ Murk Mine Co.",
+    risk: "Medium",
+    color: 0xf39c12,
+    desc: "Mining venture. Moderate risk, higher rewards.",
+    duration: 12 * 3600000, // 12 hours
+    ranges: [
+      { chance: 0.20, mult: 0.60 },  // 20% significant loss
+      { chance: 0.20, mult: 0.90 },  // 20% small loss
+      { chance: 0.25, mult: 1.30 },  // 25% decent gain
+      { chance: 0.20, mult: 1.75 },  // 20% great gain
+      { chance: 0.10, mult: 2.50 },  // 10% big win
+      { chance: 0.05, mult: 4.00 },  // 5% jackpot
+    ]
+  },
+  void_market: {
+    name: "🌀 Void Markets",
+    risk: "Extreme",
+    color: 0x9b59b6,
+    desc: "The void is unpredictable. Lose it all or multiply it tenfold.",
+    duration: 24 * 3600000, // 24 hours
+    ranges: [
+      { chance: 0.25, mult: 0.10 },  // 25% near total loss
+      { chance: 0.15, mult: 0.50 },  // 15% major loss
+      { chance: 0.20, mult: 1.00 },  // 20% break even
+      { chance: 0.15, mult: 2.00 },  // 15% double
+      { chance: 0.15, mult: 4.00 },  // 15% quadruple
+      { chance: 0.10, mult: 8.00 },  // 10% huge win
+    ]
+  }
+};
+
+function rollVentureMultiplier(venture) {
+  let roll = Math.random();
+  for (const tier of venture.ranges) {
+    if (roll < tier.chance) return tier.mult;
+    roll -= tier.chance;
+  }
+  return 1.0;
+}
+
+async function cmdInvest(message, args, util) {
+  const { economySettings, run, get } = util;
+  const userId = message.author.id;
+  const guildId = message.guild.id;
+
+  // Ensure investments table exists
+  await run(`CREATE TABLE IF NOT EXISTS user_investments (
+    id BIGSERIAL PRIMARY KEY,
+    guild_id TEXT NOT NULL, user_id TEXT NOT NULL,
+    venture_id TEXT NOT NULL, amount BIGINT NOT NULL,
+    invested_at BIGINT NOT NULL, matures_at BIGINT NOT NULL, collected INTEGER DEFAULT 0
+  )`).catch(() => {});
+
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+  if (!economy) return message.reply("You don't have an economy account yet.").catch(() => {});
+
+  const sub = (args[0] || "").toLowerCase();
+
+  // invest status — view active investments
+  if (sub === "status" || sub === "list") {
+    const investments = await util.all
+      ? await util.all(`SELECT * FROM user_investments WHERE guild_id=? AND user_id=? AND collected=0 ORDER BY invested_at DESC LIMIT 10`, [guildId, userId])
+      : [];
+    if (!investments || investments.length === 0)
+      return message.reply({ embeds: [{ color: 0x95a5a6, description: "📊 You have no active investments. Use `invest <amount> <swamp_trade|murk_mine|void_market>`" }] }).catch(() => {});
+
+    const now = Date.now();
+    const fields = investments.map(inv => {
+      const v = VENTURES[inv.venture_id] || { name: inv.venture_id };
+      const timeLeft = inv.matures_at - now;
+      const ready = timeLeft <= 0;
+      const timeStr = ready ? "✅ Ready to collect!" : `⏳ ${Math.ceil(timeLeft / 3600000)}h remaining`;
+      return { name: `${v.name || inv.venture_id}`, value: `**${inv.amount.toLocaleString()} ${economySettings.currency_name}** invested\n${timeStr}`, inline: true };
+    });
+
+    return message.reply({ embeds: [{
+      color: 0x3498db,
+      title: `📊 𝕀𝕟𝕧𝕖𝕤𝕥𝕞𝕖𝕟𝕥 ℙ𝕠𝕣𝕥𝕗𝕠𝕝𝕚𝕠`,
+      fields,
+      footer: { text: "Use 'invest collect' to collect matured investments" }
+    }] }).catch(() => {});
+  }
+
+  // invest collect
+  if (sub === "collect") {
+    const now = Date.now();
+    const matured = util.all
+      ? await util.all(`SELECT * FROM user_investments WHERE guild_id=? AND user_id=? AND collected=0 AND matures_at<=?`, [guildId, userId, now])
+      : [];
+    if (!matured || matured.length === 0)
+      return message.reply({ embeds: [{ color: 0x95a5a6, description: "⏳ No matured investments to collect yet. Check `invest status`." }] }).catch(() => {});
+
+    let totalReturns = 0;
+    const summaryLines = [];
+    for (const inv of matured) {
+      const v = VENTURES[inv.venture_id];
+      if (!v) continue;
+      const mult = rollVentureMultiplier(v);
+      const returns = Math.floor(inv.amount * mult);
+      const profit = returns - inv.amount;
+      totalReturns += returns;
+      const profitStr = profit >= 0 ? `+${profit.toLocaleString()}` : profit.toLocaleString();
+      summaryLines.push(`${v.name}: **${inv.amount.toLocaleString()} → ${returns.toLocaleString()}** (${profitStr})`);
+      await run(`UPDATE user_investments SET collected=1 WHERE id=?`, [inv.id]).catch(() => {});
+    }
+
+    const newBalance = economy.balance + totalReturns;
+    await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, guildId, userId]);
+
+    return message.reply({ embeds: [{
+      color: totalReturns > 0 ? 0x2ecc71 : 0xe74c3c,
+      title: `💰 𝕀𝕟𝕧𝕖𝕤𝕥𝕞𝕖𝕟𝕥 ℂ𝕠𝕝𝕝𝕖𝕔𝕥𝕖𝕕`,
+      description: summaryLines.join("\n"),
+      fields: [
+        { name: "Total Collected", value: `${totalReturns.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+        { name: "New Balance", value: `${newBalance.toLocaleString()} ${economySettings.currency_name}`, inline: true }
+      ]
+    }] }).catch(() => {});
+  }
+
+  // invest <amount> <venture>
+  const ventureKey = (args[1] || "").toLowerCase();
+  const venture = VENTURES[ventureKey];
+  if (!venture) {
+    const ventureList = Object.entries(VENTURES)
+      .map(([k, v]) => `**${v.name}** (\`${k}\`) — ${v.risk} risk, matures in ${v.duration / 3600000}h\n${v.desc}`)
+      .join("\n\n");
+    return message.reply({ embeds: [{
+      color: 0x3498db,
+      title: "📊 𝕀𝕟𝕧𝕖𝕤𝕥𝕞𝕖𝕟𝕥 𝕍𝕖𝕟𝕥𝕦𝕣𝕖𝕤",
+      description: `Choose a venture:\n\n${ventureList}\n\n**Usage:** \`invest <amount> <venture_id>\`\n**Collect:** \`invest collect\`\n**Status:** \`invest status\``,
+      footer: { text: "Investments are locked until maturity. Results are revealed on collection." }
+    }] }).catch(() => {});
+  }
+
+  const bet = args[0] === "all" ? economy.balance : parseInt(args[0]);
+  if (isNaN(bet) || bet <= 0) return message.reply("Please specify a valid amount.").catch(() => {});
+  if (bet > economy.balance) return message.reply(`You only have ${economy.balance.toLocaleString()} ${economySettings.currency_name}.`).catch(() => {});
+  if (bet < 100) return message.reply("Minimum investment is 100 coins.").catch(() => {});
+
+  const now = Date.now();
+  const matures_at = now + venture.duration;
+
+  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [economy.balance - bet, guildId, userId]);
+  await run(
+    `INSERT INTO user_investments (guild_id, user_id, venture_id, amount, invested_at, matures_at, collected) VALUES (?, ?, ?, ?, ?, ?, 0)`,
+    [guildId, userId, ventureKey, bet, now, matures_at]
+  );
+
+  return message.reply({ embeds: [{
+    color: venture.color,
+    title: `${venture.name} — Investment Filed`,
+    description: `💸 You invested **${bet.toLocaleString()} ${economySettings.currency_name}** in **${venture.name}**.\n\n${venture.desc}`,
+    fields: [
+      { name: "Risk", value: venture.risk, inline: true },
+      { name: "Matures In", value: `${venture.duration / 3600000} hours`, inline: true },
+      { name: "Wallet", value: `${(economy.balance - bet).toLocaleString()} ${economySettings.currency_name}`, inline: true }
+    ],
+    footer: { text: "Use 'invest collect' after the venture matures to see your returns." }
+  }] }).catch(() => {});
+}
+
+// ─── NET WORTH COMMAND ────────────────────────────────────────────────────────
+async function cmdNetWorth(message, args, util) {
+  const { economySettings, get } = util;
+
+  const target = message.mentions.users.first() || message.author;
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, target.id]);
+  if (!economy) return message.reply(`${target.username} has no economy account yet.`).catch(() => {});
+
+  // Sum inventory item values
+  let inventoryValue = 0;
+  const inventoryItems = util.all
+    ? await util.all(`SELECT ui.quantity, si.price FROM user_inventory ui
+        JOIN economy_shop_items si ON si.guild_id=ui.guild_id AND si.item_id=ui.item_id
+        WHERE ui.guild_id=? AND ui.user_id=?`, [message.guild.id, target.id])
+    : [];
+  if (inventoryItems && inventoryItems.length > 0) {
+    inventoryValue = inventoryItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+  }
+
+  // Active investments
+  let investmentValue = 0;
+  const activeInvests = util.all
+    ? await util.all(`SELECT amount FROM user_investments WHERE guild_id=? AND user_id=? AND collected=0`, [message.guild.id, target.id])
+    : [];
+  if (activeInvests && activeInvests.length > 0) {
+    investmentValue = activeInvests.reduce((sum, i) => sum + i.amount, 0);
+  }
+
+  const wallet = economy.balance || 0;
+  const bank = economy.bank_balance || 0;
+  const netWorth = wallet + bank + inventoryValue + investmentValue;
+
+  // Net worth tiers
+  let tier = "🧹 Swamp Peasant";
+  if (netWorth >= 500000) tier = "👑 Murk Overlord";
+  else if (netWorth >= 200000) tier = "🐉 Dragon Lord";
+  else if (netWorth >= 100000) tier = "⚔️ Warlord";
+  else if (netWorth >= 50000) tier = "🎭 Shadow Broker";
+  else if (netWorth >= 20000) tier = "💼 Merchant Prince";
+  else if (netWorth >= 10000) tier = "⚗️ Alchemist";
+  else if (netWorth >= 5000) tier = "🛡️ Murk Guard";
+  else if (netWorth >= 2000) tier = "🛒 Market Runner";
+  else if (netWorth >= 500) tier = "🪣 Bog Collector";
+
+  await message.reply({ embeds: [{
+    color: 0xf1c40f,
+    title: `💰 ℕ𝕖𝕥 𝕎𝕠𝕣𝕥𝕙 — ${target.username}`,
+    description: `**Wealth Tier:** ${tier}`,
+    fields: [
+      { name: "👜 Wallet", value: `${wallet.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+      { name: "🏦 Bank", value: `${bank.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+      { name: "🎒 Inventory Value", value: `${inventoryValue.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+      { name: "📊 Active Investments", value: `${investmentValue.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+      { name: "✨ Total Net Worth", value: `**${netWorth.toLocaleString()} ${economySettings.currency_name}**`, inline: true },
+    ],
+    thumbnail: { url: target.displayAvatarURL({ dynamic: true }) }
+  }] }).catch(() => {});
+}
+
+
 module.exports = {
   cmdBalance,
   cmdDaily,
@@ -1714,5 +2009,7 @@ module.exports = {
   cmdRoulette,
   cmdBlackjack,
   cmdHighLow,
+  cmdInvest,
+  cmdNetWorth,
 };
 

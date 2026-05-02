@@ -66,6 +66,23 @@ async function getEconomySettings(guildId) {
 }
 
 // ─────────────────────────────────────────────────────
+// In-memory cooldown manager (per-command, per-user+guild)
+// ─────────────────────────────────────────────────────
+const _ecoCooldowns = new Map();
+function checkCd(cmd, guildId, userId, ms) {
+  const key = `${cmd}:${guildId}:${userId}`;
+  const remaining = ms - (Date.now() - (_ecoCooldowns.get(key) || 0));
+  return remaining > 0 ? remaining : 0;
+}
+function setCd(cmd, guildId, userId) {
+  _ecoCooldowns.set(`${cmd}:${guildId}:${userId}`, Date.now());
+}
+function fmtCd(ms) {
+  if (ms < 60000) return `${Math.ceil(ms / 1000)}s`;
+  return `${Math.floor(ms / 60000)}m ${Math.ceil((ms % 60000) / 1000)}s`;
+}
+
+// ─────────────────────────────────────────────────────
 // ECONOMY: BALANCE & REWARDS
 // ─────────────────────────────────────────────────────
 
@@ -259,6 +276,12 @@ async function cmdPay(message, args) {
     return;
   }
 
+  const payCd = checkCd('pay', message.guild.id, message.author.id, 30000);
+  if (payCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Pay is on cooldown! Try again in **${fmtCd(payCd)}**.` }] }).catch(() => {});
+    return;
+  }
+
   await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.member.id]);
 
   if (senderEcon.balance < amount) {
@@ -266,6 +289,7 @@ async function cmdPay(message, args) {
     return;
   }
 
+  setCd('pay', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, message.author.id]);
   await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, target.member.id]);
 
@@ -346,6 +370,13 @@ async function cmdDeposit(message, args) {
     return;
   }
 
+  const depositCd = checkCd('deposit', message.guild.id, message.author.id, 8000);
+  if (depositCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Deposit is on cooldown! Try again in **${fmtCd(depositCd)}**.` }] }).catch(() => {});
+    return;
+  }
+  setCd('deposit', message.guild.id, message.author.id);
+
   await run(`UPDATE user_economy SET balance=?, bank=? WHERE guild_id=? AND user_id=?`,
     [economy.balance - amount, economy.bank + amount, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
@@ -385,6 +416,13 @@ async function cmdWithdraw(message, args) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You only have ${economy.bank} ${economySettings.currency_name} in your bank!` }] }).catch(() => {});
     return;
   }
+
+  const withdrawCd = checkCd('withdraw', message.guild.id, message.author.id, 8000);
+  if (withdrawCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Withdraw is on cooldown! Try again in **${fmtCd(withdrawCd)}**.` }] }).catch(() => {});
+    return;
+  }
+  setCd('withdraw', message.guild.id, message.author.id);
 
   await run(`UPDATE user_economy SET balance=?, bank=? WHERE guild_id=? AND user_id=?`,
     [economy.balance + amount, economy.bank - amount, message.guild.id, message.author.id]);
@@ -504,6 +542,12 @@ async function cmdSlots(message, args) {
     return;
   }
 
+  const slotsCd = checkCd('slots', message.guild.id, message.author.id, 15000);
+  if (slotsCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Slots is on cooldown! Try again in **${fmtCd(slotsCd)}**.` }] }).catch(() => {});
+    return;
+  }
+
   const symbols = ["🍒", "🍋", "🍊", "🍇", "💎", "7️⃣"];
   const reel1 = symbols[Math.floor(Math.random() * symbols.length)];
   const reel2 = symbols[Math.floor(Math.random() * symbols.length)];
@@ -527,6 +571,7 @@ async function cmdSlots(message, args) {
   const winnings = Math.floor(bet * multiplier) - bet;
   const newBalance = economy.balance + winnings;
 
+  setCd('slots', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "slots", winnings, `Slots (bet ${bet})`]);
@@ -579,12 +624,19 @@ async function cmdCoinflip(message, args) {
     return;
   }
 
+  const cfCd = checkCd('coinflip', message.guild.id, message.author.id, 10000);
+  if (cfCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Coinflip is on cooldown! Try again in **${fmtCd(cfCd)}**.` }] }).catch(() => {});
+    return;
+  }
+
   const flip = Math.random() < 0.5 ? "heads" : "tails";
   const userChoice = choice === "h" ? "heads" : choice === "t" ? "tails" : choice;
   const won = flip === userChoice;
   const winnings = won ? bet : -bet;
   const newBalance = economy.balance + winnings;
 
+  setCd('coinflip', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "coinflip", winnings, `Coinflip ${flip} (bet ${bet})`]);
@@ -637,11 +689,18 @@ async function cmdDice(message, args) {
     return;
   }
 
+  const diceCd = checkCd('dice', message.guild.id, message.author.id, 10000);
+  if (diceCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Dice is on cooldown! Try again in **${fmtCd(diceCd)}**.` }] }).catch(() => {});
+    return;
+  }
+
   const roll = Math.floor(Math.random() * 6) + 1;
   const won = roll === guess;
   const winnings = won ? bet * 5 : -bet;
   const newBalance = economy.balance + winnings;
 
+  setCd('dice', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "dice", winnings, `Dice ${roll} (bet ${bet})`]);
@@ -1014,6 +1073,13 @@ async function cmdBuy(message, args) {
     }
   }
 
+  const buyCd = checkCd('buy', message.guild.id, message.author.id, 8000);
+  if (buyCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Shop is on cooldown! Try again in **${fmtCd(buyCd)}**.` }] }).catch(() => {});
+    return;
+  }
+  setCd('buy', message.guild.id, message.author.id);
+
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [economy.balance - item.price, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "shop_purchase", -item.price, `Bought ${item.name}`]);
@@ -1160,6 +1226,11 @@ async function cmdTrade(message, args) {
       await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!trade offer <@user> <your_item> for <their_item>`" }] }).catch(() => {});
       return;
     }
+    const tradeCd = checkCd('trade', guildId, userId, 60000);
+    if (tradeCd) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Trade is on cooldown! Try again in **${fmtCd(tradeCd)}**.` }] }).catch(() => {});
+      return;
+    }
     const found = await pickUserSmart(message, args[1]);
     if (!found?.member) {
       await message.reply({ embeds: [{ color: 0xe74c3c, description: "Target user not found." }] }).catch(() => {});
@@ -1204,6 +1275,7 @@ async function cmdTrade(message, args) {
       return;
     }
 
+    setCd('trade', guildId, userId);
     await run(
       `INSERT INTO trade_offers (guild_id, from_user_id, to_user_id, from_item, to_item, status)
        VALUES (?, ?, ?, ?, ?, 'pending')`,
@@ -1379,6 +1451,13 @@ async function cmdLottery(message, args) {
       return;
     }
 
+    const lotteryCd = checkCd('lottery', guildId, userId, 20000);
+    if (lotteryCd) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Lottery is on cooldown! Try again in **${fmtCd(lotteryCd)}**.` }] }).catch(() => {});
+      return;
+    }
+    setCd('lottery', guildId, userId);
+
     await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [cost, guildId, userId]);
     await run(`UPDATE lottery_pool SET pot=pot+? WHERE guild_id=?`, [cost, guildId]);
     await run(
@@ -1495,6 +1574,11 @@ async function cmdRoulette(message, args) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {}); return;
   }
 
+  const rouletteCd = checkCd('roulette', message.guild.id, message.author.id, 15000);
+  if (rouletteCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Roulette is on cooldown! Try again in **${fmtCd(rouletteCd)}**.` }] }).catch(() => {}); return;
+  }
+
   const choice = args[1].toLowerCase();
   const RED_NUMBERS = new Set([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
   const spin = Math.floor(Math.random() * 37); // 0-36
@@ -1540,6 +1624,7 @@ async function cmdRoulette(message, args) {
 
   const winnings = won ? bet * (multiplier - 1) : -bet;
   const newBalance = economy.balance + winnings;
+  setCd('roulette', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "roulette", winnings, `Roulette ${spin} (bet ${bet} on ${choice})`]);
@@ -1612,6 +1697,12 @@ async function cmdBlackjack(message, args) {
   if (economy.balance < bet) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {}); return;
   }
+
+  const bjCd = checkCd('blackjack', message.guild.id, message.author.id, 45000);
+  if (bjCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Blackjack is on cooldown! Try again in **${fmtCd(bjCd)}**.` }] }).catch(() => {}); return;
+  }
+  setCd('blackjack', message.guild.id, message.author.id);
 
   const deck = bjDeck();
   let playerHand = [deck.pop(), deck.pop()];
@@ -1729,6 +1820,11 @@ async function cmdHighLow(message, args) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {}); return;
   }
 
+  const hlCd = checkCd('highlow', message.guild.id, message.author.id, 10000);
+  if (hlCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ High-Low is on cooldown! Try again in **${fmtCd(hlCd)}**.` }] }).catch(() => {}); return;
+  }
+
   const choice = args[1]?.toLowerCase();
   if (!["higher","lower","h","l","high","low"].includes(choice)) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Choose `higher` or `lower`." }] }).catch(() => {}); return;
@@ -1744,6 +1840,7 @@ async function cmdHighLow(message, args) {
 
   const winnings = won ? Math.floor(bet * 0.9) : -bet;
   const newBalance = economy.balance + winnings;
+  setCd('highlow', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "highlow", winnings, `High-Low (bet ${bet})`]);

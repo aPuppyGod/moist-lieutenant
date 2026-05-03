@@ -7,7 +7,7 @@ const { createCanvas, loadImage, registerFont } = require("canvas");
 registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'static', 'OpenSans-Regular.ttf'), { family: 'OpenSans' });
 const { getLevelRoles, getGuildSettings, upsertReactionRoleBinding, removeReactionRoleBinding, getReactionRoleBindings } = require("./settings");
 const { normalizeEmojiKey } = require("./reactionRoles");
-const { cmdFish, cmdDig, cmdMine, cmdHunt, cmdRobBank, cmdPhone, cmdAdventure, cmdExplore, cmdBounty, cmdCraft, cmdPrestige, cmdClass, cmdUse, cmdItemInfo, cmdGift } = require("./economy");
+const { cmdFish, cmdDig, cmdMine, cmdHunt, cmdHeist, cmdRobBank, cmdPhone, cmdAdventure, cmdExplore, cmdBounty, cmdCraft, cmdPrestige, cmdClass, cmdUse, cmdItemInfo, cmdGift } = require("./economy");
 const { cmdGuide, cmdPostGuide } = require("./guide");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
@@ -4076,6 +4076,14 @@ async function executeCommand(message, cmd, args, prefix) {
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdRobBank(message, args, util);
+    return true;
+  }
+
+  if (cmd === "heist") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdHeist(message, args, util);
     return true;
   }
 

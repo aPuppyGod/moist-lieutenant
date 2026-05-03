@@ -176,21 +176,31 @@ async function cmdDaily(message) {
 
   const totalAmount = Math.floor((baseAmount + streakBonus + milestoneBonus) * buffMult);
 
-  const newBalance = economy.balance + totalAmount;
+  // Merchant class passive: 10% daily bank interest
+  const userDailyClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  let bankInterest = 0;
+  let interestText = "";
+  if (userDailyClass?.class_id === 'merchant' && economy.bank > 0) {
+    bankInterest = Math.floor(economy.bank * 0.10);
+    interestText = `\n💼 **Merchant Interest:** +${bankInterest} ${economySettings.currency_name} *(10% of bank)*`;
+  }
+  const grandTotal = totalAmount + bankInterest;
+
+  const newBalance = economy.balance + grandTotal;
   await run(`UPDATE user_economy SET balance=?, last_daily=?, daily_streak=?, daily_streak_date=? WHERE guild_id=? AND user_id=?`,
     [newBalance, now, newStreak, today, message.guild.id, message.author.id]);
 
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "daily", totalAmount, `Daily reward (${newStreak} day streak)`]);
+    [message.guild.id, message.author.id, "daily", grandTotal, `Daily reward (${newStreak} day streak)`]);
 
   const buffText = buffMult > 1 ? `\n🍀 **Buff multiplier:** ${buffMult.toFixed(2)}x` : "";
   const embed = {
     color: 0x2ecc71,
     title: `${economySettings.currency_symbol} 𝔻𝕒𝕚𝕝𝕪 ℝ𝕖𝕨𝕒𝕣𝕕`,
-    description: `**Base:** ${baseAmount} ${economySettings.currency_name}\n**Streak Bonus:** +${streakBonus} ${economySettings.currency_name}${milestoneBonus > 0 ? `\n**Milestone:** +${milestoneBonus}` : ""}${buffText}${milestoneText}`,
+    description: `**Base:** ${baseAmount} ${economySettings.currency_name}\n**Streak Bonus:** +${streakBonus} ${economySettings.currency_name}${milestoneBonus > 0 ? `\n**Milestone:** +${milestoneBonus}` : ""}${buffText}${milestoneText}${interestText}`,
     fields: [
       { name: "🔥 Streak", value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
-      { name: "💰 Earned", value: `+${totalAmount} ${economySettings.currency_name}`, inline: true },
+      { name: "💰 Earned", value: `+${grandTotal} ${economySettings.currency_name}`, inline: true },
       { name: "💳 New Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
     ],
     footer: { text: `Next daily reward ≥ ${Math.floor((baseAmount + Math.min(Math.floor(bonusPerDay * Math.sqrt(newStreak) * newStreak * 0.5 + bonusPerDay * newStreak), 5000)) * buffMult)} ${economySettings.currency_name}` }
@@ -465,10 +475,14 @@ async function cmdRob(message, args) {
 
   const now = Date.now();
   const cooldown = (economySettings.rob_cooldown || 3600) * 1000;
-  if (robber.last_normal_rob && (now - robber.last_normal_rob) < cooldown) {
-    const timeLeft = cooldown - (now - robber.last_normal_rob);
+  // Brigand class passive: 25% faster rob cooldown
+  const robberClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const effectiveCooldown = robberClass?.class_id === 'brigand' ? Math.floor(cooldown * 0.75) : cooldown;
+  if (robber.last_normal_rob && (now - robber.last_normal_rob) < effectiveCooldown) {
+    const timeLeft = effectiveCooldown - (now - robber.last_normal_rob);
     const minutes = Math.floor(timeLeft / 60000);
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You must wait ${minutes} minutes before robbing again!` }] }).catch(() => {});
+    const brigandHint = robberClass?.class_id === 'brigand' ? " *(Brigand: 25% faster cooldown)*" : "";
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You must wait ${minutes} minutes before robbing again!${brigandHint}` }] }).catch(() => {});
     return;
   }
 
@@ -1059,8 +1073,13 @@ async function cmdBuy(message, args) {
   await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
 
-  if (economy.balance < item.price) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need ${item.price} ${economySettings.currency_name} to buy this! You have ${economy.balance}.` }] }).catch(() => {});
+  // Artificer class passive: 20% shop discount
+  const buyerClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const finalPrice = buyerClass?.class_id === 'artificer' ? Math.floor(item.price * 0.8) : item.price;
+  const discountNote = buyerClass?.class_id === 'artificer' ? ` *(20% Artificer discount!)*` : "";
+
+  if (economy.balance < finalPrice) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need ${finalPrice} ${economySettings.currency_name} to buy this! You have ${economy.balance}.` }] }).catch(() => {});
     return;
   }
 
@@ -1080,9 +1099,9 @@ async function cmdBuy(message, args) {
   }
   setCd('buy', message.guild.id, message.author.id);
 
-  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [economy.balance - item.price, message.guild.id, message.author.id]);
+  await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [economy.balance - finalPrice, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "shop_purchase", -item.price, `Bought ${item.name}`]);
+    [message.guild.id, message.author.id, "shop_purchase", -finalPrice, `Bought ${item.name}`]);
 
   await run(`
     INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
@@ -1091,7 +1110,7 @@ async function cmdBuy(message, args) {
     DO UPDATE SET quantity = user_inventory.quantity + 1
   `, [message.guild.id, message.author.id, item.item_id]);
 
-  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You bought **${item.name}** for ${item.price} ${economySettings.currency_name}!` }] }).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You bought **${item.name}** for ${finalPrice} ${economySettings.currency_name}!${discountNote}` }] }).catch(() => {});
 }
 
 async function cmdInventory(message) {

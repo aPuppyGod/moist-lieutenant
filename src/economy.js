@@ -1036,6 +1036,106 @@ const MURK_CATALOG = [
   }
 ];
 
+// ==================== HEIST SYSTEM ====================
+
+const HEIST_SCENARIOS = [
+  { name: "Murk Vault Heist",        intro: "🏦 You case the Murk City Vault, studying guard rotations and laser grids...", successStory: "You crack the vault door with a custom pick and slip out through the sewers undetected!", failStory: "A silent alarm trips — you barely escape with the police hot on your heels." },
+  { name: "Bog Baron Mansion",        intro: "🏚️ The Bog Baron is hosting a gala tonight — perfect cover to slip inside...",           successStory: "You swap into a waiter's uniform, pocket the jewels, and waltz out the front door.",              failStory: "A guard recognizes your face from a wanted poster. You drop everything and run." },
+  { name: "Swamp Treasury Run",       intro: "💧 The swamp treasury moves shipments by boat at midnight — you wait in the reeds...",  successStory: "You leap aboard, overpower the guards, and make off with a chest of Murk coin!",            failStory: "The boat was a decoy. You surface to a dozen crossbow bolts aimed at you." },
+  { name: "Void Crystal Smugglers",   intro: "🔮 Intel says a void crystal shipment passes through tonight — risky but lucrative...", successStory: "You ambush the courier in the fog and vanish with the crystals before dawn.",               failStory: "The smugglers were tipped off. You walk into an ambush and flee empty-handed." },
+  { name: "Ancient Relic Exchange",   intro: "🏺 A shady dealer is trading relics in the back alleys of Murk Market...",             successStory: "You pocket the relics during the exchange and disappear into the crowd.",                    failStory: "The dealer had a bodyguard you didn't account for. You escape, barely." },
+];
+
+async function cmdHeist(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+    [message.guild.id, message.author.id]);
+
+  const stats = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='heist' AND stat_name='last_heist'`,
+    [message.guild.id, message.author.id]
+  );
+
+  const now = Date.now();
+  const cooldown = 7200000; // 2 hours
+
+  if (stats?.last_played && (now - stats.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - stats.last_played);
+    const minutes = Math.floor(timeLeft / 60000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🚔 You're laying low after the last job. Try again in **${minutes}m**.` }] }).catch(() => {});
+    return;
+  }
+
+  const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
+    [message.guild.id, message.author.id]);
+  if (!economy) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy data missing. Try again." }] }).catch(() => {});
+    return;
+  }
+
+  const scenario = HEIST_SCENARIOS[Math.floor(Math.random() * HEIST_SCENARIOS.length)];
+  const heistCount = (stats?.stat_value || 0) + 1;
+
+  // Brigand passive: 15% better success odds
+  const robberClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const baseSuccessRate = 0.40;
+  const successRate = robberClass?.class_id === 'brigand' ? baseSuccessRate + 0.15 : baseSuccessRate;
+
+  const success = Math.random() < successRate;
+
+  await runCmd(
+    `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+     VALUES (?, ?, 'heist', 'last_heist', ?, ?)
+     ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=minigames_stats.stat_value+1, last_played=?`,
+    [message.guild.id, message.author.id, heistCount, now, now]
+  );
+
+  if (success) {
+    const winAmount = Math.floor(2000 + Math.random() * 8000); // 2000-10000
+    await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+      [winAmount, message.guild.id, message.author.id]);
+    await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+      [message.guild.id, message.author.id, "heist", winAmount, `Heist: ${scenario.name}`]);
+    const brigandNote = robberClass?.class_id === 'brigand' ? "\n\n🗡️ *Brigand passive: +15% success odds*" : "";
+    const embed = new EmbedBuilder()
+      .setColor(0x2ecc71)
+      .setTitle(`💰 ℍ𝕖𝕚𝕤𝕥 𝕊𝕦𝕔𝕔𝕖𝕤𝕤!`)
+      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n✅ *${scenario.successStory}*${brigandNote}`)
+      .addFields(
+        { name: "💵 Score", value: `+${winAmount} ${economySettings.currency_name}`, inline: true },
+        { name: "🔢 Total Heists", value: `${heistCount}`, inline: true },
+        { name: "💳 Balance", value: `${economy.balance + winAmount} ${economySettings.currency_name}`, inline: true }
+      )
+      .setFooter({ text: "Next heist available in 2 hours" });
+    await message.reply({ embeds: [embed] }).catch(() => {});
+  } else {
+    const fine = Math.floor(economy.balance * 0.30);
+    const newBalance = Math.max(0, economy.balance - fine);
+    await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
+      [newBalance, message.guild.id, message.author.id]);
+    await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+      [message.guild.id, message.author.id, "heist_fail", -fine, `Failed heist: ${scenario.name}`]);
+    const brigandNote = robberClass?.class_id === 'brigand' ? "\n\n🗡️ *Brigand passive: +15% success odds*" : "";
+    const embed = new EmbedBuilder()
+      .setColor(0xe74c3c)
+      .setTitle(`🚔 ℍ𝕖𝕚𝕤𝕥 𝔽𝕒𝕚𝕝𝕖𝕕!`)
+      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n❌ *${scenario.failStory}*${brigandNote}`)
+      .addFields(
+        { name: "💸 Fine Paid", value: `-${fine} ${economySettings.currency_name}`, inline: true },
+        { name: "🔢 Total Heists", value: `${heistCount}`, inline: true },
+        { name: "💳 Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
+      )
+      .setFooter({ text: "Next heist available in 2 hours" });
+    await message.reply({ embeds: [embed] }).catch(() => {});
+  }
+}
+
 // ==================== EXPORTS ====================
 
 module.exports = {
@@ -1043,6 +1143,7 @@ module.exports = {
   cmdDig,
   cmdMine,
   cmdHunt,
+  cmdHeist,
   cmdRobBank,
   cmdPhone,
   cmdAdventure,
@@ -1160,14 +1261,19 @@ async function cmdFish(message, args, util) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: '❌ Could not load your economy data. Please try again.' }] }).catch(() => {});
     return;
   }
-  const newBalance = economy.balance + fish.value;
+  // Scholar class passive: 25% more fishing value
+  const userFishClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const scholarFishMult = userFishClass?.class_id === 'scholar' ? 1.25 : 1;
+  const fishValue = Math.floor(fish.value * scholarFishMult);
+  const scholarFishNote = scholarFishMult > 1 ? "\n📚 **Scholar Bonus: +25% value!**" : "";
+  const newBalance = economy.balance + fishValue;
   
   await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
     [newBalance, message.guild.id, message.author.id]);
 
   await runCmd(
     `INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "fishing", fish.value, `Caught a ${fish.name}`]
+    [message.guild.id, message.author.id, "fishing", fishValue, `Caught a ${fish.name}`]
   );
 
   const rarityColors2 = { common: 0x3498db, uncommon: 0x2ecc71, rare: 0x9b59b6, epic: 0xe74c3c, legendary: 0xffd700, mythic: 0xff1493, void: 0x8b00ff };
@@ -1175,9 +1281,9 @@ async function cmdFish(message, args, util) {
   const fishEmbed = new EmbedBuilder()
     .setColor(fishColor)
     .setTitle(`🎣 𝔽𝕚𝕤𝕙𝕚𝕟𝕘 ℝ𝕖𝕤𝕦𝕝𝕥`)
-    .setDescription(`${fish.emoji} **${fish.name}** [${fish.rarity.toUpperCase()}]`)
+    .setDescription(`${fish.emoji} **${fish.name}** [${fish.rarity.toUpperCase()}]${scholarFishNote}`)
     .addFields(
-      { name: '💰 Value', value: `+${fish.value} ${economySettings.currency_name}`, inline: true },
+      { name: '💰 Value', value: `+${fishValue} ${economySettings.currency_name}`, inline: true },
       { name: '⭐ Rarity', value: fish.rarity, inline: true },
       { name: '🎣 Total Caught', value: `${totalCaught}`, inline: true }
     );
@@ -1304,6 +1410,11 @@ async function cmdDig(message, args, util) {
     );
   }
 
+  // Scholar class passive: 25% more dig value
+  const userDigClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const scholarDigBonus = userDigClass?.class_id === 'scholar';
+  if (scholarDigBonus) totalValveGain = Math.floor(totalValveGain * 1.25);
+
   const digCount = (stats?.stat_value || 0) + 1;
   await runCmd(
     `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
@@ -1331,10 +1442,11 @@ async function cmdDig(message, args, util) {
 
   const rarityColors = { common: 0xa0522d, uncommon: 0x7ccd7c, rare: 0x4169e1, epic: 0x9b59b6, legendary: 0xffd700, mythic: 0xff69b4, ancient: 0xff4500 };
   const mapBonus = treasureMap ? "\n\n✨ **Treasure map bonus: 2x value!**" : "";
+  const scholarDigText = scholarDigBonus ? "\n📚 **Scholar Bonus: +25% value!**" : "";
   const embed = new EmbedBuilder()
     .setColor(rarityColors[reward.rarity] || 0xe67e22)
     .setTitle(`⛏️ 𝔻𝕚𝕘 ℝ𝕖𝕤𝕦𝕝𝕥`)
-    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${totalValveGain} ${economySettings.currency_name}${mapBonus}`)
+    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${totalValveGain} ${economySettings.currency_name}${mapBonus}${scholarDigText}`)
     .addFields({ name: "Total Digs", value: `${digCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + totalValveGain} ${economySettings.currency_name}`, inline: true });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -1395,7 +1507,10 @@ async function cmdMine(message, args, util) {
   const voidBuff = await getCmd(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='void_triple' AND expires_at>?`,
     [message.guild.id, message.author.id, now]);
   const mult = voidBuff ? 3 : 1;
-  const value = reward.value * mult;
+  // Scholar class passive: 25% more mine value
+  const userMineClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const scholarMineMult = userMineClass?.class_id === 'scholar' ? 1.25 : 1;
+  const value = Math.floor(reward.value * mult * scholarMineMult);
 
   await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
     [value, message.guild.id, message.author.id]);
@@ -1404,10 +1519,11 @@ async function cmdMine(message, args, util) {
 
   const rarityColors = { common: 0x607060, uncommon: 0x7ccd7c, rare: 0x4169e1, epic: 0x9b59b6, legendary: 0xffd700, mythic: 0xff69b4 };
   const voidText = voidBuff ? "\n\n🔑 **Void Key active: 3x rewards!**" : "";
+  const scholarMineText = userMineClass?.class_id === 'scholar' ? "\n📚 **Scholar Bonus: +25% value!**" : "";
   const embed = new EmbedBuilder()
     .setColor(rarityColors[reward.rarity] || 0x607060)
     .setTitle("⛏️ 𝕄𝕚𝕟𝕖 ℝ𝕖𝕤𝕦𝕝𝕥")
-    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${value} ${economySettings.currency_name}${voidText}`)
+    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${value} ${economySettings.currency_name}${voidText}${scholarMineText}`)
     .addFields({ name: "Total Mines", value: `${mineCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + value} ${economySettings.currency_name}`, inline: true });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -1470,17 +1586,23 @@ async function cmdHunt(message, args, util) {
     return;
   }
 
+  // Scholar class passive: 25% more hunt value
+  const userHuntClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const scholarHuntMult = userHuntClass?.class_id === 'scholar' ? 1.25 : 1;
+  const huntValue = Math.floor(reward.value * scholarHuntMult);
+  const scholarHuntText = scholarHuntMult > 1 ? "\n📚 **Scholar Bonus: +25% value!**" : "";
+
   await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
-    [reward.value, message.guild.id, message.author.id]);
+    [huntValue, message.guild.id, message.author.id]);
   await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "hunting", reward.value, `Hunted ${reward.item}`]);
+    [message.guild.id, message.author.id, "hunting", huntValue, `Hunted ${reward.item}`]);
 
   const rarityColors = { common: 0x8b4513, uncommon: 0x228b22, rare: 0x4169e1, epic: 0x9b59b6, legendary: 0xffd700, mythic: 0xff69b4 };
   const embed = new EmbedBuilder()
     .setColor(rarityColors[reward.rarity] || 0x8b4513)
     .setTitle("🕸️ ℍ𝕦𝕟𝕥 ℝ𝕖𝕤𝕦𝕝𝕥")
-    .setDescription(`${reward.emoji || '🐾'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${reward.value} ${economySettings.currency_name}`)
-    .addFields({ name: "Total Hunts", value: `${huntCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + reward.value} ${economySettings.currency_name}`, inline: true });
+    .setDescription(`${reward.emoji || '🐾'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${huntValue} ${economySettings.currency_name}${scholarHuntText}`)
+    .addFields({ name: "Total Hunts", value: `${huntCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + huntValue} ${economySettings.currency_name}`, inline: true });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 

@@ -421,6 +421,7 @@ async function cmdEconomy(message) {
           `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
           `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
           `\`${ecoPrefix}heist\` — Pull off a heist (2hr CD, high reward)`,
+          `\`${ecoPrefix}duel <@user> <amount>\` — 1v1 coin wager duel`,
         ].join("\n"),
         inline: false
       },
@@ -3594,7 +3595,7 @@ const {
   cmdDeposit, cmdWithdraw, cmdRob, cmdSlots, cmdCoinflip, cmdDice,
   cmdJob, cmdWork, cmdShop, cmdBuy, cmdInventory,
   cmdRoulette, cmdBlackjack, cmdHighLow,
-  cmdInvest, cmdNetWorth, cmdStats,
+  cmdInvest, cmdNetWorth, cmdStats, cmdDuel,
 } = require("./economyCommands");
 
 // ─────────────────────────────────────────────────────
@@ -3840,6 +3841,7 @@ async function handleCommands(message) {
     "networth", "wealth", "net-worth", "nw",
     "stats", "mystats", "ecostats",
     "invest", "investment", "stock",
+    "duel",
     "ecoadmin", "leaderboard", "lb", "economy", "eco", "ecohelp"];
   
   // Try economy prefix first for economy commands
@@ -4145,6 +4147,11 @@ async function executeCommand(message, cmd, args, prefix) {
   if (cmd === "stats" || cmd === "mystats" || cmd === "ecostats") {
     const economySettings = await getEconomySettingsRow(message.guild.id);
     await cmdStats(message, args, economySettings);
+    return true;
+  }
+
+  if (cmd === "duel") {
+    await cmdDuel(message, args);
     return true;
   }
 
@@ -4707,6 +4714,10 @@ function buildSlashCommands() {
     { name: "mine", description: "Mine in the caverns (needs Pickaxe)" },
     { name: "hunt", description: "Hunt swamp creatures (needs Hunting Net)" },
     { name: "heist", description: "Pull off a heist for big rewards (2hr cooldown)" },
+    { name: "duel",  description: "Challenge someone to a 1v1 coin duel", options: [
+      { type: 6, name: "user",   description: "User to challenge",        required: true },
+      { type: 4, name: "amount", description: "Wager amount (min 50)",    required: true }
+    ] },
     { name: "stats", description: "View your gathering and economy stats", options: [{ type: 6, name: "user", description: "User (optional)", required: false }] },
     { name: "phone", description: "Use phone services", options: [{ type: 3, name: "service", description: "Service (police, taxi, takeout)", required: false }] },
     { name: "adventure", description: "Go on a swamp adventure", options: [{ type: 4, name: "story_id", description: "Story ID", required: false }] },

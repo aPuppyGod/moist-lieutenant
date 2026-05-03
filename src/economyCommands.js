@@ -504,12 +504,16 @@ async function cmdRob(message, args) {
   const success = Math.random() < 0.5;
   if (!success) {
     const fine = Math.min(robber.balance, Math.floor(victim.balance * 0.3));
-    await run(`UPDATE user_economy SET balance=?, last_normal_rob=? WHERE guild_id=? AND user_id=?`,
-      [robber.balance - fine, now, message.guild.id, message.author.id]);
-    await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-      [message.guild.id, message.author.id, "rob_failed", -fine, `Failed to rob ${target.member.user.tag}`]);
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You got caught trying to rob ${target.member}! You paid a fine of ${fine} ${economySettings.currency_name}.` }] }).catch(() => {});
-    return;
+  // Bone Armor reduces fine by 50%
+  const boneArmorBuff = await get(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='bone_armor_50' AND expires_at>?`, [message.guild.id, message.author.id, now]);
+  const effectiveFine = boneArmorBuff ? Math.floor(fine * 0.5) : fine;
+  const armorNote = boneArmorBuff ? " *(🦴 Bone Armor: 50% off!)*" : "";
+  await run(`UPDATE user_economy SET balance=?, last_normal_rob=? WHERE guild_id=? AND user_id=?`,
+    [robber.balance - effectiveFine, now, message.guild.id, message.author.id]);
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, message.author.id, "rob_failed", -effectiveFine, `Failed to rob ${target.member.user.tag}`]);
+  await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You got caught trying to rob ${target.member}! You paid a fine of ${effectiveFine} ${economySettings.currency_name}${armorNote}.` }] }).catch(() => {});
+  return;
   }
 
   const stolen = Math.floor(victim.balance * (0.1 + Math.random() * 0.2));
@@ -1918,6 +1922,50 @@ const VENTURES = {
       { chance: 0.15, mult: 4.00 },  // 15% quadruple
       { chance: 0.10, mult: 8.00 },  // 10% huge win
     ]
+  },
+  bog_shrooms: {
+    name: "🍄 Bog Shroom Farm",
+    risk: "Very Low",
+    color: 0x5dbb63,
+    desc: "Cultivating swamp mushrooms. Tiny gains but nearly guaranteed.",
+    duration: 2 * 3600000,  // 2 hours — great for quick, safe returns
+    ranges: [
+      { chance: 0.05, mult: 0.90 },  // 5%  tiny loss
+      { chance: 0.30, mult: 1.05 },  // 30% slight gain
+      { chance: 0.40, mult: 1.10 },  // 40% decent gain
+      { chance: 0.20, mult: 1.20 },  // 20% good gain
+      { chance: 0.05, mult: 1.40 },  // 5%  great gain
+    ]
+  },
+  dragon_auction: {
+    name: "🐉 Dragon Auction",
+    risk: "High",
+    color: 0xe74c3c,
+    desc: "Bidding on a rare dragon artefact. High stakes, high rewards.",
+    duration: 6 * 3600000,  // 6 hours
+    ranges: [
+      { chance: 0.30, mult: 0.20 },  // 30% big loss
+      { chance: 0.20, mult: 0.70 },  // 20% partial loss
+      { chance: 0.15, mult: 1.00 },  // 15% break even
+      { chance: 0.20, mult: 2.20 },  // 20% good win
+      { chance: 0.10, mult: 4.50 },  // 10% great win
+      { chance: 0.05, mult: 9.00 },  // 5%  jackpot
+    ]
+  },
+  artifact_fence: {
+    name: "🏺 Artifact Fence",
+    risk: "Medium-High",
+    color: 0xf39c12,
+    desc: "Selling ancient relics through back channels. Steady medium risk.",
+    duration: 16 * 3600000, // 16 hours
+    ranges: [
+      { chance: 0.15, mult: 0.40 },  // 15% significant loss
+      { chance: 0.15, mult: 0.80 },  // 15% small loss
+      { chance: 0.20, mult: 1.00 },  // 20% break even
+      { chance: 0.25, mult: 1.60 },  // 25% decent gain
+      { chance: 0.15, mult: 2.80 },  // 15% great gain
+      { chance: 0.10, mult: 5.00 },  // 10% jackpot
+    ]
   }
 };
 
@@ -2165,6 +2213,136 @@ async function cmdStats(message, args, economySettings) {
 }
 
 
+// ─────────────────────────────────────────────────────
+// ECONOMY: DUEL (1v1 wager)
+// ─────────────────────────────────────────────────────
+
+async function cmdDuel(message, args) {
+  const economySettings = await getEconomySettings(message.guild.id);
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
+    return;
+  }
+
+  const ecoPrefix = economySettings.economy_prefix || "$";
+  const sym = economySettings.currency_name;
+
+  const target = message.mentions.users.first();
+  const amount = parseInt(args[1], 10);
+
+  if (!target || target.id === message.author.id || target.bot) {
+    await message.reply({ embeds: [new EmbedBuilder().setColor(0xe74c3c).setTitle("⚔️ Duel").setDescription(
+      `Challenge someone to a coin duel!\n\n**Usage:** \`${ecoPrefix}duel @user <amount>\`\n\n**Rules:**\n• Both players wager the same amount\n• Winner takes the full pot\n• You have 60 seconds to accept`
+    )] }).catch(() => {});
+    return;
+  }
+
+  if (isNaN(amount) || amount < 50) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ Minimum duel wager is **50** ${sym}.` }] }).catch(() => {});
+    return;
+  }
+
+  const duelCd = checkCd('duel', message.guild.id, message.author.id, 30000);
+  if (duelCd) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `⏳ Duel on cooldown! Try again in **${fmtCd(duelCd)}**.` }] }).catch(() => {});
+    return;
+  }
+
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const challengerEcon = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  if ((challengerEcon?.balance || 0) < amount) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need **${amount} ${sym}** in your wallet to issue this challenge!` }] }).catch(() => {});
+    return;
+  }
+
+  // Deduct from challenger upfront — refunded on decline/expire
+  await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, message.author.id]);
+  setCd('duel', message.guild.id, message.author.id);
+
+  const scenes = [
+    "The two meet in the foggy Murk arena. The crowd falls silent...",
+    "Both warriors draw their weapons at the crossroads of the swamp...",
+    "The Murk itself watches as the challengers face each other...",
+    "A ring of bog-fire ignites around them. There is no backing down...",
+    "The duel bell tolls through the swamp. All creatures go still...",
+  ];
+  const randomScene = scenes[Math.floor(Math.random() * scenes.length)];
+
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0xe67e22)
+    .setTitle("⚔️ 𝔻𝕦𝕖𝕝 ℂ𝕙𝕒𝕝𝕝𝕖𝕟𝕘𝕖!")
+    .setDescription(`${message.author} challenges ${target} to a duel!\n\n*${randomScene}*\n\n**Wager:** ${amount} ${sym} each\n**Prize Pool:** ${amount * 2} ${sym}\n\n${target}, type \`${ecoPrefix}duel accept\` or \`${ecoPrefix}duel decline\` within **60 seconds**!`)
+    .setFooter({ text: "Challenge expires in 60 seconds" })
+  ] }).catch(() => {});
+
+  const filter = m =>
+    m.author.id === target.id && (
+      m.content.trim().toLowerCase() === 'accept' ||
+      m.content.trim().toLowerCase() === 'yes' ||
+      m.content.trim().toLowerCase() === 'decline' ||
+      m.content.trim().toLowerCase() === 'no' ||
+      m.content.trim().toLowerCase() === `${ecoPrefix}duel accept` ||
+      m.content.trim().toLowerCase() === `${ecoPrefix}duel decline`
+    );
+
+  const collected = await message.channel.awaitMessages({ filter, max: 1, time: 60000 }).catch(() => null);
+  const response = collected?.first()?.content?.trim()?.toLowerCase() || '';
+  const accepted = response === 'accept' || response === 'yes' || response === `${ecoPrefix}duel accept`;
+
+  if (!accepted) {
+    // Refund challenger
+    await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, message.author.id]);
+    const reason = (!collected || collected.size === 0)
+      ? `⏰ **${target.username}** didn't respond in time! ${message.author}'s wager refunded.`
+      : `🤚 **${target.username}** declined the duel! ${message.author}'s wager refunded.`;
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: reason }] }).catch(() => {});
+    return;
+  }
+
+  // Check target has enough
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, target.id]);
+  const targetEcon = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, target.id]);
+  if ((targetEcon?.balance || 0) < amount) {
+    await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, message.author.id]);
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ ${target} doesn't have enough ${sym}! Wager refunded to ${message.author}.` }] }).catch(() => {});
+    return;
+  }
+
+  // Deduct from target
+  await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [amount, message.guild.id, target.id]);
+
+  // Resolve: 50/50
+  const challengerWins = Math.random() < 0.5;
+  const winner = challengerWins ? message.author : target;
+  const loser  = challengerWins ? target : message.author;
+  const pot = amount * 2;
+
+  await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [pot, message.guild.id, winner.id]);
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, winner.id, "duel_won", pot, `Duel vs ${loser.username}`]);
+  await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+    [message.guild.id, loser.id, "duel_lost", -amount, `Duel vs ${winner.username}`]);
+
+  const battleScenes = [
+    "Blades clash in the swamp fog! The fight is fierce and desperate...",
+    "The warriors trade blows for what feels like an eternity...",
+    "In a single decisive strike, the duel is decided...",
+    "The swamp holds its breath as the two duelists give everything...",
+    "Lightning flashes over the bog as the final blow lands...",
+  ];
+
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0xffd700)
+    .setTitle("⚔️ 𝔻𝕦𝕖𝕝 ℝ𝕖𝕤𝕦𝕝𝕥!")
+    .setDescription(`*${battleScenes[Math.floor(Math.random() * battleScenes.length)]}*\n\n🏆 **${winner.username}** wins the duel!\n💀 **${loser.username}** falls defeated.`)
+    .addFields(
+      { name: "💰 Prize Collected", value: `${pot} ${sym}`, inline: true },
+      { name: "🎯 Wager Each",      value: `${amount} ${sym}`, inline: true }
+    )
+    .setFooter({ text: "50/50 chance — pure skill (or luck)" })
+  ] }).catch(() => {});
+}
+
 module.exports = {
   cmdBalance,
   cmdDaily,
@@ -2191,5 +2369,6 @@ module.exports = {
   cmdInvest,
   cmdNetWorth,
   cmdStats,
+  cmdDuel,
 };
 

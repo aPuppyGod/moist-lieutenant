@@ -82,29 +82,141 @@ function generateDailyBazaar() {
 // ==================== CRAFTING RECIPES ==================
 
 const RECIPES = {
-  // Simple combos
+  // ── Core Synthesis ───────────────────────────────────────────────────────
   "murk_elixir": {
     name: "🔮 Murk Elixir (Master)",
     inputs: [
-      { item: "swamp_tonic", qty: 2 },
-      { item: "murk_shard", qty: 1 },
+      { item: "swamp_tonic",  qty: 2 },
+      { item: "murk_shard",   qty: 1 },
       { item: "ancient_coin", qty: 3 }
     ],
     output: { item: "murk_elixir", qty: 1 },
     reward_coins: 500,
-    buff: { buff_id: "super_luck", duration: 7200000 }  // 2 hours: +30% rewards
+    buff: { buff_id: "super_luck", duration: 7200000 }  // 2 hours: +30% all gather value
   },
   "prestige_token": {
     name: "👑 Prestige Token",
     inputs: [
-      { item: "void_essence", qty: 2 },
-      { item: "murk_elixir", qty: 1 },
+      { item: "void_essence",   qty: 2 },
+      { item: "murk_elixir",   qty: 1 },
       { item: "fortune_scroll", qty: 5 }
     ],
     output: null,
     reward_coins: 0,
-    effect: "prestige_unlock"  // unlocks prestige mode
+    effect: "prestige_unlock"
+  },
+  // ── Gathering Boosts ─────────────────────────────────────────────────────
+  "enhanced_tonic": {
+    name: "💪 Enhanced Tonic",
+    inputs: [
+      { item: "bone_dust",    qty: 2 },
+      { item: "crystal_dust", qty: 2 },
+      { item: "murk_shard",   qty: 1 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "enhanced_gather_30", duration: 7200000 }  // 2 hours: +30% all gather
+  },
+  "alchemists_stone": {
+    name: "⚗️ Alchemist's Stone",
+    inputs: [
+      { item: "bone_dust",    qty: 1 },
+      { item: "crystal_dust", qty: 1 },
+      { item: "dark_matter",  qty: 1 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "alchemist_gather_40", duration: 10800000 }  // 3 hours: +40% all gather
+  },
+  "wisdom_tome": {
+    name: "📚 Ancient Wisdom Tome",
+    inputs: [
+      { item: "ancient_tablet", qty: 1 },
+      { item: "crystal_dust",   qty: 2 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "wisdom_boost_50", duration: 7200000 }  // 2 hours: +50% all gather
+  },
+  "crystal_lens": {
+    name: "🔮 Crystal Lens",
+    inputs: [
+      { item: "crystal_dust", qty: 3 },
+      { item: "murk_shard",   qty: 2 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "fish_double", duration: 7200000 }  // 2 hours: 2x fishing value only
+  },
+  // ── Defense & Crime ───────────────────────────────────────────────────────
+  "bone_armor": {
+    name: "🦴 Bone Armor Set",
+    inputs: [
+      { item: "bone_dust",  qty: 3 },
+      { item: "murk_shard", qty: 2 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "bone_armor_50", duration: 21600000 }  // 6 hours: 50% reduced rob fine
+  },
+  "dragon_armor": {
+    name: "🐉 Dragon Scale Armor",
+    inputs: [
+      { item: "dragon_tooth", qty: 2 },
+      { item: "bone_dust",    qty: 3 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "robbery_immune", duration: 28800000 }  // 8 hours: completely unrobbable
+  },
+  "shadow_veil": {
+    name: "👁️ Shadow Veil",
+    inputs: [
+      { item: "void_fragment", qty: 2 },
+      { item: "dark_matter",   qty: 2 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "robbery_immune", duration: 10800000 }  // 3 hours: completely unrobbable
+  },
+  "dark_blade": {
+    name: "⚫ Dark Blade",
+    inputs: [
+      { item: "dark_matter", qty: 2 },
+      { item: "murk_shard",  qty: 3 }
+    ],
+    output: null,
+    reward_coins: 0,
+    buff: { buff_id: "heist_edge", duration: 86400000 }  // 24 hours: +20% heist success rate
+  },
+  // ── Material Processing ───────────────────────────────────────────────────
+  "void_shard_bundle": {
+    name: "🌀 Void Shard Bundle",
+    inputs: [
+      { item: "void_fragment", qty: 3 },
+      { item: "dark_matter",   qty: 1 }
+    ],
+    output: { item: "void_essence", qty: 2 },
+    reward_coins: 0
+  },
+  "murk_crystal": {
+    name: "💎 Murk Crystal",
+    inputs: [
+      { item: "murk_shard", qty: 5 }
+    ],
+    output: null,
+    reward_coins: 1800
   }
+};
+
+// ── Friendly display names for crafting recipes ───────────────────────────────
+const ITEM_NAMES = {
+  bone_dust:     "🦴 Bone Dust",     crystal_dust:   "✨ Crystal Dust",
+  dark_matter:   "⚫ Dark Matter",   murk_shard:     "🔷 Murk Shard",
+  dragon_tooth:  "🦷 Dragon Tooth",  void_fragment:  "🌀 Void Fragment",
+  ancient_tablet:"📜 Ancient Tablet", void_essence:  "🌑 Void Essence",
+  murk_elixir:   "🔮 Murk Elixir",  fortune_scroll: "📜 Fortune Scroll",
+  swamp_tonic:   "🧪 Swamp Tonic",  ancient_coin:   "🪙 Ancient Coin",
 };
 
 // ==================== BOUNTY SYSTEM ==================
@@ -220,9 +332,15 @@ async function cmdCraft(message, args, util) {
   }
 
   if (!args[0]) {
-    const recipes = Object.entries(RECIPES).map(([key, recipe]) =>
-      `**${recipe.name}**\nInputs: ${recipe.inputs.map(i => `${i.qty}x ${i.item}`).join(", ")}`
-    ).join("\n\n");
+    const recipes = Object.entries(RECIPES).map(([key, recipe]) => {
+      const inputList = recipe.inputs.map(i => `${i.qty}x ${ITEM_NAMES[i.item] || i.item}`).join(", ");
+      let outputStr = "";
+      if (recipe.output)              outputStr = ` → ${recipe.output.qty}x ${ITEM_NAMES[recipe.output.item] || recipe.output.item}`;
+      else if (recipe.reward_coins)   outputStr = ` → 💰 ${recipe.reward_coins} coins`;
+      else if (recipe.buff)           outputStr = ` → **${recipe.buff.buff_id.replace(/_/g, ' ')}** buff`;
+      else if (recipe.effect)         outputStr = ` → ⭐ prestige unlock`;
+      return `**${recipe.name}**\n\`${key}\` | 📥 ${inputList}${outputStr}`;
+    }).join("\n\n");
 
     await message.reply({ embeds: [{
       color: 0x7b68ee,
@@ -1082,10 +1200,16 @@ async function cmdHeist(message, args, util) {
   const scenario = HEIST_SCENARIOS[Math.floor(Math.random() * HEIST_SCENARIOS.length)];
   const heistCount = (stats?.stat_value || 0) + 1;
 
-  // Brigand passive: 15% better success odds
+  // Brigand passive: 15% better success odds; Dark Blade buff: +20%
   const robberClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const heistEdgeBuff = await getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='heist_edge' AND expires_at>?`, [message.guild.id, message.author.id, now]);
   const baseSuccessRate = 0.40;
-  const successRate = robberClass?.class_id === 'brigand' ? baseSuccessRate + 0.15 : baseSuccessRate;
+  let successRate = robberClass?.class_id === 'brigand' ? baseSuccessRate + 0.15 : baseSuccessRate;
+  if (heistEdgeBuff) successRate = Math.min(0.85, successRate + 0.20);
+  const heistPassiveParts = [];
+  if (robberClass?.class_id === 'brigand') heistPassiveParts.push("🗡️ *Brigand: +15% success*");
+  if (heistEdgeBuff) heistPassiveParts.push("⚫ *Dark Blade: +20% success*");
+  const heistPassiveNote = heistPassiveParts.length > 0 ? `\n\n${heistPassiveParts.join("  ")}` : "";
 
   const success = Math.random() < successRate;
 
@@ -1102,11 +1226,10 @@ async function cmdHeist(message, args, util) {
       [winAmount, message.guild.id, message.author.id]);
     await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
       [message.guild.id, message.author.id, "heist", winAmount, `Heist: ${scenario.name}`]);
-    const brigandNote = robberClass?.class_id === 'brigand' ? "\n\n🗡️ *Brigand passive: +15% success odds*" : "";
     const embed = new EmbedBuilder()
       .setColor(0x2ecc71)
       .setTitle(`💰 ℍ𝕖𝕚𝕤𝕥 𝕊𝕦𝕔𝕔𝕖𝕤𝕤!`)
-      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n✅ *${scenario.successStory}*${brigandNote}`)
+      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n✅ *${scenario.successStory}*${heistPassiveNote}`)
       .addFields(
         { name: "💵 Score", value: `+${winAmount} ${economySettings.currency_name}`, inline: true },
         { name: "🔢 Total Heists", value: `${heistCount}`, inline: true },
@@ -1121,11 +1244,10 @@ async function cmdHeist(message, args, util) {
       [newBalance, message.guild.id, message.author.id]);
     await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
       [message.guild.id, message.author.id, "heist_fail", -fine, `Failed heist: ${scenario.name}`]);
-    const brigandNote = robberClass?.class_id === 'brigand' ? "\n\n🗡️ *Brigand passive: +15% success odds*" : "";
     const embed = new EmbedBuilder()
       .setColor(0xe74c3c)
       .setTitle(`🚔 ℍ𝕖𝕚𝕤𝕥 𝔽𝕒𝕚𝕝𝕖𝕕!`)
-      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n❌ *${scenario.failStory}*${brigandNote}`)
+      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n❌ *${scenario.failStory}*${heistPassiveNote}`)
       .addFields(
         { name: "💸 Fine Paid", value: `-${fine} ${economySettings.currency_name}`, inline: true },
         { name: "🔢 Total Heists", value: `${heistCount}`, inline: true },
@@ -1264,7 +1386,27 @@ async function cmdFish(message, args, util) {
   // Scholar class passive: 25% more fishing value
   const userFishClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
   const scholarFishMult = userFishClass?.class_id === 'scholar' ? 1.25 : 1;
-  const fishValue = Math.floor(fish.value * scholarFishMult);
+  // Active gather buffs (stacking)
+  const [gBuff20f, gBuff100f, gBuffLuckf, gBuffEnhf, gBuffAlchf, gBuffWisdf, gBuffFishD] = await Promise.all([
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_20' AND expires_at>?`,  [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_100' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='super_luck' AND expires_at>?`,         [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='enhanced_gather_30' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='alchemist_gather_40' AND expires_at>?`,[message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='wisdom_boost_50' AND expires_at>?`,    [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='fish_double' AND expires_at>?`,        [message.guild.id, message.author.id, now]),
+  ]);
+  let gatherMultF = 1.0;
+  const gatherNotesF = [];
+  if (gBuff20f)   { gatherMultF += 0.20; gatherNotesF.push("+20% Tonic"); }
+  if (gBuff100f)  { gatherMultF += 1.00; gatherNotesF.push("+2x Dragon Scale"); }
+  if (gBuffLuckf) { gatherMultF += 0.30; gatherNotesF.push("+30% Murk Elixir"); }
+  if (gBuffEnhf)  { gatherMultF += 0.30; gatherNotesF.push("+30% Enhanced Tonic"); }
+  if (gBuffAlchf) { gatherMultF += 0.40; gatherNotesF.push("+40% Alchemist Stone"); }
+  if (gBuffWisdf) { gatherMultF += 0.50; gatherNotesF.push("+50% Wisdom Tome"); }
+  if (gBuffFishD) { gatherMultF += 1.00; gatherNotesF.push("+2x Crystal Lens"); }
+  const fishBuffLine = gatherNotesF.length > 0 ? `\n✨ **Buffs:** ${gatherNotesF.join(", ")}` : "";
+  const fishValue = Math.floor(fish.value * scholarFishMult * gatherMultF);
   const scholarFishNote = scholarFishMult > 1 ? "\n📚 **Scholar Bonus: +25% value!**" : "";
   const newBalance = economy.balance + fishValue;
   
@@ -1281,7 +1423,7 @@ async function cmdFish(message, args, util) {
   const fishEmbed = new EmbedBuilder()
     .setColor(fishColor)
     .setTitle(`🎣 𝔽𝕚𝕤𝕙𝕚𝕟𝕘 ℝ𝕖𝕤𝕦𝕝𝕥`)
-    .setDescription(`${fish.emoji} **${fish.name}** [${fish.rarity.toUpperCase()}]${scholarFishNote}`)
+    .setDescription(`${fish.emoji} **${fish.name}** [${fish.rarity.toUpperCase()}]${scholarFishNote}${fishBuffLine}`)
     .addFields(
       { name: '💰 Value', value: `+${fishValue} ${economySettings.currency_name}`, inline: true },
       { name: '⭐ Rarity', value: fish.rarity, inline: true },
@@ -1414,7 +1556,25 @@ async function cmdDig(message, args, util) {
   const userDigClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
   const scholarDigBonus = userDigClass?.class_id === 'scholar';
   if (scholarDigBonus) totalValveGain = Math.floor(totalValveGain * 1.25);
-
+  // Active gather buffs (stacking)
+  const [gBuff20d, gBuff100d, gBuffLuckd, gBuffEnhd, gBuffAlchd, gBuffWisd] = await Promise.all([
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_20' AND expires_at>?`,  [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_100' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='super_luck' AND expires_at>?`,         [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='enhanced_gather_30' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='alchemist_gather_40' AND expires_at>?`,[message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='wisdom_boost_50' AND expires_at>?`,    [message.guild.id, message.author.id, now]),
+  ]);
+  let gatherMultD = 1.0;
+  const gatherNotesD = [];
+  if (gBuff20d)   { gatherMultD += 0.20; gatherNotesD.push("+20% Tonic"); }
+  if (gBuff100d)  { gatherMultD += 1.00; gatherNotesD.push("+2x Dragon Scale"); }
+  if (gBuffLuckd) { gatherMultD += 0.30; gatherNotesD.push("+30% Murk Elixir"); }
+  if (gBuffEnhd)  { gatherMultD += 0.30; gatherNotesD.push("+30% Enhanced Tonic"); }
+  if (gBuffAlchd) { gatherMultD += 0.40; gatherNotesD.push("+40% Alchemist Stone"); }
+  if (gBuffWisd)  { gatherMultD += 0.50; gatherNotesD.push("+50% Wisdom Tome"); }
+  totalValveGain = Math.floor(totalValveGain * gatherMultD);
+  const digBuffLine = gatherNotesD.length > 0 ? `\n✨ **Buffs:** ${gatherNotesD.join(", ")}` : "";
   const digCount = (stats?.stat_value || 0) + 1;
   await runCmd(
     `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
@@ -1446,7 +1606,7 @@ async function cmdDig(message, args, util) {
   const embed = new EmbedBuilder()
     .setColor(rarityColors[reward.rarity] || 0xe67e22)
     .setTitle(`⛏️ 𝔻𝕚𝕘 ℝ𝕖𝕤𝕦𝕝𝕥`)
-    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${totalValveGain} ${economySettings.currency_name}${mapBonus}${scholarDigText}`)
+    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${totalValveGain} ${economySettings.currency_name}${mapBonus}${scholarDigText}${digBuffLine}`)
     .addFields({ name: "Total Digs", value: `${digCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + totalValveGain} ${economySettings.currency_name}`, inline: true });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -1510,7 +1670,25 @@ async function cmdMine(message, args, util) {
   // Scholar class passive: 25% more mine value
   const userMineClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
   const scholarMineMult = userMineClass?.class_id === 'scholar' ? 1.25 : 1;
-  const value = Math.floor(reward.value * mult * scholarMineMult);
+  // Active gather buffs (stacking)
+  const [gBuff20m, gBuff100m, gBuffLuckm, gBuffEnhm, gBuffAlchm, gBuffWisdm] = await Promise.all([
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_20' AND expires_at>?`,  [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_100' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='super_luck' AND expires_at>?`,         [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='enhanced_gather_30' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='alchemist_gather_40' AND expires_at>?`,[message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='wisdom_boost_50' AND expires_at>?`,    [message.guild.id, message.author.id, now]),
+  ]);
+  let gatherMultM = 1.0;
+  const gatherNotesM = [];
+  if (gBuff20m)   { gatherMultM += 0.20; gatherNotesM.push("+20% Tonic"); }
+  if (gBuff100m)  { gatherMultM += 1.00; gatherNotesM.push("+2x Dragon Scale"); }
+  if (gBuffLuckm) { gatherMultM += 0.30; gatherNotesM.push("+30% Murk Elixir"); }
+  if (gBuffEnhm)  { gatherMultM += 0.30; gatherNotesM.push("+30% Enhanced Tonic"); }
+  if (gBuffAlchm) { gatherMultM += 0.40; gatherNotesM.push("+40% Alchemist Stone"); }
+  if (gBuffWisdm) { gatherMultM += 0.50; gatherNotesM.push("+50% Wisdom Tome"); }
+  const mineBuffLine = gatherNotesM.length > 0 ? `\n✨ **Buffs:** ${gatherNotesM.join(", ")}` : "";
+  const value = Math.floor(reward.value * mult * scholarMineMult * gatherMultM);
 
   await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
     [value, message.guild.id, message.author.id]);
@@ -1523,7 +1701,7 @@ async function cmdMine(message, args, util) {
   const embed = new EmbedBuilder()
     .setColor(rarityColors[reward.rarity] || 0x607060)
     .setTitle("⛏️ 𝕄𝕚𝕟𝕖 ℝ𝕖𝕤𝕦𝕝𝕥")
-    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${value} ${economySettings.currency_name}${voidText}${scholarMineText}`)
+    .setDescription(`${reward.emoji || '⛏️'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${value} ${economySettings.currency_name}${voidText}${scholarMineText}${mineBuffLine}`)
     .addFields({ name: "Total Mines", value: `${mineCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + value} ${economySettings.currency_name}`, inline: true });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
@@ -1589,7 +1767,25 @@ async function cmdHunt(message, args, util) {
   // Scholar class passive: 25% more hunt value
   const userHuntClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
   const scholarHuntMult = userHuntClass?.class_id === 'scholar' ? 1.25 : 1;
-  const huntValue = Math.floor(reward.value * scholarHuntMult);
+  // Active gather buffs (stacking)
+  const [gBuff20h, gBuff100h, gBuffLuckh, gBuffEnhh, gBuffAlchh, gBuffWisdh] = await Promise.all([
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_20' AND expires_at>?`,  [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='earnings_boost_100' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='super_luck' AND expires_at>?`,         [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='enhanced_gather_30' AND expires_at>?`, [message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='alchemist_gather_40' AND expires_at>?`,[message.guild.id, message.author.id, now]),
+    getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='wisdom_boost_50' AND expires_at>?`,    [message.guild.id, message.author.id, now]),
+  ]);
+  let gatherMultH = 1.0;
+  const gatherNotesH = [];
+  if (gBuff20h)   { gatherMultH += 0.20; gatherNotesH.push("+20% Tonic"); }
+  if (gBuff100h)  { gatherMultH += 1.00; gatherNotesH.push("+2x Dragon Scale"); }
+  if (gBuffLuckh) { gatherMultH += 0.30; gatherNotesH.push("+30% Murk Elixir"); }
+  if (gBuffEnhh)  { gatherMultH += 0.30; gatherNotesH.push("+30% Enhanced Tonic"); }
+  if (gBuffAlchh) { gatherMultH += 0.40; gatherNotesH.push("+40% Alchemist Stone"); }
+  if (gBuffWisdh) { gatherMultH += 0.50; gatherNotesH.push("+50% Wisdom Tome"); }
+  const huntBuffLine = gatherNotesH.length > 0 ? `\n✨ **Buffs:** ${gatherNotesH.join(", ")}` : "";
+  const huntValue = Math.floor(reward.value * scholarHuntMult * gatherMultH);
   const scholarHuntText = scholarHuntMult > 1 ? "\n📚 **Scholar Bonus: +25% value!**" : "";
 
   await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
@@ -1601,7 +1797,7 @@ async function cmdHunt(message, args, util) {
   const embed = new EmbedBuilder()
     .setColor(rarityColors[reward.rarity] || 0x8b4513)
     .setTitle("🕸️ ℍ𝕦𝕟𝕥 ℝ𝕖𝕤𝕦𝕝𝕥")
-    .setDescription(`${reward.emoji || '🐾'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${huntValue} ${economySettings.currency_name}${scholarHuntText}`)
+    .setDescription(`${reward.emoji || '🐾'} **${reward.item}** [${reward.rarity?.toUpperCase() || 'COMMON'}]\n\n💰 **Value:** +${huntValue} ${economySettings.currency_name}${scholarHuntText}${huntBuffLine}`)
     .addFields({ name: "Total Hunts", value: `${huntCount}`, inline: true }, { name: "New Balance", value: `${economy.balance + huntValue} ${economySettings.currency_name}`, inline: true });
   await message.reply({ embeds: [embed] }).catch(() => {});
 }

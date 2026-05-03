@@ -151,59 +151,112 @@ async function cmdDaily(message) {
   }
 
   const baseAmount = economySettings.daily_amount || 300;
-  // Exponential streak scaling: grows faster at higher streaks
   const bonusPerDay = economySettings.daily_streak_bonus || 50;
-  const streakBonus = Math.min(Math.floor(bonusPerDay * Math.sqrt(newStreak - 1) * (newStreak - 1) * 0.5 + bonusPerDay * (newStreak - 1)), 5000);
+  const prestige = economy.prestige_level || 0;
 
-  // Streak milestone bonuses
+  // ── S-curve streak bonus ─────────────────────────────────────────────────
+  // Fast early gains, natural diminishing returns at high streaks.
+  // At streak 7: ~40% of base | 14: ~65% | 30: ~90% → capped at 90%
+  const streakFraction = Math.min(0.90, 1 - Math.exp(-0.085 * Math.max(0, newStreak - 1)));
+  const streakBonusCurve = Math.floor(baseAmount * streakFraction);
+  // Linear per-day stacking from config (e.g. 50 coins/day)
+  const streakBonusLinear = bonusPerDay * (newStreak - 1);
+  // Combined streak reward (cap at 3x base to prevent runaway)
+  const streakBonus = Math.min(streakBonusCurve + streakBonusLinear, baseAmount * 3);
+
+  // ── Prestige multiplier: +8% per prestige level ──────────────────────────
+  const prestigeMult = 1 + prestige * 0.08;
+
+  // ── Milestone bonuses (scale with prestige) ──────────────────────────────
   let milestoneBonus = 0;
   let milestoneText = "";
-  if (newStreak === 7)   { milestoneBonus = 1000; milestoneText = "\n🔥 **7-day streak bonus! +1,000 bonus!**"; }
-  if (newStreak === 14)  { milestoneBonus = 2500; milestoneText = "\n🔥 **2-week streak bonus! +2,500 bonus!**"; }
-  if (newStreak === 30)  { milestoneBonus = 7500; milestoneText = "\n🌟 **30-day streak bonus! +7,500 bonus!**"; }
-  if (newStreak === 100) { milestoneBonus = 25000; milestoneText = "\n👑 **100-day streak! LEGENDARY +25,000 bonus!**"; }
-  if (newStreak > 100 && newStreak % 50 === 0) { milestoneBonus = 10000; milestoneText = `\n⚡ **${newStreak}-day streak bonus! +10,000 bonus!**`; }
+  const DAILY_MILESTONES = [
+    [7,   1000,  "🔥", "7-day"],
+    [14,  2500,  "🔥", "2-week"],
+    [21,  4000,  "💫", "3-week"],
+    [30,  8000,  "🌟", "30-day"],
+    [60,  15000, "⭐", "60-day"],
+    [90,  22000, "🌙", "90-day"],
+    [100, 30000, "👑", "100-day"],
+    [150, 45000, "💎", "150-day"],
+    [200, 60000, "🏆", "200-day"],
+    [365, 120000,"✨", "1-year"],
+  ];
+  for (const [days, bonus, emoji, label] of DAILY_MILESTONES) {
+    if (newStreak === days) {
+      milestoneBonus = Math.floor(bonus * (1 + prestige * 0.10));
+      milestoneText = `\n${emoji} **${label} streak milestone! +${milestoneBonus.toLocaleString()} bonus!**`;
+    }
+  }
+  if (newStreak > 100 && newStreak % 50 === 0 && milestoneBonus === 0) {
+    milestoneBonus = Math.floor(15000 * (1 + prestige * 0.10));
+    milestoneText = `\n⚡ **${newStreak}-day streak milestone! +${milestoneBonus.toLocaleString()} bonus!**`;
+  }
 
-  // Check buffs that boost daily
-  const frogAmulet = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='daily_boost_15' AND expires_at>?`,
-    [message.guild.id, message.author.id, now]);
-  const frogCrown = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='royal_boost' AND expires_at>?`,
-    [message.guild.id, message.author.id, now]);
+  // ── Active buff checks (parallel) ────────────────────────────────────────
+  const [frogAmulet, frogCrown, murkCompass] = await Promise.all([
+    get(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='daily_boost_15' AND expires_at>?`,  [message.guild.id, message.author.id, now]),
+    get(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='royal_boost' AND expires_at>?`,     [message.guild.id, message.author.id, now]),
+    get(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='global_boost_15' AND expires_at>?`,[message.guild.id, message.author.id, now]),
+  ]);
 
   let buffMult = 1.0;
-  if (frogAmulet) buffMult += 0.15;
-  if (frogCrown)  buffMult += 0.25;
+  const buffParts = [];
+  if (frogAmulet)  { buffMult += 0.15; buffParts.push("🐸 +15%"); }
+  if (frogCrown)   { buffMult += 0.25; buffParts.push("👑 +25%"); }
+  if (murkCompass) { buffMult += 0.15; buffParts.push("🧿 +15%"); }
 
-  const totalAmount = Math.floor((baseAmount + streakBonus + milestoneBonus) * buffMult);
+  // ── Fortune variance ±12% (makes each day feel slightly different) ───────
+  const fortuneRoll = 0.88 + Math.random() * 0.24;
+  const fortunePct = Math.round((fortuneRoll - 1) * 100);
+  const fortuneText = fortunePct !== 0 ? ` *(fortune: ${fortunePct > 0 ? "+" : ""}${fortunePct}%)*` : "";
 
-  // Merchant class passive: 10% daily bank interest
+  // ── Sub-total before variance ─────────────────────────────────────────────
+  const subtotal = Math.floor((baseAmount + streakBonus + milestoneBonus) * prestigeMult * buffMult);
+  const totalAmount = Math.floor(subtotal * fortuneRoll);
+
+  // ── Merchant class: 10% bank interest ────────────────────────────────────
   const userDailyClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
   let bankInterest = 0;
   let interestText = "";
   if (userDailyClass?.class_id === 'merchant' && economy.bank > 0) {
     bankInterest = Math.floor(economy.bank * 0.10);
-    interestText = `\n💼 **Merchant Interest:** +${bankInterest} ${economySettings.currency_name} *(10% of bank)*`;
+    interestText = `\n💼 **Merchant Interest:** +${bankInterest.toLocaleString()} *(10% of bank)*`;
   }
   const grandTotal = totalAmount + bankInterest;
 
   const newBalance = economy.balance + grandTotal;
   await run(`UPDATE user_economy SET balance=?, last_daily=?, daily_streak=?, daily_streak_date=? WHERE guild_id=? AND user_id=?`,
     [newBalance, now, newStreak, today, message.guild.id, message.author.id]);
-
+  await run(`UPDATE user_economy SET total_earned=COALESCE(total_earned,0)+? WHERE guild_id=? AND user_id=?`,
+    [grandTotal, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "daily", grandTotal, `Daily reward (${newStreak} day streak)`]);
+    [message.guild.id, message.author.id, "daily", grandTotal, `Daily reward (${newStreak}-day streak, P${prestige})`]);
 
-  const buffText = buffMult > 1 ? `\n🍀 **Buff multiplier:** ${buffMult.toFixed(2)}x` : "";
+  // ── Next-day estimate ────────────────────────────────────────────────────
+  const nextStreakFraction = Math.min(0.90, 1 - Math.exp(-0.085 * newStreak));
+  const nextStreakBonus = Math.min(Math.floor(baseAmount * nextStreakFraction) + bonusPerDay * newStreak, baseAmount * 3);
+  const nextBase = Math.floor((baseAmount + nextStreakBonus) * prestigeMult * buffMult);
+  const nextMin = Math.floor(nextBase * 0.88);
+  const nextMax = Math.floor(nextBase * 1.12);
+
+  const buffLine = buffParts.length > 0 ? `\n🍀 **Boosts:** ${buffParts.join("  ")}` : "";
+  const prestigeLine = prestige > 0 ? `\n⭐ **Prestige ${prestige}:** ${(prestigeMult * 100 - 100).toFixed(0)}% multiplier` : "";
+
   const embed = {
     color: 0x2ecc71,
     title: `${economySettings.currency_symbol} 𝔻𝕒𝕚𝕝𝕪 ℝ𝕖𝕨𝕒𝕣𝕕`,
-    description: `**Base:** ${baseAmount} ${economySettings.currency_name}\n**Streak Bonus:** +${streakBonus} ${economySettings.currency_name}${milestoneBonus > 0 ? `\n**Milestone:** +${milestoneBonus}` : ""}${buffText}${milestoneText}${interestText}`,
+    description:
+      `**Base:** ${baseAmount.toLocaleString()} ${economySettings.currency_name}` +
+      (streakBonus > 0 ? `\n**Streak Bonus:** +${streakBonus.toLocaleString()}` : "") +
+      (milestoneBonus > 0 ? `\n**Milestone:** +${milestoneBonus.toLocaleString()}` : "") +
+      `${fortuneText}${prestigeLine}${buffLine}${milestoneText}${interestText}`,
     fields: [
-      { name: "🔥 Streak", value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
-      { name: "💰 Earned", value: `+${grandTotal} ${economySettings.currency_name}`, inline: true },
-      { name: "💳 New Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
+      { name: "🔥 Streak",       value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
+      { name: "💰 Earned",        value: `+${grandTotal.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+      { name: "💳 New Balance",   value: `${newBalance.toLocaleString()} ${economySettings.currency_name}`, inline: true },
     ],
-    footer: { text: `Next daily reward ≥ ${Math.floor((baseAmount + Math.min(Math.floor(bonusPerDay * Math.sqrt(newStreak) * newStreak * 0.5 + bonusPerDay * newStreak), 5000)) * buffMult)} ${economySettings.currency_name}` }
+    footer: { text: `Tomorrow's estimate: ${nextMin.toLocaleString()}–${nextMax.toLocaleString()} ${economySettings.currency_name}` }
   };
 
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -236,25 +289,106 @@ async function cmdWeekly(message) {
   }
 
   const weeklyBase = economySettings.weekly_amount || 2500;
+  const prestige = economy.prestige_level || 0;
+  const dailyStreak = economy.daily_streak || 0;
 
-  // Check buffs
-  const frogCrown2 = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='royal_boost' AND expires_at>?`,
-    [message.guild.id, message.author.id, now]);
-  const weeklyMult = frogCrown2 ? 1.25 : 1.0;
-  const weeklyTotal = Math.floor(weeklyBase * weeklyMult);
+  // ── Weekly streak tracking ────────────────────────────────────────────────
+  // A streak is maintained if the user claimed within the last 8–14 days
+  const twoWeeksMs = weekInMs * 2;
+  let newWeeklyStreak = 1;
+  if (economy.last_weekly && (now - economy.last_weekly) < twoWeeksMs && (economy.weekly_streak || 0) > 0) {
+    newWeeklyStreak = (economy.weekly_streak || 0) + 1;
+  }
 
-  const newBalance = economy.balance + weeklyTotal;
-  await run(`UPDATE user_economy SET balance=?, last_weekly=? WHERE guild_id=? AND user_id=?`, [newBalance, now, message.guild.id, message.author.id]);
+  // ── Weekly streak bonus: +8% per consecutive week, capped at 100% ────────
+  const weeklyStreakFraction = Math.min(1.00, (newWeeklyStreak - 1) * 0.08);
+  const weeklyStreakBonus = Math.floor(weeklyBase * weeklyStreakFraction);
 
+  // ── Weekly milestones (scale with prestige) ───────────────────────────────
+  let weeklyMilestoneBonus = 0;
+  let weeklyMilestoneText = "";
+  const WEEKLY_MILESTONES = [
+    [4,  3500,  "🔥", "4-week"],
+    [8,  8000,  "🌟", "8-week"],
+    [13, 18000, "👑", "quarter-year"],
+    [26, 35000, "💎", "half-year"],
+    [52, 80000, "✨", "1-year"],
+  ];
+  for (const [weeks, bonus, emoji, label] of WEEKLY_MILESTONES) {
+    if (newWeeklyStreak === weeks) {
+      weeklyMilestoneBonus = Math.floor(bonus * (1 + prestige * 0.10));
+      weeklyMilestoneText = `\n${emoji} **${label} weekly streak! +${weeklyMilestoneBonus.toLocaleString()} milestone bonus!**`;
+    }
+  }
+  if (newWeeklyStreak > 52 && newWeeklyStreak % 13 === 0 && weeklyMilestoneBonus === 0) {
+    weeklyMilestoneBonus = Math.floor(25000 * (1 + prestige * 0.10));
+    weeklyMilestoneText = `\n⚡ **${newWeeklyStreak}-week milestone! +${weeklyMilestoneBonus.toLocaleString()} bonus!**`;
+  }
+
+  // ── Daily streak synergy ──────────────────────────────────────────────────
+  let dailySynergyMult = 1.0;
+  let dailySynergyText = "";
+  if (dailyStreak >= 30)     { dailySynergyMult = 1.35; dailySynergyText = `\n🔥 **Daily streak synergy (${dailyStreak} days): +35%**`; }
+  else if (dailyStreak >= 14){ dailySynergyMult = 1.25; dailySynergyText = `\n🔥 **Daily streak synergy (${dailyStreak} days): +25%**`; }
+  else if (dailyStreak >= 7) { dailySynergyMult = 1.15; dailySynergyText = `\n🔥 **Daily streak synergy (${dailyStreak} days): +15%**`; }
+
+  // ── Prestige multiplier: +10% per prestige level ──────────────────────────
+  const weeklyPrestigeMult = 1 + prestige * 0.10;
+
+  // ── Active buff checks (parallel) ────────────────────────────────────────
+  const [frogCrown2, murkCompass2] = await Promise.all([
+    get(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='royal_boost' AND expires_at>?`,     [message.guild.id, message.author.id, now]),
+    get(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='global_boost_15' AND expires_at>?`,[message.guild.id, message.author.id, now]),
+  ]);
+
+  let weeklyBuffMult = 1.0;
+  const weeklyBuffParts = [];
+  if (frogCrown2)   { weeklyBuffMult += 0.25; weeklyBuffParts.push("👑 +25%"); }
+  if (murkCompass2) { weeklyBuffMult += 0.15; weeklyBuffParts.push("🧿 +15%"); }
+
+  // ── Fortune variance ±15% ────────────────────────────────────────────────
+  const weeklyFortuneRoll = 0.85 + Math.random() * 0.30;
+  const wFortunePct = Math.round((weeklyFortuneRoll - 1) * 100);
+  const wFortuneText = wFortunePct !== 0 ? ` *(fortune: ${wFortunePct > 0 ? "+" : ""}${wFortunePct}%)*` : "";
+
+  const weeklySubtotal = Math.floor(
+    (weeklyBase + weeklyStreakBonus + weeklyMilestoneBonus)
+    * weeklyPrestigeMult
+    * weeklyBuffMult
+    * dailySynergyMult
+  );
+  const weeklyTotal = Math.floor(weeklySubtotal * weeklyFortuneRoll);
+
+  const weeklyNewBalance = economy.balance + weeklyTotal;
+  await run(`UPDATE user_economy SET balance=?, last_weekly=?, weekly_streak=? WHERE guild_id=? AND user_id=?`,
+    [weeklyNewBalance, now, newWeeklyStreak, message.guild.id, message.author.id]);
+  await run(`UPDATE user_economy SET total_earned=COALESCE(total_earned,0)+? WHERE guild_id=? AND user_id=?`,
+    [weeklyTotal, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-    [message.guild.id, message.author.id, "weekly", weeklyTotal, "Weekly reward"]);
+    [message.guild.id, message.author.id, "weekly", weeklyTotal, `Weekly reward (W${newWeeklyStreak} streak, P${prestige})`]);
 
-  const buffLine = frogCrown2 ? "\n👑 **Frog Crown: +25% bonus applied!**" : "";
+  const wBuffLine = weeklyBuffParts.length > 0 ? `\n🍀 **Boosts:** ${weeklyBuffParts.join("  ")}` : "";
+  const wPrestigeLine = prestige > 0 ? `\n⭐ **Prestige ${prestige}:** ${(weeklyPrestigeMult * 100 - 100).toFixed(0)}% multiplier` : "";
+
+  // Next week estimate
+  const nextWeeklyStreakFraction = Math.min(1.00, newWeeklyStreak * 0.08);
+  const nextWeeklyBonus = Math.floor(weeklyBase * nextWeeklyStreakFraction);
+  const nextWeeklyBase = Math.floor((weeklyBase + nextWeeklyBonus) * weeklyPrestigeMult * weeklyBuffMult * dailySynergyMult);
+
   await message.reply({ embeds: [{
     color: 0x2ecc71,
     title: `${economySettings.currency_symbol} 𝕎𝕖𝕖𝕜𝕝𝕪 ℝ𝕖𝕨𝕒𝕣𝕕`,
-    description: `💰 **+${weeklyTotal} ${economySettings.currency_name}** collected!${buffLine}\n\n**New Balance:** ${newBalance} ${economySettings.currency_name}`,
-    footer: { text: "Come back in 7 days for another weekly reward!" }
+    description:
+      `**Base:** ${weeklyBase.toLocaleString()} ${economySettings.currency_name}` +
+      (weeklyStreakBonus > 0 ? `\n**Weekly Streak Bonus:** +${weeklyStreakBonus.toLocaleString()} *(${(weeklyStreakFraction*100).toFixed(0)}%)*` : "") +
+      (weeklyMilestoneBonus > 0 ? `\n**Milestone:** +${weeklyMilestoneBonus.toLocaleString()}` : "") +
+      `${wFortuneText}${wPrestigeLine}${dailySynergyText}${wBuffLine}${weeklyMilestoneText}`,
+    fields: [
+      { name: "📅 Weekly Streak",  value: `${newWeeklyStreak} week${newWeeklyStreak !== 1 ? "s" : ""}`, inline: true },
+      { name: "💰 Earned",          value: `+${weeklyTotal.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+      { name: "💳 New Balance",     value: `${weeklyNewBalance.toLocaleString()} ${economySettings.currency_name}`, inline: true },
+    ],
+    footer: { text: `Next week's estimate: ~${Math.floor(nextWeeklyBase * 0.85).toLocaleString()}–${Math.floor(nextWeeklyBase * 1.15).toLocaleString()} ${economySettings.currency_name}` }
   }] }).catch(() => {});
 }
 

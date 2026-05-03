@@ -1285,6 +1285,7 @@ async function initDb() {
     // Prestige level and lifetime earnings on user_economy
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS prestige_level INTEGER DEFAULT 0`);
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS total_earned BIGINT DEFAULT 0`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS weekly_streak INTEGER DEFAULT 0`);
 
     // Active timed buffs (from crafted items like swamp_tonic)
     await run(`

@@ -7884,40 +7884,72 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         await run(`INSERT INTO economy_jobs (guild_id, name, pay_min, pay_max, required_shifts, weekly_shifts_required) VALUES (?, ?, ?, ?, ?, ?)`,
           [guildId, "Developer", 400, 800, 60, 5]);
 
-        // Add default Murk shop items
+        // Add default Murk shop items (full list, mirrors ensureDefaultShopItems in commands.js)
         const defaultShopItems = [
-          ["fishing_rod", "🎣 Fishing Rod", "A gnarled rod carved from swamp oak. Required to fish in the murky waters.", 300, "tool", "fishing_rod", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3a3.png"],
-          ["shovel", "⛏️ Rusty Shovel", "A well-worn shovel caked with dried mud. Required for digging in the swamp.", 250, "tool", "shovel", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/26cf.png"],
-          ["swamp_tonic", "🧪 Swamp Tonic", "A bubbling green brew. Boosts all earnings by 20% for 1 hour.", 200, "consumable", "swamp_tonic", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ea.png"],
-          ["revival_potion", "💜 Revival Potion", "A violet vial that revives you from near-death. Fully restores lost coins on death.", 500, "consumable", "revival_potion", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f49c.png"],
-          ["padlock", "🔒 Padlock", "Secures your wallet from thieves. Grants 4-hour robbery immunity when used.", 250, "consumable", "padlock", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f512.png"],
-          ["trap_kit", "🪤 Trap Kit", "Sets an invisible trap. The next person to rob you loses 20% of their wallet instead.", 350, "consumable", "trap_kit", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa64.png"],
-          ["fortune_scroll", "📜 Fortune Scroll", "An ancient parchment. Reading it grants a random coin bonus of 50-500.", 400, "consumable", "fortune_scroll", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f4dc.png"],
-          ["murk_map", "🗺️ Murk Map", "A hand-drawn map of the deep swamp. Doubles your explore loot for 2 hours.", 600, "consumable", "murk_map", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f5fa.png"],
-          ["void_essence", "🌑 Void Essence", "A vial of pure void energy. Use it to crystallize 3-8 free Murk Shards.", 750, "consumable", "void_essence", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f311.png"],
-          ["ancient_coin", "🪙 Ancient Coin", "A pre-Murk currency. Sell it to a merchant for 1.5x its purchase value.", 450, "consumable", "ancient_coin", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa99.png"],
-          ["murk_shard", "🔷 Murk Shard", "A crystallized fragment of the Murk's dark energy. Core crafting material.", 150, "material", null, "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f537.png"],
-          ["shadow_cloak", "🌑 Shadow Cloak", "A cloak woven from Murk shadows. Makes you completely unrobbable for 2 hours.", 900, "consumable", "shadow_cloak", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9e5.png"],
-          ["lucky_charm", "🍀 Lucky Charm", "A four-leaf clover in swamp resin. +20% earnings boost for 6 hours.", 700, "consumable", "lucky_charm", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f340.png"],
-          ["gamblers_dice", "🎲 Gambler's Dice", "Cursed dice from a lost game. 40% chance to triple your wallet, or lose 40%.", 800, "consumable", "gamblers_dice", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3b2.png"],
-          ["merchants_lens", "🔍 Merchant's Lens", "A magnifying glass that reveals another user's exact wallet and bank balance.", 550, "consumable", "merchants_lens", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f50d.png"],
-          ["frog_amulet", "🐸 Frog Amulet", "A carved frog totem from the Murk. Permanently boosts daily rewards by 15%.", 650, "single", "frog_amulet", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f438.png"],
-          ["lizard_totem", "🦎 Lizard Totem", "An ancient carved totem. Passively regenerates +50 coins per hour forever.", 850, "single", "lizard_totem", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f98e.png"],
-          ["witch_brew", "🫖 Witch's Brew", "Unstable brew from Baba Murk. 50/50: doubles your wallet or halves it.", 650, "consumable", "witch_brew", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fad6.png"],
-          ["prestige_token", "⭐ Prestige Token", "A glowing token of exceptional status. Required for the Prestige Ascension ritual.", 2000, "single", "prestige_use", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/2b50.png"],
-          ["dragon_scale", "🐉 Dragon Scale", "A mythical scale from the Murk Serpent. 2x all earnings for 3 hours.", 1200, "consumable", "dragon_scale", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f409.png"],
-          ["trophy", "🏆 Swamp Trophy", "A prestigious collectible awarded to Murk survivors. Pure bragging rights.", 1000, "collectible", null, "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3c6.png"],
-          ["frog_crown", "👑 Frog Crown", "The legendary crown of the Murk Frog King. +25% daily and weekly bonus permanently.", 1500, "single", "frog_crown", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f451.png"],
-          ["black_market_pass", "🎭 Black Market Pass", "A forged pass to The Dark Bazaar. Permanently unlocks dark market trades.", 1800, "single", "black_market_pass", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ad.png"],
-          ["murk_lantern", "🏮 Murk Lantern", "A lantern burning swamp gas. Doubles explore loot for 2 hours when lit.", 500, "consumable", "murk_lantern", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ee.png"],
-          ["cursed_compass", "🧭 Cursed Compass", "Points to buried treasure... or danger. 65% chance for a 200-1000 coin jackpot.", 750, "consumable", "cursed_compass", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ed.png"]
+          // Tools
+          ["fishing_rod",    "🎣 Fishing Rod",        "A gnarled rod carved from swamp oak. Required to fish in the murky waters.",              300,  "tool",        "fishing_rod",       "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3a3.png"],
+          ["shovel",         "⛏️ Rusty Shovel",       "A well-worn shovel caked with dried mud. Required for digging in the swamp.",              280,  "tool",        "shovel",            "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/26cf.png"],
+          ["pickaxe",        "⛏️ Iron Pickaxe",       "A sturdy pickaxe forged in Murk fire. Required to mine in the caverns.",                  380,  "tool",        "pickaxe",           null],
+          ["hunting_net",    "🕸️ Hunting Net",        "Woven from bog-spider silk. Required for hunting creatures in the swamp.",                 320,  "tool",        "hunting_net",       null],
+          ["phone",          "📱 Phone",               "Call police (protection), taxi (stories), or takeout (food).",                            150,  "single",      null,                null],
+          ["treasure_map",   "🗺️ Treasure Map",       "Doubles dig rewards. Consumed on use.",                                                    180,  "consumable",  null,                null],
+          // Basic consumables
+          ["swamp_tonic",    "🧪 Swamp Tonic",        "A bubbling green brew. Boosts all earnings by 20% for 1 hour.",                           450,  "consumable",  "swamp_tonic",       "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ea.png"],
+          ["revival_potion", "💜 Revival Potion",     "A violet vial that auto-revives you from near-death once.",                               750,  "consumable",  "revival_potion",    "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f49c.png"],
+          ["padlock",        "🔒 Padlock",             "Secures your wallet from thieves. Grants 4-hour robbery immunity when used.",             400,  "consumable",  "padlock",           "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f512.png"],
+          ["trap_kit",       "🪤 Trap Kit",           "Sets an invisible trap. The next robber loses 20% of their wallet instead.",              500,  "consumable",  "trap_kit",          "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa64.png"],
+          ["fortune_scroll", "📜 Fortune Scroll",     "An ancient parchment. Reading it grants a random coin bonus of 200–2000.",                500,  "consumable",  "fortune_scroll",    "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f4dc.png"],
+          ["bog_whistle",    "🎵 Bog Whistle",        "A reedy whistle that calls the swamp spirits. 75% chance to earn 300–1500 coins.",        400,  "consumable",  "bog_whistle",       null],
+          ["mana_potion",    "💙 Mana Potion",        "A crystalline blue vial. Instantly resets all gathering cooldowns (fish/dig/mine/hunt).", 600,  "consumable",  "mana_potion",       null],
+          ["bone_charm",     "🦴 Bone Charm",         "A carved bone talisman. Boosts job pay by +25% for 4 hours.",                            350,  "consumable",  "bone_charm",        null],
+          // Exploration & loot boosters
+          ["murk_map",       "🗺️ Murk Map",          "A hand-drawn map of the deep swamp. Doubles your explore loot for 2 hours.",              700,  "consumable",  "murk_map",          "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f5fa.png"],
+          ["murk_lantern",   "🏮 Murk Lantern",      "A lantern burning swamp gas. Doubles explore loot for 2 hours when lit.",                 700,  "consumable",  "murk_lantern",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ee.png"],
+          ["cursed_compass", "🧭 Cursed Compass",    "Points to buried treasure... or danger. 65% chance for a 500–3000 coin jackpot.",          900,  "consumable",  "cursed_compass",    "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ed.png"],
+          ["lucky_charm",    "🍀 Lucky Charm",       "A four-leaf clover in swamp resin. +25% earnings boost for 6 hours.",                     900,  "consumable",  "lucky_charm",       "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f340.png"],
+          ["shadow_cloak",   "🌑 Shadow Cloak",      "A cloak woven from Murk shadows. Makes you completely unrobbable for 2 hours.",           1100, "consumable",  "shadow_cloak",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9e5.png"],
+          ["bog_armor",      "🛡️ Bog Armor",         "Thick bog-hide armor. Reduces any robbery fine by 75% for 6 hours.",                      850,  "consumable",  "bog_armor",         null],
+          // Gambling
+          ["gamblers_dice",  "🎲 Gambler's Dice",   "Cursed dice. 40% chance to triple your wallet — or lose 40%.",                            1000, "consumable",  "gamblers_dice",     "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3b2.png"],
+          ["witch_brew",     "🫖 Witch's Brew",     "Unstable brew from Baba Murk. 50/50: DOUBLES your wallet or halves it.",                  800,  "consumable",  "witch_brew",        "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fad6.png"],
+          ["chaos_stone",    "🌀 Chaos Stone",       "A swirling void stone. Randomly multiplies your wallet by 0.2x–8x. Extreme risk!",       1800, "consumable",  "chaos_stone",       null],
+          // Power-up consumables
+          ["dragon_scale",   "🐉 Dragon Scale",      "A mythical scale. 2x ALL earnings for 3 hours.",                                          1500, "consumable",  "dragon_scale",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f409.png"],
+          ["time_crystal",   "⏱️ Time Crystal",      "Instantly resets ALL activity cooldowns.",                                                 1300, "consumable",  "time_crystal",      null],
+          ["experience_vial","⚗️ Experience Vial",   "+30% job pay for 2 hours.",                                                                700,  "consumable",  "experience_vial",   null],
+          ["void_key",       "🗝️ Void Key",          "3x rewards from dig and mine for 1 hour.",                                                2200, "consumable",  "void_key",          null],
+          // Info & utility
+          ["merchants_lens", "🔍 Merchant's Lens",  "Reveals another user's exact wallet & bank. Single-use.",                                  700,  "consumable",  "merchants_lens",    "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f50d.png"],
+          // Materials
+          ["murk_shard",     "🔷 Murk Shard",        "A crystallized fragment of Murk energy. Core crafting material.",                         200,  "material",    null,                "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f537.png"],
+          ["ancient_coin",   "🪙 Ancient Coin",      "A pre-Murk currency. Sell it for 1.5x its purchase value.",                              500,  "consumable",  "ancient_coin",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1fa99.png"],
+          ["void_essence",   "🌑 Void Essence",      "A vial of pure void energy. Crystallizes 5–12 free Murk Shards.",                        900,  "consumable",  "void_essence",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f311.png"],
+          ["bone_dust",      "🦴 Bone Dust",         "Ground bones of swamp creatures. Advanced crafting material.",                            120,  "material",    null,                null],
+          ["crystal_dust",   "✨ Crystal Dust",      "Powdered murk crystals. Rare crafting material.",                                          200,  "material",    null,                null],
+          ["dark_matter",    "⚫ Dark Matter",        "Solidified void energy. Rare crafting material.",                                          320,  "material",    null,                null],
+          // Permanent upgrades
+          ["frog_amulet",    "🐸 Frog Amulet",       "A carved frog totem. Permanently boosts daily rewards by 15%.",                           900,  "single",      "frog_amulet",       "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f438.png"],
+          ["lizard_totem",   "🦎 Lizard Totem",      "An ancient totem. Passively regenerates +150 coins per hour forever.",                    1200, "single",      "lizard_totem",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f98e.png"],
+          ["frog_crown",     "👑 Frog Crown",         "The legendary crown of the Frog King. +25% daily & weekly bonus permanently.",           2000, "single",      "frog_crown",        "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f451.png"],
+          ["bankers_tome",   "📚 Banker's Tome",    "An ancient ledger of wealth. Grants 3% daily bank interest permanently.",                 2200, "single",      "bankers_tome",      null],
+          ["murk_compass",   "🧿 Murk Compass",      "+15% all income sources permanently.",                                                     3000, "single",      "murk_compass",      null],
+          ["dragon_heart",   "❤️ Dragon Heart",      "Beats with ancient power. Regenerates +600 coins per hour passively forever.",            4000, "single",      "dragon_heart",      null],
+          ["black_market_pass","🎭 Black Market Pass","Unlocks the Dark Bazaar permanently.",                                                   2500, "single",      "black_market_pass", "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3ad.png"],
+          // Prestige & endgame
+          ["prestige_token", "⭐ Prestige Token",    "Required for the Prestige Ascension ritual.",                                              3500, "single",      "prestige_use",      "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/2b50.png"],
+          // Collectibles
+          ["trophy",         "🏆 Swamp Trophy",      "A prestigious collectible. Pure bragging rights.",                                         1500, "collectible", null,                "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f3c6.png"],
+          ["dragon_tooth",   "🦷 Dragon Tooth",      "A tooth from the Murk Serpent. Rare collectible.",                                         500,  "collectible", null,                null],
+          ["void_fragment",  "🌀 Void Fragment",     "A shard of pure void. Rare collectible.",                                                   800,  "collectible", null,                null],
+          ["ancient_tablet", "📜 Ancient Tablet",    "Inscribed with Murk runes. Rare collectible.",                                             1000, "collectible", null,                null],
         ];
 
         for (const [itemId, name, description, price, itemType, useEffect, itemImageUrl] of defaultShopItems) {
           await run(`
             INSERT INTO economy_shop_items (guild_id, item_id, id, name, description, price, item_type, use_effect, item_image_url)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `, [guildId, itemId, itemId, name, description, price, itemType, useEffect, itemImageUrl]);
+            ON CONFLICT (guild_id, item_id) DO NOTHING
+          `, [guildId, itemId, itemId, name, description, price, itemType, useEffect, itemImageUrl]).catch(() => {});
         }
       }
 

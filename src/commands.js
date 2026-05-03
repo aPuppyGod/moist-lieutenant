@@ -420,6 +420,7 @@ async function cmdEconomy(message) {
         value: [
           `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
           `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
+          `\`${ecoPrefix}heist\` — Pull off a heist (2hr CD, high reward)`,
         ].join("\n"),
         inline: false
       },
@@ -428,6 +429,8 @@ async function cmdEconomy(message) {
         value: [
           `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
           `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
+          `\`${ecoPrefix}mine\` — Mine in the caverns (needs ⛏️ Pickaxe)`,
+          `\`${ecoPrefix}hunt\` — Hunt creatures (needs 🕸️ Hunting Net)`,
           `\`${ecoPrefix}phone <police|taxi|takeout>\` — Make a call (needs 📱 Phone)`,
           `\`${ecoPrefix}adventure <story_id>\` — Story adventure`,
           `\`${ecoPrefix}explore\` — Explore the swamp`,
@@ -3591,7 +3594,7 @@ const {
   cmdDeposit, cmdWithdraw, cmdRob, cmdSlots, cmdCoinflip, cmdDice,
   cmdJob, cmdWork, cmdShop, cmdBuy, cmdInventory,
   cmdRoulette, cmdBlackjack, cmdHighLow,
-  cmdInvest, cmdNetWorth,
+  cmdInvest, cmdNetWorth, cmdStats,
 } = require("./economyCommands");
 
 // ─────────────────────────────────────────────────────
@@ -3833,6 +3836,10 @@ async function handleCommands(message) {
     "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call",
     "adventure", "story", "explore", "swamp", "bounty", "bounties", "craft", "crafting",
     "prestige", "class", "use", "consume", "item", "inspect", "gift", "trade", "lottery",
+    "mine", "mining", "hunt", "hunting", "heist",
+    "networth", "wealth", "net-worth", "nw",
+    "stats", "mystats", "ecostats",
+    "invest", "investment", "stock",
     "ecoadmin", "leaderboard", "lb", "economy", "eco", "ecohelp"];
   
   // Try economy prefix first for economy commands
@@ -4132,6 +4139,12 @@ async function executeCommand(message, cmd, args, prefix) {
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get, all };
     await cmdNetWorth(message, args, util);
+    return true;
+  }
+
+  if (cmd === "stats" || cmd === "mystats" || cmd === "ecostats") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    await cmdStats(message, args, economySettings);
     return true;
   }
 
@@ -4691,6 +4704,10 @@ function buildSlashCommands() {
     { name: "dice", description: "Roll dice and guess the result", options: [{ type: 4, name: "bet", description: "Bet amount", required: true }, { type: 4, name: "guess", description: "Guess (1-6)", required: true }] },
     { name: "fish", description: "Go fishing for treasure" },
     { name: "dig", description: "Dig for treasure" },
+    { name: "mine", description: "Mine in the caverns (needs Pickaxe)" },
+    { name: "hunt", description: "Hunt swamp creatures (needs Hunting Net)" },
+    { name: "heist", description: "Pull off a heist for big rewards (2hr cooldown)" },
+    { name: "stats", description: "View your gathering and economy stats", options: [{ type: 6, name: "user", description: "User (optional)", required: false }] },
     { name: "phone", description: "Use phone services", options: [{ type: 3, name: "service", description: "Service (police, taxi, takeout)", required: false }] },
     { name: "adventure", description: "Go on a swamp adventure", options: [{ type: 4, name: "story_id", description: "Story ID", required: false }] },
     { name: "explore", description: "Explore and find treasure" },

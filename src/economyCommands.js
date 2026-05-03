@@ -2111,6 +2111,59 @@ async function cmdNetWorth(message, args, util) {
   }] }).catch(() => {});
 }
 
+// ==================== STATS COMMAND ====================
+
+async function cmdStats(message, args, economySettings) {
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  const target = args[0] ? await pickUserSmart(message, args[0]) : { member: message.member };
+  if (!target) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ User not found." }] }).catch(() => {});
+    return;
+  }
+
+  const userId = target.member.id;
+  const guildId = message.guild.id;
+
+  const [fishStat, digStat, mineStat, huntStat, heistStat, economy, classRow] = await Promise.all([
+    get(`SELECT stat_value FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='fishing'  AND stat_name='fish_count'`,  [guildId, userId]),
+    get(`SELECT stat_value FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='digging'  AND stat_name='last_dig'`,    [guildId, userId]),
+    get(`SELECT stat_value FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='mining'   AND stat_name='last_mine'`,   [guildId, userId]),
+    get(`SELECT stat_value FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='hunting'  AND stat_name='last_hunt'`,   [guildId, userId]),
+    get(`SELECT stat_value FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='heist'    AND stat_name='last_heist'`,  [guildId, userId]),
+    get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]),
+    get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]),
+  ]);
+
+  const classDisplay = classRow?.class_id
+    ? { brigand: "🗡️ Brigand", artificer: "⚙️ Artificer", scholar: "📖 Scholar", merchant: "💼 Merchant" }[classRow.class_id] || classRow.class_id
+    : "*(none)*";
+
+  const streak = economy?.daily_streak || 0;
+  const prestige = economy?.prestige_level || 0;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x3498db)
+    .setTitle(`📊 ${target.member.displayName}'s Stats`)
+    .setThumbnail(target.member.displayAvatarURL({ dynamic: true }))
+    .addFields(
+      { name: "🎣 Fishing Trips",  value: `${fishStat?.stat_value  || 0}`, inline: true },
+      { name: "⛏️ Dig Runs",       value: `${digStat?.stat_value   || 0}`, inline: true },
+      { name: "🪨 Mine Runs",      value: `${mineStat?.stat_value  || 0}`, inline: true },
+      { name: "🕸️ Hunt Runs",      value: `${huntStat?.stat_value  || 0}`, inline: true },
+      { name: "💰 Heists Run",     value: `${heistStat?.stat_value || 0}`, inline: true },
+      { name: "🔥 Daily Streak",   value: `${streak} day${streak !== 1 ? "s" : ""}`, inline: true },
+      { name: "⭐ Prestige",       value: `Level ${prestige}`, inline: true },
+      { name: "🎭 Class",          value: classDisplay, inline: true },
+    )
+    .setFooter({ text: `${economySettings.currency_name} economy` });
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+}
+
 
 module.exports = {
   cmdBalance,
@@ -2137,5 +2190,6 @@ module.exports = {
   cmdHighLow,
   cmdInvest,
   cmdNetWorth,
+  cmdStats,
 };
 

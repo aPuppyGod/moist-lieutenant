@@ -31,7 +31,7 @@ const MURK_CLASSES = {
   brigand: {
     name: "🗡️ Brigand",
     icon: "🗡️",
-    description: "Master of stealth and high-risk crimes. 25% faster robbery cooldowns.",
+    description: "Master of stealth and high-risk crimes. 25% faster robbery cooldowns & +15% heist success odds.",
     passive: "robbery_speedup",
     passive_value: 0.75  // multiply cooldown by 0.75
   },

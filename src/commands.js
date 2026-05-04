@@ -8,6 +8,7 @@ registerFont(require('path').join(__dirname, '..', 'assets', 'Open_Sans', 'stati
 const { getLevelRoles, getGuildSettings, upsertReactionRoleBinding, removeReactionRoleBinding, getReactionRoleBindings } = require("./settings");
 const { normalizeEmojiKey } = require("./reactionRoles");
 const { cmdFish, cmdDig, cmdMine, cmdHunt, cmdHeist, cmdRobBank, cmdPhone, cmdAdventure, cmdExplore, cmdBounty, cmdCraft, cmdPrestige, cmdClass, cmdUse, cmdItemInfo, cmdGift } = require("./economy");
+const { cmdWeapons, cmdGrowWeed, cmdCook, cmdBeehive, cmdGrapes, cmdBrew } = require("./illegal");
 const { cmdGuide, cmdPostGuide } = require("./guide");
 const { recordModAction } = require("./modActionTracker");
 const fs = require("fs");
@@ -4123,6 +4124,54 @@ async function executeCommand(message, cmd, args, prefix) {
     const ecoPrefix = economySettings?.economy_prefix || "$";
     const util = { economySettings, ecoPrefix, run, get };
     await cmdHeist(message, args, util);
+    return true;
+  }
+
+  if (cmd === "weapons" || cmd === "weapon" || cmd === "arms") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdWeapons(message, args, util);
+    return true;
+  }
+
+  if (cmd === "grow-weed" || cmd === "weed" || cmd === "growweed") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdGrowWeed(message, args, util);
+    return true;
+  }
+
+  if (cmd === "cook" || cmd === "meth" || cmd === "cookmeth") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdCook(message, args, util);
+    return true;
+  }
+
+  if (cmd === "beehive" || cmd === "bees" || cmd === "hive") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdBeehive(message, args, util);
+    return true;
+  }
+
+  if (cmd === "grapes" || cmd === "grapevine" || cmd === "grape-vine") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdGrapes(message, args, util);
+    return true;
+  }
+
+  if (cmd === "brew" || cmd === "brewing" || cmd === "alcohol") {
+    const economySettings = await getEconomySettingsRow(message.guild.id);
+    const ecoPrefix = economySettings?.economy_prefix || "$";
+    const util = { economySettings, ecoPrefix, run, get };
+    await cmdBrew(message, args, util);
     return true;
   }
 

@@ -650,6 +650,13 @@ async function cmdRob(message, args) {
     return;
   }
 
+  // Robber must have money to pay fine if caught
+  const minRequired = Math.max(50, Math.floor(victim.balance * 0.3));
+  if (robber.balance < minRequired) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need at least **${minRequired} ${economySettings.currency_name}** in your wallet to rob — you'd have nothing to pay as a fine if caught!` }] }).catch(() => {});
+    return;
+  }
+
   const success = Math.random() < 0.5;
   if (!success) {
     const fine = Math.min(robber.balance, Math.floor(victim.balance * 0.3));
@@ -899,20 +906,26 @@ async function cmdJob(message, args) {
 
   const subcommand = args[0]?.toLowerCase();
 
-  if (!subcommand || subcommand === "list") {
+  if (!subcommand || subcommand === "list" || subcommand === "page" || /^\d+$/.test(subcommand || "")) {
     const jobs = await all(`SELECT * FROM economy_jobs WHERE guild_id=? ORDER BY pay_min ASC`, [message.guild.id]);
     if (jobs.length === 0) {
       await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ No jobs available! Ask an admin to add some." }] }).catch(() => {});
       return;
     }
 
+    const JOBS_PER_PAGE = 5;
+    const pageArg = subcommand === "list" || subcommand === "page" ? (parseInt(args[1]) || 1) : (parseInt(subcommand) || 1);
+    const totalPages = Math.ceil(jobs.length / JOBS_PER_PAGE);
+    const page = Math.max(1, Math.min(pageArg, totalPages));
+    const slice = jobs.slice((page - 1) * JOBS_PER_PAGE, page * JOBS_PER_PAGE);
+
     const embed = {
       color: 0x3498db,
-      title: "💼 𝔸𝕧𝕒𝕚𝕝𝕒𝕓𝕝𝕖 𝕁𝕠𝕓𝕤",
-      description: jobs.map(j =>
-        `**${j.name}**\n💰 Pay: ${j.pay_min}-${j.pay_max} ${economySettings.currency_name}\n📊 Requires: ${j.required_shifts} total shifts\n⏰ Weekly: ${j.weekly_shifts_required} shifts/week`
+      title: `💼 𝔸𝕧𝕒𝕚𝕝𝕒𝕓𝕝𝕖 𝕁𝕠𝕓𝕤 — Page ${page}/${totalPages}`,
+      description: slice.map(j =>
+        `**${j.name}**\n💰 Pay: ${j.pay_min}–${j.pay_max} ${economySettings.currency_name}\n📊 Requires: ${j.required_shifts} total shifts  ⏰ Weekly: ${j.weekly_shifts_required} shifts/week`
       ).join("\n\n"),
-      footer: { text: `Use job apply <jobname> to apply!` }
+      footer: { text: `Page ${page}/${totalPages} — use job list <page> to navigate  |  job apply <name> to apply` }
     };
 
     await message.reply({ embeds: [embed] }).catch(() => {});
@@ -1785,7 +1798,7 @@ async function cmdRoulette(message, args) {
 
   if (!args[0] || !args[1]) {
     await message.reply({ embeds: [new EmbedBuilder().setColor(0x8e44ad).setTitle("🎡 ℝ𝕠𝕦𝕝𝕖𝕥𝕥𝕖").setDescription(
-      `Bet on a number (0-36), color (red/black), or group (even/odd/low/high)!\n\n**Usage:** \`${ecoPrefix}roulette <bet> <choice>\`\n\n**Payouts:**\n🔴/⚫ Red or Black → 2x\n🔢 Even/Odd → 2x\n📊 Low (1-18)/High (19-36) → 2x\n🎯 Single number (0-36) → 35x jackpot\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
+      `**Usage:** \`${ecoPrefix}roulette <bet> <choice>\`\n\n**Outside Bets (low risk):**\n🔴 \`red\` / ⚫ \`black\` → **2x**\n🔢 \`even\` / \`odd\` → **2x**\n📊 \`low\` (1-18) / \`high\` (19-36) → **2x**\n\n**Column/Dozen Bets:**\n\`col1\`/\`col2\`/\`col3\` (columns) → **3x**\n\`dozen1\`/\`dozen2\`/\`dozen3\` (1-12, 13-24, 25-36) → **3x**\n\n**Inside Bets (high risk, high reward):**\n🎯 Straight-up \`0\`–\`36\` (single number) → **36x**\n✌️ Split \`split:n1,n2\` (2 adjacent numbers) → **18x**\n🏘️ Street \`street:n\` (row of 3 starting at n) → **12x**\n⬛ Corner \`corner:n\` (4-number square starting at n) → **9x**\n💚 \`green\` / \`0\` (house number) → **36x**\n\n**Your Balance:** ${economy.balance} ${economySettings.currency_name}`
     )] }).catch(() => {});
     return;
   }
@@ -1813,11 +1826,60 @@ async function cmdRoulette(message, args) {
   let multiplier = 0;
   let choiceDesc = choice;
 
-  const numChoice = parseInt(choice);
-  if (!isNaN(numChoice) && numChoice >= 0 && numChoice <= 36) {
+  // ── INSIDE BETS ────────────────────────────────────────────────────────────
+  if (choice === "green" || choice === "0" || (parseInt(choice) === 0 && choice.length === 1)) {
+    // Green / house: single number 0
+    won = spin === 0;
+    multiplier = 36;
+    choiceDesc = "💚 Green (0)";
+
+  } else if (/^\d+$/.test(choice)) {
+    // Straight-up number
+    const numChoice = parseInt(choice);
+    if (numChoice < 0 || numChoice > 36) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Number must be between 0 and 36." }] }).catch(() => {}); return;
+    }
     won = spin === numChoice;
-    multiplier = 35;
-    choiceDesc = `number ${numChoice}`;
+    multiplier = 36;
+    choiceDesc = `Straight-up #${numChoice}`;
+
+  } else if (choice.startsWith("split:")) {
+    // Split: two adjacent numbers — payout 18x
+    const parts = choice.slice(6).split(",").map(Number);
+    if (parts.length !== 2 || parts.some(n => isNaN(n) || n < 0 || n > 36)) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Split format: `split:n1,n2` (e.g. `split:4,5`)" }] }).catch(() => {}); return;
+    }
+    // Validate adjacency: same row (differ by 1) or vertically adjacent (differ by 3)
+    const diff = Math.abs(parts[0] - parts[1]);
+    if (diff !== 1 && diff !== 3) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Split numbers must be adjacent on the roulette table (differ by 1 or 3)." }] }).catch(() => {}); return;
+    }
+    won = parts.includes(spin);
+    multiplier = 18;
+    choiceDesc = `Split ${parts[0]}|${parts[1]}`;
+
+  } else if (choice.startsWith("street:")) {
+    // Street: a row of 3 (n, n+1, n+2 where n % 3 === 1)
+    const start = parseInt(choice.slice(7));
+    if (isNaN(start) || start < 1 || start > 34 || start % 3 !== 1) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Street format: `street:n` where n is row start (1,4,7,10,...,34)" }] }).catch(() => {}); return;
+    }
+    won = spin >= start && spin <= start + 2;
+    multiplier = 12;
+    choiceDesc = `Street ${start}-${start+2}`;
+
+  } else if (choice.startsWith("corner:")) {
+    // Corner: 4-number square (n, n+1, n+3, n+4 where n % 3 !== 0)
+    const n = parseInt(choice.slice(7));
+    if (isNaN(n) || n < 1 || n > 32 || n % 3 === 0) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Corner format: `corner:n` where n is top-left (not divisible by 3), e.g. corner:1, corner:4, corner:7..." }] }).catch(() => {}); return;
+    }
+    const cornerNums = [n, n+1, n+3, n+4];
+    won = cornerNums.includes(spin);
+    multiplier = 9;
+    choiceDesc = `Corner ${n},${n+1},${n+3},${n+4}`;
+
+  // ── OUTSIDE BETS ───────────────────────────────────────────────────────────
   } else if (choice === "red") {
     won = spinColor === "red";
     multiplier = 2;
@@ -1831,7 +1893,7 @@ async function cmdRoulette(message, args) {
     multiplier = 2;
     choiceDesc = "Even";
   } else if (choice === "odd") {
-    won = spin % 2 !== 0;
+    won = spin !== 0 && spin % 2 !== 0;
     multiplier = 2;
     choiceDesc = "Odd";
   } else if (choice === "low") {
@@ -1842,8 +1904,37 @@ async function cmdRoulette(message, args) {
     won = spin >= 19 && spin <= 36;
     multiplier = 2;
     choiceDesc = "High (19-36)";
+
+  // ── COLUMN BETS ────────────────────────────────────────────────────────────
+  } else if (choice === "col1") {
+    won = spin !== 0 && spin % 3 === 1;
+    multiplier = 3;
+    choiceDesc = "Column 1 (1,4,7,...,34)";
+  } else if (choice === "col2") {
+    won = spin !== 0 && spin % 3 === 2;
+    multiplier = 3;
+    choiceDesc = "Column 2 (2,5,8,...,35)";
+  } else if (choice === "col3") {
+    won = spin !== 0 && spin % 3 === 0;
+    multiplier = 3;
+    choiceDesc = "Column 3 (3,6,9,...,36)";
+
+  // ── DOZEN BETS ─────────────────────────────────────────────────────────────
+  } else if (choice === "dozen1" || choice === "1st12") {
+    won = spin >= 1 && spin <= 12;
+    multiplier = 3;
+    choiceDesc = "1st Dozen (1-12)";
+  } else if (choice === "dozen2" || choice === "2nd12") {
+    won = spin >= 13 && spin <= 24;
+    multiplier = 3;
+    choiceDesc = "2nd Dozen (13-24)";
+  } else if (choice === "dozen3" || choice === "3rd12") {
+    won = spin >= 25 && spin <= 36;
+    multiplier = 3;
+    choiceDesc = "3rd Dozen (25-36)";
+
   } else {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid choice! Use: red, black, even, odd, low, high, or a number 0-36." }] }).catch(() => {}); return;
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ Invalid choice. Use \`${ecoPrefix}roulette\` to see all bet types.` }] }).catch(() => {}); return;
   }
 
   const winnings = won ? bet * (multiplier - 1) : -bet;
@@ -1856,7 +1947,7 @@ async function cmdRoulette(message, args) {
   const embed = {
     color: won ? 0x2ecc71 : 0xe74c3c,
     title: "🎡 ℝ𝕠𝕦𝕝𝕖𝕥𝕥𝕖",
-    description: `The wheel spins...\n\n${spinEmoji} **${spin}** ${spinColor.toUpperCase()}\n\nYou bet on **${choiceDesc}**\n${won ? `✅ You won **${winnings} ${economySettings.currency_name}**!` : `❌ You lost **${bet} ${economySettings.currency_name}**.`}`,
+    description: `The wheel spins...\n\n${spinEmoji} **${spin}** ${spinColor.toUpperCase()}\n\nYou bet on **${choiceDesc}**\n${won ? `✅ You won **${winnings} ${economySettings.currency_name}**! (${multiplier}x)` : `❌ You lost **${bet} ${economySettings.currency_name}**.`}`,
     fields: [
       { name: "Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true },
       { name: "Multiplier", value: won ? `${multiplier}x` : "0x", inline: true }

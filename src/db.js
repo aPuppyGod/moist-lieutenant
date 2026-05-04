@@ -1391,6 +1391,64 @@ async function initDb() {
     // ignore duplicate-column / already-exists errors
   }
 
+  // ── Illegal Economy + Async Robbery Tables ─────────────────────────────────
+  try {
+    // Async group bank robberies (one active per guild)
+    await run(`
+      CREATE TABLE IF NOT EXISTS active_bankrobs (
+        guild_id TEXT PRIMARY KEY,
+        leader_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        crew TEXT NOT NULL DEFAULT '[]',
+        recruit_until BIGINT NOT NULL,
+        finish_at BIGINT NOT NULL,
+        police_called INTEGER NOT NULL DEFAULT 0,
+        police_caller_id TEXT DEFAULT NULL,
+        status TEXT NOT NULL DEFAULT 'recruiting'
+      )
+    `);
+    // Joinable async heists (one active per guild)
+    await run(`
+      CREATE TABLE IF NOT EXISTS active_heists (
+        guild_id TEXT PRIMARY KEY,
+        leader_id TEXT NOT NULL,
+        channel_id TEXT NOT NULL,
+        crew TEXT NOT NULL DEFAULT '[]',
+        scenario TEXT NOT NULL,
+        recruit_until BIGINT NOT NULL,
+        execute_at BIGINT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'recruiting'
+      )
+    `);
+    // Per-user illegal operations (weed grow, meth cook, brew, etc.)
+    await run(`
+      CREATE TABLE IF NOT EXISTS illegal_ops (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        op_type TEXT NOT NULL,
+        stage INTEGER NOT NULL DEFAULT 0,
+        data TEXT NOT NULL DEFAULT '{}',
+        started_at BIGINT NOT NULL DEFAULT 0,
+        finish_at BIGINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id, op_type)
+      )
+    `);
+    // Beehive setups per user
+    await run(`
+      CREATE TABLE IF NOT EXISTS beehives (
+        guild_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        bee_count INTEGER NOT NULL DEFAULT 0,
+        honeycomb_ready INTEGER NOT NULL DEFAULT 0,
+        last_harvest_at BIGINT NOT NULL DEFAULT 0,
+        calm_expires_at BIGINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (guild_id, user_id)
+      )
+    `);
+  } catch (e) {
+    // ignore already-exists errors
+  }
+
   console.log("[db] ✓ All database tables initialized successfully");
   } catch (err) {
     console.error("[db] ✗ Failed to initialize database:");

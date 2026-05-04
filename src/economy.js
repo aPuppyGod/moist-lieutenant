@@ -1151,7 +1151,25 @@ const MURK_CATALOG = [
     item_image_url: "https://cdn.jsdelivr.net/npm/twemoji@14.0.2/assets/72x72/1f9ed.png",
     use_effect: "cursed_compass",
     lore: "It always points north. Unfortunately, north is where the screaming comes from."
-  }
+  },
+  // ── Illegal economy materials & tools ──────────────────────────────────────
+  { item_id: "iron_scrap",       name: "🔩 Iron Scrap",         price: 80,   item_type: "material",   description: "Scavenged metal scraps. Used in weapon crafting.",              item_image_url: null, use_effect: null, lore: "Smells like rust and bad decisions." },
+  { item_id: "gunpowder",        name: "💥 Gunpowder",          price: 120,  item_type: "material",   description: "Black powder. Highly flammable. Handle with care.",            item_image_url: null, use_effect: null, lore: "The warning label was illegible. Probably fine." },
+  { item_id: "ghost_gun_parts",  name: "🔧 Ghost Gun Parts",    price: 600,  item_type: "material",   description: "Untraceable firearm components. Sourced from somewhere dark.",   item_image_url: null, use_effect: null, lore: "No serial number. No history. No witnesses." },
+  { item_id: "brewing_barrel",   name: "🛢️ Brewing Barrel",     price: 1200, item_type: "tool",       description: "A sturdy oak barrel for fermenting illegal brews.",            item_image_url: null, use_effect: null, lore: "Smells of the past. And yeast." },
+  { item_id: "empty_bottle",     name: "🍶 Empty Bottle",       price: 50,   item_type: "material",   description: "A glass bottle ready for filling with questionable liquids.",   item_image_url: null, use_effect: null, lore: "Half empty or half full. Currently: completely empty." },
+  { item_id: "water_jug",        name: "🫙 Water Jug",          price: 30,   item_type: "material",   description: "A jug of clean water. Used in brewing recipes.",               item_image_url: null, use_effect: null, lore: "The cleanest thing in this operation." },
+  { item_id: "bread_yeast",      name: "🍞 Bread Yeast",        price: 40,   item_type: "material",   description: "Active dry yeast. The secret ingredient in any good brew.",    item_image_url: null, use_effect: null, lore: "It lives. It feeds. It ferments." },
+  { item_id: "sugar",            name: "🍬 Sugar",              price: 25,   item_type: "material",   description: "Raw cane sugar. Adds sweetness and boosts fermentation.",       item_image_url: null, use_effect: null, lore: "A spoonful helps the illegal brew go down." },
+  { item_id: "apple",            name: "🍎 Apple",              price: 35,   item_type: "material",   description: "A fresh apple. Used in cider brewing.",                        item_image_url: null, use_effect: null, lore: "An apple a day keeps the revenuers away." },
+  { item_id: "berry",            name: "🫐 Berry",              price: 30,   item_type: "material",   description: "Wild berries. Perfect for fermenting into berry wine.",         item_image_url: null, use_effect: null, lore: "Don't ask where they were found." },
+  { item_id: "grape_vine_trellise", name: "🍇 Grape Vine Trellise", price: 800, item_type: "tool",  description: "Plant this to grow your own grapes every 6h. One-time setup.",   item_image_url: null, use_effect: null, lore: "The roots go deep. So does the debt." },
+  { item_id: "beehive",          name: "🪣 Beehive",            price: 500,  item_type: "tool",       description: "An empty hive. Add bees to start producing honeycomb.",        item_image_url: null, use_effect: null, lore: "The previous owner left in a hurry." },
+  { item_id: "bees",             name: "🐝 Bees",               price: 300,  item_type: "consumable", description: "A colony of bees. Adds 3 bee workers to your beehive.",        item_image_url: null, use_effect: null, lore: "Buzzing intensifies." },
+  { item_id: "electric_heater",  name: "🌡️ Electric Heater",    price: 400,  item_type: "tool",       description: "Calms bees for 30 minutes before harvesting. Reusable.",       item_image_url: null, use_effect: null, lore: "Stolen from a spa. Worth it." },
+  { item_id: "campfire_kit",     name: "🔥 Campfire Kit",       price: 150,  item_type: "consumable", description: "Smoke calms bees instantly. Single use, 2h calm duration.",    item_image_url: null, use_effect: null, lore: "Light it, smoke 'em, collect the gold." },
+  { item_id: "basement",         name: "🏚️ Basement Lab",       price: 2000, item_type: "tool",       description: "A hidden basement for a safer grow operation. Required for basement weed tier.", item_image_url: null, use_effect: null, lore: "The landlord doesn't know. Let's keep it that way." },
+  { item_id: "bunker",           name: "🏗️ Underground Bunker",  price: 5000, item_type: "tool",       description: "A fully hidden underground bunker. Required for underground operations.", item_image_url: null, use_effect: null, lore: "Built before you were born. Repurposed by you." },
 ];
 
 // ==================== HEIST SYSTEM ====================
@@ -1164,99 +1182,7 @@ const HEIST_SCENARIOS = [
   { name: "Ancient Relic Exchange",   intro: "🏺 A shady dealer is trading relics in the back alleys of Murk Market...",             successStory: "You pocket the relics during the exchange and disappear into the crowd.",                    failStory: "The dealer had a bodyguard you didn't account for. You escape, barely." },
 ];
 
-async function cmdHeist(message, args, util) {
-  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-
-  if (!economySettings?.enabled) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
-    return;
-  }
-
-  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
-    [message.guild.id, message.author.id]);
-
-  const stats = await getCmd(
-    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='heist' AND stat_name='last_heist'`,
-    [message.guild.id, message.author.id]
-  );
-
-  const now = Date.now();
-  const cooldown = 7200000; // 2 hours
-
-  if (stats?.last_played && (now - stats.last_played) < cooldown) {
-    const timeLeft = cooldown - (now - stats.last_played);
-    const minutes = Math.floor(timeLeft / 60000);
-    await message.reply({ embeds: [{ color: 0xf39c12, description: `🚔 You're laying low after the last job. Try again in **${minutes}m**.` }] }).catch(() => {});
-    return;
-  }
-
-  const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
-    [message.guild.id, message.author.id]);
-  if (!economy) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy data missing. Try again." }] }).catch(() => {});
-    return;
-  }
-
-  const scenario = HEIST_SCENARIOS[Math.floor(Math.random() * HEIST_SCENARIOS.length)];
-  const heistCount = (stats?.stat_value || 0) + 1;
-
-  // Brigand passive: 15% better success odds; Dark Blade buff: +20%
-  const robberClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
-  const heistEdgeBuff = await getCmd(`SELECT 1 FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='heist_edge' AND expires_at>?`, [message.guild.id, message.author.id, now]);
-  const baseSuccessRate = 0.40;
-  let successRate = robberClass?.class_id === 'brigand' ? baseSuccessRate + 0.15 : baseSuccessRate;
-  if (heistEdgeBuff) successRate = Math.min(0.85, successRate + 0.20);
-  const heistPassiveParts = [];
-  if (robberClass?.class_id === 'brigand') heistPassiveParts.push("🗡️ *Brigand: +15% success*");
-  if (heistEdgeBuff) heistPassiveParts.push("⚫ *Dark Blade: +20% success*");
-  const heistPassiveNote = heistPassiveParts.length > 0 ? `\n\n${heistPassiveParts.join("  ")}` : "";
-
-  const success = Math.random() < successRate;
-
-  await runCmd(
-    `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
-     VALUES (?, ?, 'heist', 'last_heist', ?, ?)
-     ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=minigames_stats.stat_value+1, last_played=?`,
-    [message.guild.id, message.author.id, heistCount, now, now]
-  );
-
-  if (success) {
-    const winAmount = Math.floor(2000 + Math.random() * 8000); // 2000-10000
-    await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
-      [winAmount, message.guild.id, message.author.id]);
-    await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-      [message.guild.id, message.author.id, "heist", winAmount, `Heist: ${scenario.name}`]);
-    const embed = new EmbedBuilder()
-      .setColor(0x2ecc71)
-      .setTitle(`💰 ℍ𝕖𝕚𝕤𝕥 𝕊𝕦𝕔𝕔𝕖𝕤𝕤!`)
-      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n✅ *${scenario.successStory}*${heistPassiveNote}`)
-      .addFields(
-        { name: "💵 Score", value: `+${winAmount} ${economySettings.currency_name}`, inline: true },
-        { name: "🔢 Total Heists", value: `${heistCount}`, inline: true },
-        { name: "💳 Balance", value: `${economy.balance + winAmount} ${economySettings.currency_name}`, inline: true }
-      )
-      .setFooter({ text: "Next heist available in 2 hours" });
-    await message.reply({ embeds: [embed] }).catch(() => {});
-  } else {
-    const fine = Math.floor(economy.balance * 0.30);
-    const newBalance = Math.max(0, economy.balance - fine);
-    await runCmd(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`,
-      [newBalance, message.guild.id, message.author.id]);
-    await runCmd(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
-      [message.guild.id, message.author.id, "heist_fail", -fine, `Failed heist: ${scenario.name}`]);
-    const embed = new EmbedBuilder()
-      .setColor(0xe74c3c)
-      .setTitle(`🚔 ℍ𝕖𝕚𝕤𝕥 𝔽𝕒𝕚𝕝𝕖𝕕!`)
-      .setDescription(`**${scenario.name}**\n\n${scenario.intro}\n\n❌ *${scenario.failStory}*${heistPassiveNote}`)
-      .addFields(
-        { name: "💸 Fine Paid", value: `-${fine} ${economySettings.currency_name}`, inline: true },
-        { name: "🔢 Total Heists", value: `${heistCount}`, inline: true },
-        { name: "💳 Balance", value: `${newBalance} ${economySettings.currency_name}`, inline: true }
-      )
-      .setFooter({ text: "Next heist available in 2 hours" });
-    await message.reply({ embeds: [embed] }).catch(() => {});
-  }
-}
+// cmdHeist — see async joinable version below (after cmdRobBank)
 
 // ==================== EXPORTS ====================
 
@@ -1806,7 +1732,8 @@ async function cmdHunt(message, args, util) {
 
 async function cmdRobBank(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-  
+  const { all: allCmd } = require("./db");
+
   if (!economySettings?.enabled) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
     return;
@@ -1815,57 +1742,256 @@ async function cmdRobBank(message, args, util) {
   await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
     [message.guild.id, message.author.id]);
 
-  const robber = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`,
-    [message.guild.id, message.author.id]);
-
+  const subArg = (args[0] || "").toLowerCase();
   const now = Date.now();
-  const cooldown = 3600000; // 1 hour for bank robbery
-  
-  if (robber.last_bank_rob && (now - robber.last_bank_rob) < cooldown) {
-    const timeLeft = cooldown - (now - robber.last_bank_rob);
-    const minutes = Math.floor(timeLeft / 60000);
-    await message.reply({ embeds: [{ color: 0xf39c12, description: `🚔 The police are still after you! Wait **${minutes}m** before another bank robbery.` }] }).catch(() => {});
+
+  // ─── Check existing active rob ───────────────────────────────────────────
+  const activeRob = await getCmd(`SELECT * FROM active_bankrobs WHERE guild_id=?`, [message.guild.id]);
+
+  // ─── JOIN ────────────────────────────────────────────────────────────────
+  if (subArg === "join") {
+    if (!activeRob) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ No active bank robbery to join! Start one with \`${ecoPrefix}bankrob\`.` }] }).catch(() => {});
+      return;
+    }
+    if (activeRob.status !== "recruiting") {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Recruiting is closed — the robbery is already underway!" }] }).catch(() => {});
+      return;
+    }
+    if (now > activeRob.recruit_until) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ The recruiting window has closed." }] }).catch(() => {});
+      return;
+    }
+    const crew = JSON.parse(activeRob.crew);
+    if (crew.includes(message.author.id)) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You're already in this robbery!" }] }).catch(() => {});
+      return;
+    }
+
+    const robber = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+    if (!robber || robber.balance < 200) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You need at least **200 coins** in your wallet to join a bank robbery (stake)." }] }).catch(() => {});
+      return;
+    }
+
+    crew.push(message.author.id);
+    await runCmd(`UPDATE active_bankrobs SET crew=? WHERE guild_id=?`, [JSON.stringify(crew), message.guild.id]);
+
+    const timeLeft = Math.ceil((activeRob.finish_at - now) / 1000);
+    await message.reply({ embeds: [{ color: 0x3498db, title: "🏦 Joined the Robbery!", description: `You're in, **${message.author.username}**! 🔫\n\n👥 Crew: **${crew.length}** robbers\n⏰ Robbery executes in **${timeLeft}s**` }] }).catch(() => {});
     return;
   }
 
-  // Bank has 50% base success rate, but calling police increases to higher difficulty
-  const success = Math.random() < 0.5;
-  let amount = 0;
-
-  if (success) {
-    amount = Math.floor(500 + Math.random() * 1500); // 500-2000
-  } else {
-    const fine = Math.floor(robber.balance * 0.4); // 40% fine if caught
-    await runCmd(`UPDATE user_economy SET balance=?, last_bank_rob=? WHERE guild_id=? AND user_id=?`,
-      [Math.max(0, robber.balance - fine), now, message.guild.id, message.author.id]);
-    
-    await runCmd(
-      `INSERT INTO robbery_attempts (guild_id, robber_id, robbery_type, success, amount_stolen, attempted_at)
-       VALUES (?, ?, 'bank', 0, ?, ?)`,
-      [message.guild.id, message.author.id, 0, now]
-    );
-
-    await message.reply({ embeds: [{ color: 0xe74c3c, title: '🚔 BANK ROBBERY FAILED!', description: `You got caught by the police and paid a fine of **${fine} ${economySettings.currency_name}**!` }] }).catch(() => {});
+  // ─── CHECK STATUS ────────────────────────────────────────────────────────
+  if (subArg === "check" || subArg === "status") {
+    if (!activeRob) {
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: `No active bank robbery. Start one with \`${ecoPrefix}bankrob\`.` }] }).catch(() => {});
+      return;
+    }
+    const crew = JSON.parse(activeRob.crew);
+    const timeLeft = Math.max(0, Math.ceil((activeRob.finish_at - now) / 1000));
+    const phase = activeRob.status === "recruiting" && now < activeRob.recruit_until
+      ? `🟡 Recruiting (${Math.ceil((activeRob.recruit_until - now) / 1000)}s left to join)`
+      : `🔴 In progress (${timeLeft}s until result)`;
+    const policeNote = activeRob.police_called ? "\n🚔 **Police have been called!** Success chance is reduced." : "";
+    await message.reply({ embeds: [{ color: 0xf39c12, title: "🏦 Bank Robbery Status", description: `👥 Crew: **${crew.length}** robbers\nLeader: <@${activeRob.leader_id}>\nPhase: ${phase}${policeNote}` }] }).catch(() => {});
     return;
   }
 
-  const newBalance = robber.balance + amount;
-  await runCmd(`UPDATE user_economy SET balance=?, last_bank_rob=? WHERE guild_id=? AND user_id=?`,
-    [newBalance, now, message.guild.id, message.author.id]);
+  // ─── START NEW ROBBERY ───────────────────────────────────────────────────
+  if (activeRob) {
+    const crew = JSON.parse(activeRob.crew);
+    const timeLeft = Math.ceil((activeRob.finish_at - now) / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🏦 A bank robbery is already in progress! ${crew.includes(message.author.id) ? "You're already in the crew." : `Use \`${ecoPrefix}bankrob join\` to participate.`}\n\n⏰ Result in **${timeLeft}s**.` }] }).catch(() => {});
+    return;
+  }
+
+  const cooldownKey = `bankrob_cd_${message.guild.id}_${message.author.id}`;
+  const robber = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+
+  const personalCd = 3600000; // 1 hour personal cooldown
+  if (robber.last_bank_rob && (now - robber.last_bank_rob) < personalCd) {
+    const mins = Math.floor((personalCd - (now - robber.last_bank_rob)) / 60000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🚔 You're still wanted from the last job. Try again in **${mins}m**.` }] }).catch(() => {});
+    return;
+  }
+
+  if (!robber || robber.balance < 200) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You need at least **200 coins** to lead a bank robbery (stake in case of failure)." }] }).catch(() => {});
+    return;
+  }
+
+  const recruitWindowMs = 60_000; // 60s to join
+  const robberyDurationMs = 5 * 60_000; // 5 minutes
+  const recruitUntil = now + recruitWindowMs;
+  const finishAt = now + robberyDurationMs;
 
   await runCmd(
-    `INSERT INTO robbery_attempts (guild_id, robber_id, robbery_type, success, amount_stolen, attempted_at)
-     VALUES (?, ?, 'bank', 1, ?, ?)`,
-    [message.guild.id, message.author.id, amount, now]
+    `INSERT INTO active_bankrobs (guild_id, leader_id, channel_id, crew, recruit_until, finish_at, police_called, status)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 'recruiting')
+     ON CONFLICT (guild_id) DO UPDATE SET
+       leader_id=excluded.leader_id, channel_id=excluded.channel_id, crew=excluded.crew,
+       recruit_until=excluded.recruit_until, finish_at=excluded.finish_at,
+       police_called=0, status='recruiting'`,
+    [message.guild.id, message.author.id, message.channel.id, JSON.stringify([message.author.id]), recruitUntil, finishAt]
   );
+  await runCmd(`UPDATE user_economy SET last_bank_rob=? WHERE guild_id=? AND user_id=?`, [now, message.guild.id, message.author.id]);
 
-  await message.reply({ embeds: [{ color: 0x2ecc71, title: '💰 BANK ROBBERY SUCCESS!', description: `🚨 You made off with **${amount} ${economySettings.currency_name}**!\n\n*sirens in the distance...*` }] }).catch(() => {});
+  // DM 3 random wealthy members (potential victims) to call police
+  const wealthyVictims = await allCmd(
+    `SELECT user_id FROM user_economy WHERE guild_id=? AND user_id != ? AND balance > 500 ORDER BY balance DESC LIMIT 5`,
+    [message.guild.id, message.author.id]
+  );
+  for (const v of wealthyVictims.slice(0, 3)) {
+    const victimUser = await message.client.users.fetch(v.user_id).catch(() => null);
+    if (victimUser) {
+      victimUser.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Bank Robbery Alert!", description: `Someone is robbing the bank in **${message.guild.name}**!\n\nThe robbery will complete in **5 minutes**.\n\n📱 If you have a **Phone**, quickly use \`${ecoPrefix}phone police\` in the server to call the police and reduce their success chances!\n\n*This is a targeted alert because you have significant wealth deposited.*` }] }).catch(() => {});
+    }
+  }
+
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0xf39c12)
+    .setTitle("🏦 𝔹𝕒𝕟𝕜 ℝ𝕠𝕓𝕓𝕖𝕣𝕪 𝕊𝕥𝕒𝕣𝕥𝕚𝕟𝕘!")
+    .setDescription(`**${message.author.username}** is planning a bank heist! 🔫\n\n⏰ **60 seconds** to join the crew!\n⏳ Robbery executes in **5 minutes**\n\n📞 **Potential victims have been alerted** — they can call police to interfere!\n💀 More crew = slightly higher success + bigger payout split equally`)
+    .addFields(
+      { name: "👥 Current Crew", value: `<@${message.author.id}> (leader)`, inline: false },
+      { name: "📋 To Join", value: `\`${ecoPrefix}bankrob join\``, inline: true },
+      { name: "📊 Check Status", value: `\`${ecoPrefix}bankrob check\``, inline: true }
+    )
+    .setFooter({ text: "Success chance: 40% solo → up to 65% with full crew | Police call = -20%" })
+  ] }).catch(() => {});
+
+  // Transition from recruiting → active after 60s
+  setTimeout(async () => {
+    try {
+      const rob = await getCmd(`SELECT * FROM active_bankrobs WHERE guild_id=? AND status='recruiting'`, [message.guild.id]);
+      if (!rob) return;
+      await runCmd(`UPDATE active_bankrobs SET status='active' WHERE guild_id=?`, [message.guild.id]);
+      const crewList = JSON.parse(rob.crew).map(id => `<@${id}>`).join(", ");
+      await message.channel.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Recruiting Closed!", description: `The crew is locked in! 👥 **${JSON.parse(rob.crew).length}** robbers: ${crewList}\n\n⏰ Result in **~4 minutes**. Stay tuned!` }] }).catch(() => {});
+    } catch (e) { /* ignore */ }
+  }, recruitWindowMs);
 }
 
-// ==================== PHONE SYSTEM ====================
+// ==================== HEIST SYSTEM (JOINABLE ASYNC) ====================
+
+async function cmdHeist(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  const { all: allCmd } = require("./db");
+
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  await runCmd(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`,
+    [message.guild.id, message.author.id]);
+
+  const subArg = (args[0] || "").toLowerCase();
+  const now = Date.now();
+
+  const activeHeist = await getCmd(`SELECT * FROM active_heists WHERE guild_id=?`, [message.guild.id]);
+
+  // ─── JOIN ────────────────────────────────────────────────────────────────
+  if (subArg === "join") {
+    if (!activeHeist) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ No active heist to join! Start one with \`${ecoPrefix}heist\`.` }] }).catch(() => {});
+      return;
+    }
+    if (now > activeHeist.recruit_until) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ The recruiting window has closed." }] }).catch(() => {});
+      return;
+    }
+    const crew = JSON.parse(activeHeist.crew);
+    if (crew.includes(message.author.id)) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You're already in this heist!" }] }).catch(() => {});
+      return;
+    }
+    const member = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+    if (!member || member.balance < 100) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You need at least **100 coins** to join a heist." }] }).catch(() => {});
+      return;
+    }
+    crew.push(message.author.id);
+    await runCmd(`UPDATE active_heists SET crew=? WHERE guild_id=?`, [JSON.stringify(crew), message.guild.id]);
+    const timeLeft = Math.max(0, Math.ceil((activeHeist.execute_at - now) / 1000));
+    await message.reply({ embeds: [{ color: 0x3498db, title: "🕵️ Joined the Heist!", description: `You're in! 👥 Crew now: **${crew.length}** | ⏰ Executes in **${timeLeft}s**` }] }).catch(() => {});
+    return;
+  }
+
+  // ─── CHECK STATUS ────────────────────────────────────────────────────────
+  if (subArg === "check") {
+    if (!activeHeist) {
+      await message.reply({ embeds: [{ color: 0x95a5a6, description: `No active heist. Start one with \`${ecoPrefix}heist\`.` }] }).catch(() => {});
+      return;
+    }
+    const crew = JSON.parse(activeHeist.crew);
+    const timeLeft = Math.max(0, Math.ceil((activeHeist.execute_at - now) / 1000));
+    await message.reply({ embeds: [{ color: 0x9b59b6, title: "🕵️ Heist Status", description: `**${activeHeist.scenario}**\n\n👥 Crew: **${crew.length}** | Leader: <@${activeHeist.leader_id}>\n⏰ Executes in **${timeLeft}s**` }] }).catch(() => {});
+    return;
+  }
+
+  // ─── START NEW HEIST ─────────────────────────────────────────────────────
+  if (activeHeist) {
+    const timeLeft = Math.max(0, Math.ceil((activeHeist.execute_at - now) / 1000));
+    const crew = JSON.parse(activeHeist.crew);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `A heist is already being planned! ${crew.includes(message.author.id) ? "You're already in the crew." : `Use \`${ecoPrefix}heist join\` to join.`}\n\n⏰ Result in **${timeLeft}s**.` }] }).catch(() => {});
+    return;
+  }
+
+  // Cooldown check
+  const stats = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='heist' AND stat_name='last_heist'`,
+    [message.guild.id, message.author.id]
+  );
+  const cooldown = 7200000;
+  if (stats?.last_played && (now - stats.last_played) < cooldown) {
+    const mins = Math.floor((cooldown - (now - stats.last_played)) / 60000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🚔 You're laying low after the last job. Try again in **${mins}m**.` }] }).catch(() => {});
+    return;
+  }
+
+  const economy = await getCmd(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  if (!economy || economy.balance < 100) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ You need at least **100 coins** to plan a heist." }] }).catch(() => {});
+    return;
+  }
+
+  const scenario = HEIST_SCENARIOS[Math.floor(Math.random() * HEIST_SCENARIOS.length)];
+  const recruitWindowMs = 60_000;
+  const recruitUntil = now + recruitWindowMs;
+  const executeAt = now + 2 * 60_000; // 2 minutes until execution
+
+  await runCmd(
+    `INSERT INTO active_heists (guild_id, leader_id, channel_id, crew, scenario, recruit_until, execute_at, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'recruiting')
+     ON CONFLICT (guild_id) DO UPDATE SET
+       leader_id=excluded.leader_id, channel_id=excluded.channel_id, crew=excluded.crew,
+       scenario=excluded.scenario, recruit_until=excluded.recruit_until,
+       execute_at=excluded.execute_at, status='recruiting'`,
+    [message.guild.id, message.author.id, message.channel.id, JSON.stringify([message.author.id]), scenario.name, recruitUntil, executeAt]
+  );
+
+  // Brigand / dark blade class modifiers for display
+  const robberClass = await getCmd(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const classNote = robberClass?.class_id === 'brigand' ? "\n\n🗡️ *Brigand bonus applies to your cut!*" : "";
+
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0x9b59b6)
+    .setTitle(`🕵️ ℍ𝕖𝕚𝕤𝕥 ℙ𝕝𝕒𝕟𝕟𝕚𝕟𝕘: ${scenario.name}`)
+    .setDescription(`${scenario.intro}\n\n⏰ **60s** to gather your crew — heist executes in **2 minutes**!${classNote}`)
+    .addFields(
+      { name: "👥 Current Crew", value: `<@${message.author.id}> (leader)`, inline: false },
+      { name: "📋 Join", value: `\`${ecoPrefix}heist join\``, inline: true },
+      { name: "📊 Status", value: `\`${ecoPrefix}heist check\``, inline: true }
+    )
+    .setFooter({ text: "Solo: 40% success | Each extra crew member adds ~5% success | Payout split equally" })
+  ] }).catch(() => {});
+}
 
 async function cmdPhone(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  const { all: allCmd } = require("./db");
   
   if (!economySettings?.enabled) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
@@ -1886,15 +2012,22 @@ async function cmdPhone(message, args, util) {
   const service = (args[0] || "").toLowerCase();
 
   if (service === "police" || service === "911" || service === "call_police") {
-    // Prevent robbery for 1 hour
+    const now = Date.now();
+    // Check for active bank robbery in this guild
+    const activeRob = await getCmd(`SELECT * FROM active_bankrobs WHERE guild_id=? AND status != 'done'`, [message.guild.id]);
+    if (activeRob && !activeRob.police_called) {
+      await runCmd(`UPDATE active_bankrobs SET police_called=1, police_caller_id=? WHERE guild_id=?`, [message.author.id, message.guild.id]);
+      await message.reply({ embeds: [{ color: 0x3498db, title: "🚔 Police Called!", description: `📞 You called the police on the active bank robbery!\n\n🚨 Officers en route — robbers' success chance reduced by **20%**!` }] }).catch(() => {});
+      return;
+    }
+    // General 1h protection
     await runCmd(
       `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
        VALUES (?, ?, 'phone', 'police_called', 1, ?)
        ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET last_played=?`,
-      [message.guild.id, message.author.id, Date.now(), Date.now()]
+      [message.guild.id, message.author.id, now, now]
     );
-    
-    await message.reply({ embeds: [{ color: 0x3498db, title: '📞 Police Called!', description: '🚔 Officers are patrolling your area for the next hour.\n✅ Bank robberies against you will fail if attempted within the hour.' }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x3498db, title: '📞 Police Called!', description: '🚔 Officers are patrolling your area for the next hour.\n✅ Bank robberies against you will be harder if attempted.' }] }).catch(() => {});
     return;
   }
 

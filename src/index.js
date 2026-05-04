@@ -2028,6 +2028,85 @@ client.once(Events.ClientReady, async () => {
       }
     }, 1_800_000); // every 30 minutes
 
+    // ─── Active bankrob & heist resolution ─────────────────────────────────────
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+
+        // ── Bank robberies ──────────────────────────────────────────────────────
+        const finishedRobs = await all(`SELECT * FROM active_bankrobs WHERE finish_at <= ? AND status != 'done'`, [now]);
+        for (const rob of finishedRobs) {
+          const crew = JSON.parse(rob.crew || '[]');
+          let successRate = 0.40 + Math.min(0.25, (crew.length - 1) * 0.05);
+          if (rob.police_called) successRate = Math.max(0, successRate - 0.20);
+          const success = Math.random() < successRate;
+          const channel = await client.channels.fetch(rob.channel_id).catch(() => null);
+
+          if (success) {
+            const totalPayout = Math.floor(2000 + Math.random() * 6000);
+            const cut = Math.floor(totalPayout / crew.length);
+            for (const uid of crew) {
+              await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [cut, rob.guild_id, uid]);
+            }
+            const crewMentions = crew.map(id => `<@${id}>`).join(", ");
+            if (channel) {
+              await channel.send({ embeds: [{ color: 0x2ecc71, title: "💰 Bank Robbery — SUCCESS!", description: `🚨 **The crew made it out!**\n\n👥 Crew: ${crewMentions}\n💵 Total stolen: **${totalPayout} coins** (${cut} each)\n\n*They vanish into the shadows...*` }] }).catch(() => {});
+            }
+          } else {
+            for (const uid of crew) {
+              const member = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [rob.guild_id, uid]);
+              if (member) {
+                const fine = Math.floor(member.balance * 0.40);
+                await run(`UPDATE user_economy SET balance=MAX(0, balance-?) WHERE guild_id=? AND user_id=?`, [fine, rob.guild_id, uid]);
+              }
+            }
+            const crewMentions = crew.map(id => `<@${id}>`).join(", ");
+            if (channel) {
+              await channel.send({ embeds: [{ color: 0xe74c3c, title: "🚔 Bank Robbery — BUSTED!", description: `🚔 **The police were waiting!**\n\n👥 Crew: ${crewMentions}\n💸 Each crew member fined **40% of their wallet**.\n\n${rob.police_called ? "📞 *Someone called the police...*" : ""}` }] }).catch(() => {});
+            }
+          }
+          await run(`DELETE FROM active_bankrobs WHERE guild_id=?`, [rob.guild_id]);
+        }
+
+        // ── Heists ──────────────────────────────────────────────────────────────
+        const finishedHeists = await all(`SELECT * FROM active_heists WHERE execute_at <= ? AND status != 'done'`, [now]);
+        for (const heist of finishedHeists) {
+          const crew = JSON.parse(heist.crew || '[]');
+          const successRate = Math.min(0.65, 0.40 + (crew.length - 1) * 0.05);
+          const success = Math.random() < successRate;
+          const channel = await client.channels.fetch(heist.channel_id).catch(() => null);
+
+          if (success) {
+            const totalPayout = Math.floor(2000 + Math.random() * 8000);
+            const cut = Math.floor(totalPayout / crew.length);
+            for (const uid of crew) {
+              await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [cut, heist.guild_id, uid]);
+            }
+            const crewMentions = crew.map(id => `<@${id}>`).join(", ");
+            if (channel) {
+              await channel.send({ embeds: [{ color: 0x2ecc71, title: `💰 Heist — SUCCESS: ${heist.scenario}`, description: `✅ The crew pulled it off!\n\n👥 ${crewMentions}\n💵 Total: **${totalPayout} coins** (${cut} each)` }] }).catch(() => {});
+            }
+          } else {
+            for (const uid of crew) {
+              const member = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [heist.guild_id, uid]);
+              if (member) {
+                const fine = Math.floor(member.balance * 0.30);
+                await run(`UPDATE user_economy SET balance=MAX(0, balance-?) WHERE guild_id=? AND user_id=?`, [fine, heist.guild_id, uid]);
+              }
+            }
+            const crewMentions = crew.map(id => `<@${id}>`).join(", ");
+            if (channel) {
+              await channel.send({ embeds: [{ color: 0xe74c3c, title: `🚔 Heist — FAILED: ${heist.scenario}`, description: `❌ Everything went wrong!\n\n👥 ${crewMentions}\n💸 Each crew member fined **30% of their wallet**.` }] }).catch(() => {});
+            }
+          }
+          await run(`DELETE FROM active_heists WHERE guild_id=?`, [heist.guild_id]);
+        }
+
+      } catch (err) {
+        console.error("Bankrob/heist resolution interval failed:", err);
+      }
+    }, 30_000); // every 30 seconds
+
   } catch (err) {
     console.error("ClientReady startup failed:", err);
   }

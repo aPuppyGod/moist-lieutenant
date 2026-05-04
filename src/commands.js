@@ -137,7 +137,13 @@ async function getActivePrefixes(message) {
 }
 
 async function getModPrefixes(message) {
-  const configured = (await getGuildSettings(message.guild.id).catch(() => null))?.command_prefix || DEFAULT_PREFIX;
+  const settings = await getGuildSettings(message.guild.id).catch(() => null);
+  const modPrefixesRaw = settings?.mod_prefixes;
+  if (modPrefixesRaw) {
+    const list = modPrefixesRaw.split(",").map(p => p.trim()).filter(Boolean);
+    if (list.length > 0) return list;
+  }
+  const configured = settings?.command_prefix || DEFAULT_PREFIX;
   const prefix = String(configured || DEFAULT_PREFIX).trim() || DEFAULT_PREFIX;
   return [prefix];
 }
@@ -369,7 +375,7 @@ async function cmdPublicCommands(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
-async function cmdEconomy(message) {
+async function cmdEconomy(message, args) {
   const economySettings = await getEconomySettingsRow(message.guild.id);
   if (!economySettings?.enabled) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is not enabled on this server." }] }).catch(() => {});
@@ -377,95 +383,105 @@ async function cmdEconomy(message) {
   }
   const ecoPrefix = economySettings.economy_prefix || "$";
   const name = economySettings.currency_name || "coins";
+  const page = Math.max(1, Math.min(2, parseInt(args?.[0]) || 1));
 
-  const embed = new EmbedBuilder()
-    .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤")
-    .setColor(0x1f8b4c)
-    .addFields(
-      {
-        name: "💵 𝕎𝕒𝕝𝕝𝕖𝕥 & 𝔹𝕒𝕟𝕜",
-        value: [
-          `\`${ecoPrefix}balance\` — Check your balance`,
-          `\`${ecoPrefix}deposit <amount|all>\` — Deposit to bank`,
-          `\`${ecoPrefix}withdraw <amount|all>\` — Withdraw from bank`,
-          `\`${ecoPrefix}pay <user> <amount>\` — Send ${name}`,
-          `\`${ecoPrefix}baltop\` — Richest members`,
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "🎁 𝔻𝕒𝕚𝕝𝕪 & 𝕁𝕠𝕓𝕤",
-        value: [
-          `\`${ecoPrefix}daily\` — Claim daily reward`,
-          `\`${ecoPrefix}weekly\` — Claim weekly reward`,
-          `\`${ecoPrefix}job\` — View/pick a job`,
-          `\`${ecoPrefix}work\` — Complete a work shift`,
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "🎰 𝔾𝕒𝕞𝕓𝕝𝕚𝕟𝕘",
-        value: [
-          `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
-          `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
-          `\`${ecoPrefix}slots <bet>\` — Spin the slots`,
-          `\`${ecoPrefix}roulette <bet> <red|black|even|odd|low|high|0-36>\` — Wheel spin`,
-          `\`${ecoPrefix}blackjack <bet>\` — Beat the dealer`,
-          `\`${ecoPrefix}highlow <bet> <higher|lower>\` — Guess the next number`,
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "🦹 ℂ𝕣𝕚𝕞𝕖",
-        value: [
-          `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
-          `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
-          `\`${ecoPrefix}heist\` — Pull off a heist (2hr CD, high reward)`,
-          `\`${ecoPrefix}duel <@user> <amount>\` — 1v1 coin wager duel`,
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "🎣 𝕄𝕚𝕟𝕚𝕘𝕒𝕞𝕖𝕤",
-        value: [
-          `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
-          `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
-          `\`${ecoPrefix}mine\` — Mine in the caverns (needs ⛏️ Pickaxe)`,
-          `\`${ecoPrefix}hunt\` — Hunt creatures (needs 🕸️ Hunting Net)`,
-          `\`${ecoPrefix}phone <police|taxi|takeout>\` — Make a call (needs 📱 Phone)`,
-          `\`${ecoPrefix}adventure <story_id>\` — Story adventure`,
-          `\`${ecoPrefix}explore\` — Explore the swamp`,
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "🛒 𝕊𝕙𝕠𝕡 & 𝕀𝕟𝕧𝕖𝕟𝕥𝕠𝕣𝕪",
-        value: [
-          `\`${ecoPrefix}shop\` — Browse the Murk Grand Bazaar`,
-          `\`${ecoPrefix}buy <number>\` — Buy an item from the shop`,
-          `\`${ecoPrefix}inventory\` — View your items`,
-          `\`${ecoPrefix}use <item_id>\` — Use a consumable item`,
-          `\`${ecoPrefix}item <name>\` — Inspect an item`,
-          `\`${ecoPrefix}gift <user> <item_id>\` — Gift an item`,
-        ].join("\n"),
-        inline: false
-      },
-      {
-        name: "⭐ ℙ𝕣𝕠𝕘𝕣𝕖𝕤𝕤𝕚𝕠𝕟",
-        value: [
-          `\`${ecoPrefix}class\` — View/set your class (Brigand/Artificer/Scholar/Merchant)`,
-          `\`${ecoPrefix}prestige\` — Prestige (requires Prestige Token)`,
-          `\`${ecoPrefix}bounty <user> <amount>\` — Place a bounty`,
-          `\`${ecoPrefix}craft\` — Craft items`,
-          `\`${ecoPrefix}trade <user>\` — Trade with a player`,
-          `\`${ecoPrefix}lottery\` — Enter the lottery`,
-        ].join("\n"),
-        inline: false
-      }
-    )
-    .setFooter({ text: `Currency: ${name} | Type ${ecoPrefix}shop to browse items` });
-
-  await message.reply({ embeds: [embed] }).catch(() => {});
+  if (page === 1) {
+    const embed = new EmbedBuilder()
+      .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 1/2")
+      .setColor(0x1f8b4c)
+      .addFields(
+        {
+          name: "💵 𝕎𝕒𝕝𝕝𝕖𝕥 & 𝔹𝕒𝕟𝕜",
+          value: [
+            `\`${ecoPrefix}balance\` — Check your balance`,
+            `\`${ecoPrefix}deposit <amount|all>\` — Deposit to bank`,
+            `\`${ecoPrefix}withdraw <amount|all>\` — Withdraw from bank`,
+            `\`${ecoPrefix}pay <user> <amount>\` — Send ${name}`,
+            `\`${ecoPrefix}baltop\` — Richest members`,
+          ].join("\n"),
+          inline: false
+        },
+        {
+          name: "🎁 𝔻𝕒𝕚𝕝𝕪 & 𝕁𝕠𝕓𝕤",
+          value: [
+            `\`${ecoPrefix}daily\` — Claim daily reward`,
+            `\`${ecoPrefix}weekly\` — Claim weekly reward`,
+            `\`${ecoPrefix}job\` — View/pick a job`,
+            `\`${ecoPrefix}work\` — Complete a work shift`,
+          ].join("\n"),
+          inline: false
+        },
+        {
+          name: "🎰 𝔾𝕒𝕞𝕓𝕝𝕚𝕟𝕘",
+          value: [
+            `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
+            `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
+            `\`${ecoPrefix}slots <bet>\` — Spin the slots`,
+            `\`${ecoPrefix}roulette <bet> <red|black|even|odd|low|high|0-36>\` — Wheel spin`,
+            `\`${ecoPrefix}blackjack <bet>\` — Beat the dealer`,
+            `\`${ecoPrefix}highlow <bet> <higher|lower>\` — Guess the next number`,
+          ].join("\n"),
+          inline: false
+        },
+        {
+          name: "🦹 ℂ𝕣𝕚𝕞𝕖",
+          value: [
+            `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
+            `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
+            `\`${ecoPrefix}heist\` — Pull off a heist (2hr CD, high reward)`,
+            `\`${ecoPrefix}duel <@user> <amount>\` — 1v1 coin wager duel`,
+          ].join("\n"),
+          inline: false
+        }
+      )
+      .setFooter({ text: `Currency: ${name} | Page 1/2 — use \`${ecoPrefix}economy 2\` for more` });
+    await message.reply({ embeds: [embed] }).catch(() => {});
+  } else {
+    const embed = new EmbedBuilder()
+      .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 2/2")
+      .setColor(0x1f8b4c)
+      .addFields(
+        {
+          name: "🎣 𝕄𝕚𝕟𝕚𝕘𝕒𝕞𝕖𝕤",
+          value: [
+            `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
+            `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
+            `\`${ecoPrefix}mine\` — Mine in the caverns (needs ⛏️ Pickaxe)`,
+            `\`${ecoPrefix}hunt\` — Hunt creatures (needs 🕸️ Hunting Net)`,
+            `\`${ecoPrefix}phone <police|taxi|takeout>\` — Make a call (needs 📱 Phone)`,
+            `\`${ecoPrefix}adventure <story_id>\` — Story adventure`,
+            `\`${ecoPrefix}explore\` — Explore the swamp`,
+          ].join("\n"),
+          inline: false
+        },
+        {
+          name: "🛒 𝕊𝕙𝕠𝕡 & 𝕀𝕟𝕧𝕖𝕟𝕥𝕠𝕣𝕪",
+          value: [
+            `\`${ecoPrefix}shop\` — Browse the Murk Grand Bazaar`,
+            `\`${ecoPrefix}buy <number>\` — Buy an item from the shop`,
+            `\`${ecoPrefix}inventory\` — View your items`,
+            `\`${ecoPrefix}use <item_id>\` — Use a consumable item`,
+            `\`${ecoPrefix}item <name>\` — Inspect an item`,
+            `\`${ecoPrefix}gift <user> <item_id>\` — Gift an item`,
+          ].join("\n"),
+          inline: false
+        },
+        {
+          name: "⭐ ℙ𝕣𝕠𝕘𝕣𝕖𝕤𝕤𝕚𝕠𝕟",
+          value: [
+            `\`${ecoPrefix}class\` — View/set your class (Brigand/Artificer/Scholar/Merchant)`,
+            `\`${ecoPrefix}prestige\` — Prestige (requires Prestige Token)`,
+            `\`${ecoPrefix}bounty <user> <amount>\` — Place a bounty`,
+            `\`${ecoPrefix}craft\` — Craft items`,
+            `\`${ecoPrefix}trade <user>\` — Trade with a player`,
+            `\`${ecoPrefix}lottery\` — Enter the lottery`,
+          ].join("\n"),
+          inline: false
+        }
+      )
+      .setFooter({ text: `Currency: ${name} | Page 2/2 — use \`${ecoPrefix}economy 1\` to go back` });
+    await message.reply({ embeds: [embed] }).catch(() => {});
+  }
 }
 
 async function cmdModCommands(message) {
@@ -475,9 +491,15 @@ async function cmdModCommands(message) {
     return;
   }
   const settings = await getGuildSettings(message.guild.id);
-  const prefix = settings.command_prefix || LEGACY_PREFIX;
-  const embed = compactEmbed("Moderation Commands", [
-    "`!mod-role <role-id>` `/mod-role`",
+  const generalPrefix = settings?.command_prefix || DEFAULT_PREFIX;
+  const modPrefixesRaw = settings?.mod_prefixes;
+  const modPrefixList = modPrefixesRaw ? modPrefixesRaw.split(",").map(p => p.trim()).filter(Boolean) : null;
+  const prefix = modPrefixList?.[0] || generalPrefix;
+  const prefixNote = modPrefixList && modPrefixList.length > 1
+    ? ` (prefixes: ${modPrefixList.map(p => `\`${p}\``).join(", ")})`
+    : "";
+  const embed = compactEmbed(`Moderation Commands${prefixNote}`, [
+    `\`${generalPrefix}mod-role <role-id>\` \`/mod-role\``,
     `\`${prefix}ban <user> [reason]\` \`/ban\``,
     `\`${prefix}tempban <user> <duration> [reason]\` \`/tempban\``,
     `\`${prefix}unban <user-id> [reason]\` \`/unban\``,
@@ -544,7 +566,7 @@ async function cmdSetModRole(message, args) {
     [message.guild.id, role.id]
   );
 
-  await message.reply(`✅ Mod role set to <@&${role.id}>.`).catch(() => {});
+  await message.reply(`✅ Mod role set to **${role.name}** (\`${role.id}\`).`).catch(() => {});
 }
 
 async function cmdRank(message, args) {
@@ -1641,11 +1663,15 @@ async function cmdTempBan(message, args) {
   await message.reply(`✅ Temp-banned ${target.user.tag} until <t:${Math.floor(unbanAt / 1000)}:F> (<t:${Math.floor(unbanAt / 1000)}:R>).`).catch(() => {});
 }
 
-async function cmdUnban(message, args) {
+async function cmdUnban(message, args, prefix = "?") {
   if (!(await requireModerator(message))) return;
   const userId = (args[0] || "").replace(/[<@!>]/g, "");
   if (!/^\d{15,21}$/.test(userId)) {
-    await message.reply("Usage: `?unban <user-id> [reason]`").catch(() => {});
+    await message.reply(`Usage: \`${prefix}unban <user-id> [reason]\``).catch(() => {});
+    return;
+  }
+  if (userId === message.author.id) {
+    await message.reply("❌ You cannot unban yourself.").catch(() => {});
     return;
   }
   const reason = args.slice(1).join(" ").trim() || "No reason provided";
@@ -3869,6 +3895,10 @@ async function handleCommands(message) {
   const parsed = parseCommand(message.content, activePrefixes);
   if (!parsed) return false;
 
+  // If distinct mod prefixes are configured, block mod commands from running via general prefix
+  const guildSettingsForBlock = await getGuildSettings(message.guild.id).catch(() => null);
+  if (guildSettingsForBlock?.mod_prefixes && modCommands.includes(parsed.cmd)) return false;
+
   return await executeCommand(message, parsed.cmd, parsed.args, parsed.prefix);
 }
 
@@ -3905,7 +3935,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "economy" || cmd === "eco" || cmd === "ecohelp") {
-    await cmdEconomy(message);
+    await cmdEconomy(message, args);
     return true;
   }
 
@@ -4346,7 +4376,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "unban") {
-    await cmdUnban(message, args);
+    await cmdUnban(message, args, prefix);
     return true;
   }
 

@@ -4431,8 +4431,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </select>
         </label>
         <br/><br/>
-        <label>Moderation Command Prefix <span style="font-size:0.85em;opacity:0.8;">(Other commands use !)</span>
+        <label>General Command Prefix <span style="font-size:0.85em;opacity:0.8;">(used for non-moderation, non-economy commands)</span>
           <input name="command_prefix" value="${escapeHtml(settings.command_prefix || "!")}" style="max-width:80px;" />
+        </label>
+        <br/><br/>
+        <label>Moderation Command Prefix(es) <span style="font-size:0.85em;opacity:0.8;">(comma-separated, e.g. <code>.l, .mod</code> — leave blank to use General Prefix)</span>
+          <input name="mod_prefixes" value="${escapeHtml(settings.mod_prefixes || "")}" style="max-width:300px;" placeholder="e.g. .l or .l, .mod" />
         </label>
         <br/><br/>
         <label>New Account Warning Threshold (days)
@@ -6590,6 +6594,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const modRoleId = String(req.body.mod_role_id || "").trim() || null;
       const logChannelId = String(req.body.log_channel_id || "").trim() || null;
       const commandPrefixRaw = String(req.body.command_prefix || "!").trim();
+      const modPrefixesInput = String(req.body.mod_prefixes || "").trim();
+      const modPrefixesList = modPrefixesInput
+        .split(",")
+        .map(p => p.trim())
+        .filter(p => p && p.length <= 5 && !/\s/.test(p));
+      const modPrefixes = modPrefixesList.length > 0 ? modPrefixesList.join(",") : null;
       const newAccountWarnDaysRaw = Number.parseInt(String(req.body.new_account_warn_days || "1"), 10);
       const antiNukeEnabled = req.body.anti_nuke_enabled === "on";
       const antiNukeAutoUnlockRaw = Number.parseInt(String(req.body.anti_nuke_auto_unlock_minutes || "0"), 10);
@@ -6633,6 +6643,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         log_summary_cards_enabled: logSummaryCardsEnabled,
         log_quick_mod_actions_enabled: logQuickModActionsEnabled,
         command_prefix: commandPrefix,
+        mod_prefixes: modPrefixes,
         new_account_warn_days: newAccountWarnDays,
         anti_nuke_enabled: antiNukeEnabled,
         anti_nuke_auto_unlock_minutes: antiNukeAutoUnlockMinutes,

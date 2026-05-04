@@ -1083,6 +1083,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS snipe_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS snipe_retention_minutes INTEGER DEFAULT 1440`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS afk_enabled INTEGER DEFAULT 1`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS mod_prefixes TEXT DEFAULT NULL`);
     await run(`ALTER TABLE mod_warnings ADD COLUMN IF NOT EXISTS points INTEGER DEFAULT 1`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS panel_message_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE ticket_settings ADD COLUMN IF NOT EXISTS ticket_log_channel_id TEXT DEFAULT NULL`);

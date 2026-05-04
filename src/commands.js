@@ -4061,7 +4061,7 @@ async function executeCommand(message, cmd, args, prefix) {
   }
 
   if (cmd === "baltop" || cmd === "richest" || cmd === "lb" || cmd === "leaderboard") {
-    await cmdEcoLeaderboard(message);
+    await cmdEcoLeaderboard(message, args);
     return true;
   }
 

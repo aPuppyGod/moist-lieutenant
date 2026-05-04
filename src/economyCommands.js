@@ -445,34 +445,49 @@ async function cmdPay(message, args) {
   await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ You paid ${amount} ${economySettings.currency_name} to ${target.member}! ${economySettings.currency_symbol}` }] }).catch(() => {});
 }
 
-async function cmdEcoLeaderboard(message) {
+async function cmdEcoLeaderboard(message, args = []) {
   const economySettings = await getEconomySettings(message.guild.id);
   if (!economySettings || !economySettings.enabled) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled on this server." }] }).catch(() => {});
     return;
   }
 
-  const top = await all(`
-    SELECT user_id, balance, bank, (balance + bank) as total
-    FROM user_economy
-    WHERE guild_id=?
-    ORDER BY total DESC
-    LIMIT 10
-  `, [message.guild.id]);
+  const mode = String(args[0] || "").toLowerCase();
 
-  if (top.length === 0) {
+  let top, title, descFn;
+  if (mode === "streak") {
+    top = await all(`SELECT user_id, daily_streak FROM user_economy WHERE guild_id=? ORDER BY daily_streak DESC LIMIT 10`, [message.guild.id]);
+    title = `🔥 Daily Streak Leaderboard`;
+    descFn = (row) => `**${row.daily_streak}** day streak`;
+  } else if (mode === "prestige") {
+    top = await all(`SELECT user_id, prestige_level FROM user_economy WHERE guild_id=? ORDER BY prestige_level DESC LIMIT 10`, [message.guild.id]);
+    title = `⭐ Prestige Leaderboard`;
+    descFn = (row) => `Prestige **${row.prestige_level}**`;
+  } else if (mode === "work") {
+    top = await all(`SELECT user_id, work_streak FROM user_economy WHERE guild_id=? ORDER BY work_streak DESC LIMIT 10`, [message.guild.id]);
+    title = `💼 Work Streak Leaderboard`;
+    descFn = (row) => `**${row.work_streak || 0}** day work streak`;
+  } else {
+    // default: total wealth
+    top = await all(`SELECT user_id, balance, bank, (balance + bank) as total FROM user_economy WHERE guild_id=? ORDER BY total DESC LIMIT 10`, [message.guild.id]);
+    title = `${economySettings.currency_symbol} Economy Leaderboard`;
+    descFn = (row) => `**${(row.total || 0).toLocaleString()}** ${economySettings.currency_name}`;
+  }
+
+  if (!top || top.length === 0) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "No economy data yet!" }] }).catch(() => {});
     return;
   }
 
+  const ecoPrefix = economySettings.economy_prefix || "$";
   const embed = {
     color: 0xf1c40f,
-    title: `${economySettings.currency_symbol} Economy Leaderboard`,
+    title,
     description: top.map((row, i) => {
       const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`;
-      return `${medal} <@${row.user_id}>: **${row.total}** ${economySettings.currency_name}`;
+      return `${medal} <@${row.user_id}>: ${descFn(row)}`;
     }).join("\n"),
-    footer: { text: `${message.guild.name}` }
+    footer: { text: `${message.guild.name} • Modes: ${ecoPrefix}baltop | ${ecoPrefix}baltop streak | ${ecoPrefix}baltop prestige | ${ecoPrefix}baltop work` }
   };
 
   await message.reply({ embeds: [embed] }).catch(() => {});
@@ -1087,15 +1102,67 @@ async function cmdWork(message) {
   if (boostBuff)  payMult += 0.30;
   if (globalBoost) payMult += 0.15;
 
-  const pay = Math.floor(basePay * payMult);
-  const buffNote = payMult > 1 ? ` *(×${payMult.toFixed(2)} buff)*` : "";
+  // ── Random work event ──
+  const eventRoll = Math.random();
+  let eventName = "";
+  let eventDesc = "";
+  let eventPayMult = 1.0;
+  let eventFlat = 0;
+  if (eventRoll < 0.07) {
+    eventName = "💥 Equipment Failure";
+    eventDesc = "Your tool breaks mid-shift. Rough day.";
+    eventPayMult = 0.50;
+  } else if (eventRoll < 0.17) {
+    eventName = "😴 Slow Day";
+    eventDesc = "Barely anyone showed up. Quiet and uneventful.";
+    eventPayMult = 0.85;
+  } else if (eventRoll < 0.37) {
+    eventName = "🪙 Great Tips!";
+    eventDesc = "A generous customer left you a big tip.";
+    eventPayMult = 1.20;
+  } else if (eventRoll < 0.52) {
+    eventName = "⏰ Overtime Shift!";
+    eventDesc = "Boss asked you to stay late. Extra pay!";
+    eventPayMult = 1.50;
+  } else if (eventRoll < 0.63) {
+    eventName = "⭐ Performance Bonus!";
+    eventDesc = "Your manager noticed your exceptional work.";
+    eventFlat = Math.floor(job.pay_max * 0.4);
+  } else if (eventRoll < 0.69) {
+    eventName = "💎 Legendary Shift!";
+    eventDesc = "Everything went perfectly. Absolute peak performance.";
+    eventPayMult = 2.00;
+  }
+  // else: normal day, no event
 
-  await run(`UPDATE user_economy SET balance=?, job_last_shift=?, job_shifts_completed=?, job_weekly_shifts=? WHERE guild_id=? AND user_id=?`,
-    [economy.balance + pay, now, economy.job_shifts_completed + 1, economy.job_weekly_shifts + 1, message.guild.id, message.author.id]);
+  // ── Work streak ──
+  const todayStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const lastWorkDay = economy.last_work_day;
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  let newWorkStreak = economy.work_streak || 0;
+  if (lastWorkDay === todayStr) {
+    // Already worked today — no streak change
+  } else if (lastWorkDay === yesterday) {
+    newWorkStreak += 1;
+  } else {
+    newWorkStreak = 1; // reset
+  }
+  let streakBonus = 0;
+  let streakNote = "";
+  if (newWorkStreak >= 30) { streakBonus = Math.floor(job.pay_max * 0.30); streakNote = ` 🔥×30 streak (+${streakBonus})`; }
+  else if (newWorkStreak >= 14) { streakBonus = Math.floor(job.pay_max * 0.15); streakNote = ` 🔥×14 streak (+${streakBonus})`; }
+  else if (newWorkStreak >= 7)  { streakBonus = Math.floor(job.pay_max * 0.07); streakNote = ` 🔥×7 streak (+${streakBonus})`; }
+
+  const pay = Math.floor((basePay * payMult * eventPayMult) + eventFlat + streakBonus);
+  const buffNote = payMult > 1 ? ` *(×${payMult.toFixed(2)} buff)*` : "";
+  const eventNote = eventName ? `\n\n**${eventName}** — ${eventDesc}` : "";
+
+  await run(`UPDATE user_economy SET balance=?, job_last_shift=?, job_shifts_completed=?, job_weekly_shifts=?, work_streak=?, last_work_day=? WHERE guild_id=? AND user_id=?`,
+    [economy.balance + pay, now, economy.job_shifts_completed + 1, economy.job_weekly_shifts + 1, newWorkStreak, todayStr, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "work", pay, `Worked as ${job.name}`]);
 
-  await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Shift complete! You earned **${pay}** ${economySettings.currency_name}${buffNote} (${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} this week)` }] }).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, title: "💼 𝕊𝕙𝕚𝕗𝕥 ℂ𝕠𝕞𝕡𝕝𝕖𝕥𝕖!", description: `You earned **${pay}** ${economySettings.currency_name}${buffNote}${streakNote}${eventNote}`, fields: [{ name: "📅 Weekly Progress", value: `${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} shifts`, inline: true }, { name: "🔥 Work Streak", value: `${newWorkStreak} day${newWorkStreak !== 1 ? "s" : ""}`, inline: true }] }] }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────
@@ -2327,6 +2394,32 @@ async function cmdStats(message, args, economySettings) {
   const streak = economy?.daily_streak || 0;
   const prestige = economy?.prestige_level || 0;
 
+  // Gambling records from transactions
+  const gamblingTypes = ['slots', 'coinflip', 'dice', 'blackjack', 'roulette', 'highlow'];
+  const gamblingRows = await all(
+    `SELECT type,
+            COUNT(*) AS total,
+            SUM(CASE WHEN amount > 0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN amount < 0 THEN 1 ELSE 0 END) AS losses,
+            SUM(amount) AS net
+     FROM economy_transactions
+     WHERE guild_id=? AND user_id=? AND type IN ('slots','coinflip','dice','blackjack','roulette','highlow')
+     GROUP BY type`,
+    [guildId, userId]
+  );
+  const gambMap = {};
+  for (const r of (gamblingRows || [])) gambMap[r.type] = r;
+
+  const gamblingEmoji = { slots: "🎰", coinflip: "🪙", dice: "🎲", blackjack: "🃏", roulette: "🎡", highlow: "📈" };
+  let gamblingLines = "";
+  for (const t of gamblingTypes) {
+    const r = gambMap[t];
+    if (!r || !r.total) continue;
+    const net = Number(r.net) || 0;
+    const netStr = net >= 0 ? `+${net.toLocaleString()}` : net.toLocaleString();
+    gamblingLines += `${gamblingEmoji[t]} **${t}**: ${r.wins || 0}W/${r.losses || 0}L (net ${netStr})\n`;
+  }
+
   const embed = new EmbedBuilder()
     .setColor(0x3498db)
     .setTitle(`📊 ${target.member.displayName}'s Stats`)
@@ -2337,11 +2430,16 @@ async function cmdStats(message, args, economySettings) {
       { name: "🪨 Mine Runs",      value: `${mineStat?.stat_value  || 0}`, inline: true },
       { name: "🕸️ Hunt Runs",      value: `${huntStat?.stat_value  || 0}`, inline: true },
       { name: "💰 Heists Run",     value: `${heistStat?.stat_value || 0}`, inline: true },
+      { name: "💼 Work Streak",    value: `${economy?.work_streak || 0} day${(economy?.work_streak || 0) !== 1 ? "s" : ""}`, inline: true },
       { name: "🔥 Daily Streak",   value: `${streak} day${streak !== 1 ? "s" : ""}`, inline: true },
       { name: "⭐ Prestige",       value: `Level ${prestige}`, inline: true },
       { name: "🎭 Class",          value: classDisplay, inline: true },
     )
     .setFooter({ text: `${economySettings.currency_name} economy` });
+
+  if (gamblingLines) {
+    embed.addFields({ name: "🎲 Gambling Record", value: gamblingLines.trim(), inline: false });
+  }
 
   await message.reply({ embeds: [embed] }).catch(() => {});
 }

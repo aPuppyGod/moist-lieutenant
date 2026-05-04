@@ -1518,6 +1518,25 @@ async function handleLevelUp(guild, userId, oldLevel, newLevel, message = null) 
       console.error("Failed to assign level roles:", e);
     }
   }
+
+  // Economy reward on level-up
+  try {
+    const ecoSettings = await get(`SELECT enabled, currency_name, currency_symbol FROM economy_settings WHERE guild_id=?`, [guild.id]);
+    if (ecoSettings?.enabled) {
+      const reward = newLevel * 50;
+      // Ensure economy row exists
+      await run(`INSERT INTO user_economy (guild_id, user_id, balance) VALUES (?, ?, 0) ON CONFLICT (guild_id, user_id) DO NOTHING`, [guild.id, userId]);
+      await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [reward, guild.id, userId]);
+      // Notify in level-up channel or message channel
+      if (message) {
+        const sym = ecoSettings.currency_symbol || "🪙";
+        const name = ecoSettings.currency_name || "coins";
+        await message.channel.send({ embeds: [{ color: 0xf1c40f, description: `${sym} <@${userId}> reached **Level ${newLevel}** and earned **${reward} ${name}** as a level-up bonus!` }] }).catch(() => {});
+      }
+    }
+  } catch (e) {
+    console.error("Level-up economy reward failed:", e);
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -1893,6 +1912,121 @@ client.once(Events.ClientReady, async () => {
         console.error("Scheduled messages interval failed:", err);
       }
     }, 60_000); // check every minute
+
+    // ─── Passive income tick ───────────────────────────────────────────────────
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        // Find all users with active passive_regen buffs and their last regen timestamp
+        const regenBuffs = await all(
+          `SELECT b.guild_id, b.user_id, b.buff_id,
+                  COALESCE(e.last_passive_regen_at, 0) AS last_passive_regen_at
+           FROM user_buffs b
+           JOIN user_economy e ON e.guild_id=b.guild_id AND e.user_id=b.user_id
+           WHERE b.buff_id IN ('passive_regen_50','passive_regen_600') AND b.expires_at > ?`,
+          [now]
+        );
+        // Aggregate per user (they may have both buffs)
+        const byUser = new Map();
+        for (const row of regenBuffs) {
+          const key = `${row.guild_id}:${row.user_id}`;
+          if (!byUser.has(key)) {
+            byUser.set(key, { guild_id: row.guild_id, user_id: row.user_id, last: Number(row.last_passive_regen_at) || 0, rate: 0 });
+          }
+          const entry = byUser.get(key);
+          if (row.buff_id === 'passive_regen_50')  entry.rate += 50;
+          if (row.buff_id === 'passive_regen_600') entry.rate += 600;
+        }
+        for (const entry of byUser.values()) {
+          // On first tick after startup/activation, seed the timestamp without granting coins
+          if (entry.last === 0) {
+            await run(`UPDATE user_economy SET last_passive_regen_at=? WHERE guild_id=? AND user_id=?`, [now, entry.guild_id, entry.user_id]);
+            continue;
+          }
+          const elapsedHours = (now - entry.last) / 3_600_000;
+          if (elapsedHours < 0.05) continue; // less than ~3 min – skip
+          const coins = Math.floor(entry.rate * elapsedHours);
+          if (coins <= 0) continue;
+          await run(
+            `UPDATE user_economy SET balance=balance+?, last_passive_regen_at=? WHERE guild_id=? AND user_id=?`,
+            [coins, now, entry.guild_id, entry.user_id]
+          );
+        }
+      } catch (err) {
+        console.error("Passive income interval failed:", err);
+      }
+    }, 300_000); // every 5 minutes
+
+    // ─── Lottery auto-draw (weekly) ────────────────────────────────────────────
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const weekMs = 7 * 24 * 3_600_000;
+        const pools = await all(
+          `SELECT lp.guild_id, lp.pot, lp.last_draw_at,
+                  es.currency_symbol, es.currency_name
+           FROM lottery_pool lp
+           LEFT JOIN economy_settings es ON es.guild_id = lp.guild_id
+           WHERE lp.pot > 0 AND (lp.last_draw_at IS NULL OR lp.last_draw_at < ?)`,
+          [now - weekMs]
+        );
+        for (const pool of pools) {
+          const tickets = await all(`SELECT user_id, count FROM lottery_tickets WHERE guild_id=?`, [pool.guild_id]);
+          if (!tickets.length) {
+            // No tickets sold — rollover: keep pot, reset timer
+            await run(`UPDATE lottery_pool SET last_draw_at=? WHERE guild_id=?`, [now, pool.guild_id]);
+            const g = client.guilds.cache.get(pool.guild_id);
+            if (g) {
+              const sym = pool.currency_symbol || "🪙";
+              const ch = g.channels.cache.filter(c => c.isTextBased?.() && c.permissionsFor?.(g.members.me)?.has?.('SendMessages')).first();
+              if (ch) await ch.send({ embeds: [{ color: 0xf1c40f, title: "🎟️ Lottery Rollover!", description: `No tickets were sold this week! The **${sym}${pool.pot.toLocaleString()} ${pool.currency_name || "coins"}** pot rolls over to next week. 🎉` }] }).catch(() => {});
+            }
+            continue;
+          }
+          // Build weighted pool and pick winner
+          const pool_arr = [];
+          for (const t of tickets) {
+            for (let i = 0; i < t.count; i++) pool_arr.push(t.user_id);
+          }
+          const winnerId = pool_arr[Math.floor(Math.random() * pool_arr.length)];
+          await run(`INSERT INTO user_economy (guild_id, user_id, balance) VALUES (?, ?, 0) ON CONFLICT (guild_id, user_id) DO NOTHING`, [pool.guild_id, winnerId]);
+          await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [pool.pot, pool.guild_id, winnerId]);
+          await run(`UPDATE lottery_pool SET pot=0, last_draw_at=? WHERE guild_id=?`, [now, pool.guild_id]);
+          await run(`DELETE FROM lottery_tickets WHERE guild_id=?`, [pool.guild_id]);
+          // Announce
+          const g = client.guilds.cache.get(pool.guild_id);
+          if (g) {
+            const sym = pool.currency_symbol || "🪙";
+            const ch = g.channels.cache.filter(c => c.isTextBased?.() && c.permissionsFor?.(g.members.me)?.has?.('SendMessages')).first();
+            if (ch) {
+              await ch.send({ embeds: [{ color: 0xf1c40f, title: "🎉 Weekly Lottery Draw!", description: `**Winner: <@${winnerId}>** 🎟️\n\n💰 Prize: **${sym}${pool.pot.toLocaleString()} ${pool.currency_name || "coins"}**\n\nCongratulations! The lottery resets for next week.` }] }).catch(() => {});
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Lottery auto-draw failed:", err);
+      }
+    }, 3_600_000); // every hour
+
+    // ─── Bounty expiry ─────────────────────────────────────────────────────────
+    setInterval(async () => {
+      try {
+        const now = Date.now();
+        const expired = await all(`SELECT * FROM bounties WHERE status='active' AND expires_at <= ?`, [now]);
+        for (const bounty of expired) {
+          // Refund amount to poster
+          await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [bounty.amount, bounty.guild_id, bounty.poster_id]);
+          await run(`UPDATE bounties SET status='expired' WHERE id=?`, [bounty.id]);
+          // DM the poster
+          const posterUser = await client.users.fetch(bounty.poster_id).catch(() => null);
+          if (posterUser) {
+            await posterUser.send({ embeds: [{ color: 0xe67e22, title: "⏰ Bounty Expired", description: `Your bounty of **${bounty.amount} coins** on <@${bounty.target_id}> expired unclaimed.\n\n✅ **${bounty.amount} coins** have been refunded to your wallet.` }] }).catch(() => {});
+          }
+        }
+      } catch (err) {
+        console.error("Bounty expiry interval failed:", err);
+      }
+    }, 1_800_000); // every 30 minutes
 
   } catch (err) {
     console.error("ClientReady startup failed:", err);

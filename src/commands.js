@@ -3942,7 +3942,13 @@ async function handleCommands(message) {
     "stats", "mystats", "ecostats",
     "invest", "investment", "stock",
     "duel",
-    "ecoadmin", "leaderboard", "lb", "economy", "eco", "ecohelp"];
+    "ecoadmin", "leaderboard", "lb", "economy", "eco", "ecohelp",
+    "weapons", "weapon", "arms",
+    "grow-weed", "weed", "growweed",
+    "cook", "meth", "cookmeth",
+    "beehive", "bees", "hive",
+    "grapes", "grapevine", "grape-vine",
+    "brew", "brewing", "alcohol"];
   
   // Try economy prefix first for economy commands
   const economySettings = await getEconomySettingsRow(message.guild.id);

@@ -1,5 +1,5 @@
 ﻿const { all, get, run } = require("./db");
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 /**
  * ============ MURK ECONOMY: LORE-DRIVEN DEEP ECONOMY ============
@@ -518,110 +518,708 @@ async function cmdClass(message, args, util) {
   await message.reply({ embeds: [{ color: 0x00d4ff, title: `⚔️ Class Chosen: ${murk_class.name}`, description: murk_class.description }] }).catch(() => {});
 }
 
-// ==================== SWAMP STORY SYSTEM ====================
+// ==================== TAGIHAGEN GARDEN ADVENTURE SYSTEM ====================
 
-const SWAMP_STORIES = {
-  "frog_prince": {
-    title: "🐸 The Frog Prince's Curse",
-    chapters: {
-      1: {
-        text: "You find a frog sitting on a lily pad, wearing a tiny crown. It croaks: 'Help me, adventurer! I've been cursed by the Swamp Witch!'",
+// ─── Explore events: each has multiple outcomes depending on choice ───────────
+const GARDEN_EXPLORE_EVENTS = [
+  {
+    id: "bunny_warren",
+    title: "🐇 A Bunny Warren",
+    description: "You nearly trip over a hidden burrow entrance at the base of an oak tree. Several pairs of luminous eyes blink at you from the darkness.",
+    choices: [
+      {
+        id: "reach_in",
+        label: "🤚 Reach inside",
+        success: 0.5,
+        win: { text: "A bunny drops a shiny object in your palm — a **Tagihagen Pebble**, smooth as river glass.", items: [{ id: "tagihagen_pebble", qty: 1 }], money: 0 },
+        lose: { text: "You get nibbled fiercely. Nothing gained, dignity lost.", items: [], money: -50 }
+      },
+      {
+        id: "offer_food",
+        label: "🥕 Leave a carrot nearby",
+        requires: "carrot",
+        success: 0.9,
+        win: { text: "The bunnies emerge and drop **Rabbit Fur** and a few **Garden Shards** at your feet.", items: [{ id: "rabbit_fur", qty: 2 }, { id: "garden_shard", qty: 1 }], money: 0 },
+        lose: { text: "They took the carrot and gave nothing back. Bold.", items: [], money: 0 }
+      },
+      {
+        id: "observe",
+        label: "👁️ Watch quietly",
+        success: 1.0,
+        win: { text: "You spot a bunny dragging a **Mossy Coin** into the warren — you snatch it before it disappears.", items: [{ id: "mossy_coin", qty: 1 }], money: 150 },
+        lose: { text: "", items: [], money: 0 }
+      }
+    ]
+  },
+  {
+    id: "glowing_pond",
+    title: "✨ The Glowing Pond",
+    description: "A small pond in the eastern garden glows faintly violet. The water smells of lavender and old magic. Something stirs beneath the surface.",
+    choices: [
+      {
+        id: "drink",
+        label: "💧 Take a sip",
+        death_chance: 0.15,
+        success: 0.7,
+        win: { text: "A warm glow fills your chest. You feel invigorated — and find **Bioluminite** crystallised on your lips.", items: [{ id: "bioluminite", qty: 1 }], money: 300 },
+        lose: { text: "Your stomach lurches. You spend the next hour groaning in the bushes.", items: [], money: -200 }
+      },
+      {
+        id: "fish_it",
+        label: "🎣 Fish for something shiny",
+        requires: "fishing_rod",
+        success: 0.8,
+        win: { text: "You pull out a **Glowfish** — rare, luminescent, and worth a good amount.", items: [{ id: "glowfish", qty: 1 }], money: 500 },
+        lose: { text: "Your rod snaps. The pond laughs at you (probably).", items: [], money: 0 }
+      },
+      {
+        id: "toss_coin",
+        label: "🪙 Make a wish",
+        success: 0.6,
+        win: { text: "The pond accepts your offering and spits back **two** coins for every one you tossed. Mysterious.", items: [], money: 400 },
+        lose: { text: "Your coin sinks. The pond offers no wisdom, only depth.", items: [], money: -100 }
+      }
+    ]
+  },
+  {
+    id: "tagibee_hive",
+    title: "🍯 A Wild Tagibee Hive",
+    description: "High in a bramble thicket you spot a wild hive dripping with golden Tagihagen honeycomb. The air hums with the sound of a hundred sleepy bees.",
+    choices: [
+      {
+        id: "steal_honey",
+        label: "🤜 Grab some honeycomb",
+        death_chance: 0.1,
+        success: 0.45,
+        win: { text: "You snatch a chunk of **Wild Honeycomb** before the swarm notices. Sweet success.", items: [{ id: "wild_honeycomb", qty: 2 }], money: 0 },
+        lose: { text: "The hive erupts. You flee in terror, stung dozens of times.", items: [], money: -300 }
+      },
+      {
+        id: "smoke_it",
+        label: "🔥 Use a campfire kit to smoke them",
+        requires: "campfire_kit",
+        success: 0.85,
+        win: { text: "The smoke calms the bees. You harvest **Wild Honeycomb** and a few **Beeswax Chunks** unmolested.", items: [{ id: "wild_honeycomb", qty: 3 }, { id: "beeswax_chunk", qty: 2 }], money: 0 },
+        lose: { text: "Too much smoke — the bees scatter and the hive collapses. Nothing to harvest.", items: [], money: 0 }
+      },
+      {
+        id: "leave_it",
+        label: "🚶 Leave it alone",
+        success: 1.0,
+        win: { text: "A single bee lands on your hand, deposits a tiny **Pollen Sac**, then flies away. A gift.", items: [{ id: "pollen_sac", qty: 1 }], money: 0 },
+        lose: { text: "", items: [], money: 0 }
+      }
+    ]
+  },
+  {
+    id: "old_greenhouse",
+    title: "🏚️ The Old Greenhouse",
+    description: "A crumbling glass greenhouse at the garden's edge, overgrown with vines. The door hangs open. Inside: strange plants, broken pottery, and the smell of soil.",
+    choices: [
+      {
+        id: "search_pots",
+        label: "🪴 Search the clay pots",
+        success: 0.65,
+        win: { text: "Under a cracked pot you find **Seed Packets** and a rusted **Iron Scrap**.", items: [{ id: "seed_packet", qty: 2 }, { id: "iron_scrap", qty: 1 }], money: 0 },
+        lose: { text: "Just dirt and worms. Though the worms are quite fat.", items: [], money: 0 }
+      },
+      {
+        id: "take_cuttings",
+        label: "✂️ Take plant cuttings",
+        success: 0.75,
+        win: { text: "You carefully snip **Herb Cuttings** from several healthy specimens.", items: [{ id: "herb_cutting", qty: 3 }], money: 0 },
+        lose: { text: "One of the plants bites you. You leave with nothing but a sore thumb.", items: [], money: 0 }
+      },
+      {
+        id: "smash_pots",
+        label: "💥 Smash everything",
+        success: 0.4,
+        win: { text: "Under the rubble: a stash of old **Murk Coins** someone forgot about.", items: [], money: 800 },
+        lose: { text: "A shard bounces back and cuts your cheek. You find nothing and feel foolish.", items: [], money: -100 }
+      }
+    ]
+  },
+  {
+    id: "talking_scarecrow",
+    title: "🎃 The Talking Scarecrow",
+    description: "In the middle of the turnip patch stands a scarecrow with glass eyes that follow you. When you get close, it whispers: *'I know where things are buried...'*",
+    choices: [
+      {
+        id: "bargain",
+        label: "🤝 Offer it something",
+        success: 0.8,
+        win: { text: "The scarecrow whispers coordinates. You dig and find a **Buried Cache** — coins and a **Garden Shard**.", items: [{ id: "garden_shard", qty: 1 }], money: 600 },
+        lose: { text: "It gives you nonsense directions and cackles. Nothing is buried where it said.", items: [], money: 0 }
+      },
+      {
+        id: "run",
+        label: "🏃 Run away",
+        success: 1.0,
+        win: { text: "As you flee, a **Turnip** rolls after you like an offering. You accept it.", items: [{ id: "tagihagen_turnip", qty: 2 }], money: 0 },
+        lose: { text: "", items: [], money: 0 }
+      },
+      {
+        id: "remove_hat",
+        label: "🎩 Take its hat",
+        death_chance: 0.05,
+        success: 0.5,
+        win: { text: "Inside the hat: a **Mossy Coin** and a folded map. You pocket both.", items: [{ id: "mossy_coin", qty: 1 }, { id: "old_map_fragment", qty: 1 }], money: 0 },
+        lose: { text: "The scarecrow shrieks. Crows descend on you from nowhere and peck at your pockets.", items: [], money: -400 }
+      }
+    ]
+  },
+  {
+    id: "mushroom_ring",
+    title: "🍄 A Fairy Mushroom Ring",
+    description: "A perfect circle of red-capped mushrooms in the mossy clearing. Step inside and time feels slower. The air tastes like copper and roses.",
+    choices: [
+      {
+        id: "eat_mushroom",
+        label: "🍄 Eat one of the mushrooms",
+        death_chance: 0.2,
+        success: 0.55,
+        win: { text: "A vivid hallucination… then clarity. You wake up with **Fairy Dust** in your pockets.", items: [{ id: "fairy_dust", qty: 1 }], money: 250 },
+        lose: { text: "Wrong mushroom. You spend an hour convinced you're a goose. Nothing gained.", items: [], money: 0 }
+      },
+      {
+        id: "dance_in_ring",
+        label: "💃 Dance inside the ring",
+        success: 0.7,
+        win: { text: "Something unseen applauds. **Bioluminite** and **Fairy Dust** materialise at your feet.", items: [{ id: "bioluminite", qty: 1 }, { id: "fairy_dust", qty: 1 }], money: 0 },
+        lose: { text: "You trip over a root and face-plant. The fairies (if any) are unmoved.", items: [], money: 0 }
+      },
+      {
+        id: "harvest_mushrooms",
+        label: "🧺 Pick the mushrooms carefully",
+        success: 0.85,
+        win: { text: "You harvest a basket of **Tagihagen Mushrooms** — valued by alchemists and cooks alike.", items: [{ id: "tagihagen_mushroom", qty: 3 }], money: 0 },
+        lose: { text: "The mushrooms crumble to dust the moment you touch them.", items: [], money: 0 }
+      }
+    ]
+  },
+  {
+    id: "stone_well",
+    title: "🪣 The Ancient Stone Well",
+    description: "An old mossy well in the garden's heart, sealed with a heavy stone. Faint scratching sounds come from below. Something is down there.",
+    choices: [
+      {
+        id: "lower_bucket",
+        label: "🪣 Lower the bucket",
+        success: 0.7,
+        win: { text: "The bucket comes back up dripping with **Well Water** and a **Garden Shard** caught in the handle.", items: [{ id: "well_water", qty: 2 }, { id: "garden_shard", qty: 1 }], money: 0 },
+        lose: { text: "The rope snaps. Your bucket is gone and something below laughs.", items: [], money: 0 }
+      },
+      {
+        id: "shout_in",
+        label: "📣 Shout into the well",
+        success: 0.6,
+        win: { text: "Something echoes back directions to a **hidden coin stash** nearby. You find it.", items: [], money: 700 },
+        lose: { text: "Your voice echoes back with a mocking tone. The well offers nothing.", items: [], money: 0 }
+      },
+      {
+        id: "climb_in",
+        label: "🧗 Climb down",
+        death_chance: 0.25,
+        success: 0.5,
+        win: { text: "At the bottom: a forgotten **Iron Chest** with coins, **Iron Scrap**, and a **Mossy Coin**.", items: [{ id: "iron_scrap", qty: 2 }, { id: "mossy_coin", qty: 1 }], money: 1200 },
+        lose: { text: "You slip halfway down and barely haul yourself out. Bruised and empty-handed.", items: [], money: 0 }
+      }
+    ]
+  },
+  {
+    id: "fog_sprite",
+    title: "🌫️ A Fog Sprite",
+    description: "A small glowing orb drifts toward you from the morning mist, circling your head with what seems like curiosity.",
+    choices: [
+      {
+        id: "follow_it",
+        label: "✨ Follow the sprite",
+        success: 0.75,
+        win: { text: "It leads you to a patch of **Glowing Mushrooms** and vanishes, duty done.", items: [{ id: "tagihagen_mushroom", qty: 2 }, { id: "bioluminite", qty: 1 }], money: 0 },
+        lose: { text: "It leads you in circles for 20 minutes and flickers out. Nothing found.", items: [], money: 0 }
+      },
+      {
+        id: "catch_it",
+        label: "🫙 Try to catch it",
+        success: 0.35,
+        win: { text: "Captured in your jar, the sprite gifts you **Fairy Dust** before dissolving into light.", items: [{ id: "fairy_dust", qty: 2 }], money: 0 },
+        lose: { text: "Too fast. It zips away, leaving only a cold patch of air.", items: [], money: 0 }
+      },
+      {
+        id: "ignore",
+        label: "🚶 Ignore it and keep walking",
+        success: 1.0,
+        win: { text: "It drops a **Pollen Sac** on your boot and drifts off. Small, but appreciated.", items: [{ id: "pollen_sac", qty: 1 }], money: 100 },
+        lose: { text: "", items: [], money: 0 }
+      }
+    ]
+  },
+  {
+    id: "overgrown_shed",
+    title: "🏗️ An Overgrown Tool Shed",
+    description: "Half-buried under wisteria is a small wooden shed. The padlock is rusted clean through. Inside: decades of forgotten tools and crates.",
+    choices: [
+      {
+        id: "rummage_tools",
+        label: "🔧 Search for useful tools",
+        success: 0.7,
+        win: { text: "You find a **Rusty Pickaxe Head** and some **Iron Scrap** — useful for crafting.", items: [{ id: "iron_scrap", qty: 3 }, { id: "garden_shard", qty: 1 }], money: 0 },
+        lose: { text: "Just rust and cobwebs. The tools are beyond salvage.", items: [], money: 0 }
+      },
+      {
+        id: "open_crates",
+        label: "📦 Open the old crates",
+        success: 0.6,
+        win: { text: "Inside a crate beneath burlap sacks: a jar of **Preserved Honey** and some coins.", items: [{ id: "wild_honeycomb", qty: 1 }], money: 500 },
+        lose: { text: "Rotten food and mouse nests. You sneeze twice and leave.", items: [], money: 0 }
+      },
+      {
+        id: "take_nap",
+        label: "😴 Take a cheeky nap",
+        success: 0.9,
+        win: { text: "Best nap of your life. You wake up refreshed — and some gnome has left **Herb Cuttings** by your head.", items: [{ id: "herb_cutting", qty: 2 }], money: 200 },
+        lose: { text: "You wake up late and achieve nothing. At least you're rested.", items: [], money: 0 }
+      }
+    ]
+  },
+  {
+    id: "wild_foxes",
+    title: "🦊 A Family of Garden Foxes",
+    description: "Three foxes lounge in a sunny patch of lavender. One has something shiny in its mouth. They regard you with calm amber eyes.",
+    choices: [
+      {
+        id: "steal_shiny",
+        label: "🤏 Steal the shiny thing",
+        success: 0.3,
+        win: { text: "Quick hands prevail — it's a **Mossy Coin**. The fox looks personally offended.", items: [{ id: "mossy_coin", qty: 1 }], money: 0 },
+        lose: { text: "The fox bites your finger and trots away, insulted. Deserved.", items: [], money: -100 }
+      },
+      {
+        id: "play_with_foxes",
+        label: "🎾 Play with them",
+        success: 0.85,
+        win: { text: "They bring you a **Garden Shard** and some **Tagihagen Pebbles** as play-tokens.", items: [{ id: "garden_shard", qty: 1 }, { id: "tagihagen_pebble", qty: 2 }], money: 0 },
+        lose: { text: "One fox steals your snack and they all vanish. Rude.", items: [], money: -50 }
+      },
+      {
+        id: "observe_foxes",
+        label: "📓 Sketch them in your notebook",
+        success: 1.0,
+        win: { text: "A peaceful moment. The eldest fox nuzzles your boot and leaves a **Pollen Sac** as a parting gift.", items: [{ id: "pollen_sac", qty: 1 }], money: 150 },
+        lose: { text: "", items: [], money: 0 }
+      }
+    ]
+  }
+];
+
+// ─── Exploration-only items (can only be found via explore) ────────────────────
+const EXPLORE_ITEM_NAMES = {
+  "tagihagen_pebble": "🪨 Tagihagen Pebble",
+  "mossy_coin": "🪙 Mossy Coin",
+  "garden_shard": "💠 Garden Shard",
+  "rabbit_fur": "🐇 Rabbit Fur",
+  "bioluminite": "🔮 Bioluminite",
+  "glowfish": "🐟 Glowfish",
+  "wild_honeycomb": "🍯 Wild Honeycomb",
+  "beeswax_chunk": "🕯️ Beeswax Chunk",
+  "pollen_sac": "🌼 Pollen Sac",
+  "seed_packet": "🌱 Seed Packet",
+  "iron_scrap": "🔩 Iron Scrap",
+  "herb_cutting": "🌿 Herb Cutting",
+  "tagihagen_turnip": "🌱 Tagihagen Turnip",
+  "old_map_fragment": "🗺️ Map Fragment",
+  "fairy_dust": "✨ Fairy Dust",
+  "tagihagen_mushroom": "🍄 Tagihagen Mushroom",
+  "well_water": "💧 Well Water",
+  "carrot": "🥕 Carrot",
+};
+
+// ─── Adventure stories: branching based on choice, continuous until end/death ─────
+const GARDEN_ADVENTURES = {
+  "moonlit_hunt": {
+    title: "🌙 The Moonlit Garden Hunt",
+    intro: "The garden is different at night. Silver light filters through the yew trees. A note pinned to the gate reads: *'Something precious was lost here. The one who finds it shall be rewarded.'*",
+    nodes: {
+      "start": {
+        text: "The garden path splits before you. The left trail leads toward the pond; the right toward the old greenhouse.",
         choices: [
-          { text: "Kiss the frog", consequence: "kiss_frog", reward: "frog_kiss", death_chance: 0.1 },
-          { text: "Ignore and walk away", consequence: "ignore_frog", reward: null },
-          { text: "Capture the frog", consequence: "capture_frog", reward: "frog_prisoner" }
+          { id: "go_pond", label: "🌊 Head to the pond", next: "pond_arrive" },
+          { id: "go_greenhouse", label: "🏚️ Go to the greenhouse", next: "greenhouse_arrive" },
         ]
       },
-      2: {
-        text: "The frog transforms into a handsome prince! But wait... he's actually a lizard in disguise!",
+      "pond_arrive": {
+        text: "The moonlit pond glows softly. A figure sits at its edge — an old woman in a moth-eaten coat, muttering to herself.",
         choices: [
-          { text: "Accept his thanks and leave", consequence: "accept_thanks", reward: "royal_blessing" },
-          { text: "Demand payment", consequence: "demand_payment", reward: "prince_gold" },
-          { text: "Challenge him to a duel", consequence: "duel_prince", reward: "prince_scales", death_chance: 0.3 }
+          { id: "talk_woman", label: "🗣️ Approach the old woman", next: "woman_talk" },
+          { id: "search_pond_edge", label: "🔦 Search the bank", next: "pond_bank_search" },
         ]
+      },
+      "woman_talk": {
+        text: "She looks up with bright eyes: *'Ah, a night wanderer. I lost my golden thimble by the big willow. Find it and I'll reward you handsomely.'*",
+        choices: [
+          { id: "search_willow", label: "🌳 Search under the willow", next: "willow_search" },
+          { id: "demand_upfront", label: "💰 Demand payment upfront", next: "woman_refuses" },
+        ]
+      },
+      "woman_refuses": {
+        text: "She narrows her eyes. *'I don't deal with greedy folk.'* She closes her coat and turns away. The opportunity is lost.",
+        choices: [
+          { id: "apologise", label: "🙏 Apologise and help anyway", next: "willow_search" },
+          { id: "walk_away", label: "🚶 Walk away", next: "greenhouse_arrive" },
+        ]
+      },
+      "willow_search": {
+        text: "Under the drooping willow you dig through leaf litter. Your fingers find something cold and metallic.",
+        reward: { items: [{ id: "mossy_coin", qty: 2 }], money: 800 },
+        choices: [
+          { id: "return_thimble", label: "🎁 Return the thimble", next: "woman_reward" },
+          { id: "keep_thimble", label: "🤐 Keep it for yourself", next: "keep_thimble_end" },
+        ]
+      },
+      "woman_reward": {
+        text: "She claps her hands with delight. *'Bless you!'* She presses a **Bioluminite** crystal and a pouch of coins into your palm.",
+        reward: { items: [{ id: "bioluminite", qty: 1 }, { id: "fairy_dust", qty: 1 }], money: 1500 },
+        end: true,
+        win: true
+      },
+      "keep_thimble_end": {
+        text: "You pocket it and leave. Walking home, you feel oddly guilty. The garden seems darker somehow. Still, the coins spend.",
+        reward: { items: [{ id: "mossy_coin", qty: 1 }], money: 400 },
+        end: true,
+        win: true
+      },
+      "pond_bank_search": {
+        text: "Among the reeds you find a waterlogged journal, a few old coins, and a curious **Garden Shard** embedded in the clay.",
+        reward: { items: [{ id: "garden_shard", qty: 1 }], money: 300 },
+        choices: [
+          { id: "read_journal", label: "📖 Read the journal", next: "journal_clue" },
+          { id: "head_greenhouse", label: "🏚️ Head to the greenhouse", next: "greenhouse_arrive" },
+        ]
+      },
+      "journal_clue": {
+        text: "The journal describes something buried under the 'three-stone cairn' near the eastern wall. You know the spot.",
+        choices: [
+          { id: "find_cairn", label: "🪨 Find the cairn", next: "cairn_dig" },
+          { id: "give_up_journal", label: "📕 Too much effort", next: "greenhouse_arrive" },
+        ]
+      },
+      "cairn_dig": {
+        text: "You dig carefully. Beneath the three stones is a cloth bundle — inside: a collection of **Garden Shards**, coins, and a **Map Fragment**.",
+        reward: { items: [{ id: "garden_shard", qty: 2 }, { id: "old_map_fragment", qty: 1 }], money: 1000 },
+        end: true,
+        win: true
+      },
+      "greenhouse_arrive": {
+        text: "The old greenhouse. A beam of moonlight picks out something shiny half-buried in the soil by the tomato cages.",
+        choices: [
+          { id: "dig_shiny", label: "⛏️ Dig it up", next: "greenhouse_dig" },
+          { id: "investigate_plants", label: "🌱 Check the plants instead", next: "greenhouse_plants" },
+        ]
+      },
+      "greenhouse_dig": {
+        text: "You unearth a small tin box — inside are **Iron Scraps**, a **Beeswax Chunk**, and a decent pile of coins.",
+        reward: { items: [{ id: "iron_scrap", qty: 2 }, { id: "beeswax_chunk", qty: 1 }], money: 600 },
+        end: true,
+        win: true
+      },
+      "greenhouse_plants": {
+        text: "A cluster of rare **Tagihagen Mushrooms** has sprouted overnight. You carefully harvest them.",
+        reward: { items: [{ id: "tagihagen_mushroom", qty: 3 }, { id: "herb_cutting", qty: 2 }], money: 200 },
+        end: true,
+        win: true
+      },
+    }
+  },
+  "bunnys_debt": {
+    title: "🐇 The Bunny's Debt",
+    intro: "A small white rabbit with a pocket watch bolts across your path, drops a scribbled note, and vanishes into the hedgerow. The note reads: *'I owe Mister Holt three carrots. Please help. —B'*",
+    nodes: {
+      "start": {
+        text: "Mister Holt is the grumpy old groundskeeper. You could find him at his cottage or go search for carrots in the kitchen garden first.",
+        choices: [
+          { id: "find_holt", label: "🧑‍🌾 Go see Mister Holt first", next: "holt_greeting" },
+          { id: "find_carrots", label: "🥕 Search for carrots first", next: "carrot_patch" },
+        ]
+      },
+      "holt_greeting": {
+        text: "Mister Holt opens his door with a scowl. *'That blasted rabbit owes me three carrots. Bring them and I'll overlook the matter. Don't… and I'll set traps.'*",
+        choices: [
+          { id: "promise_carrots", label: "🤝 Promise to deliver them", next: "carrot_patch" },
+          { id: "argue_with_holt", label: "🗣️ Argue on the bunny's behalf", next: "holt_annoyed" },
+        ]
+      },
+      "holt_annoyed": {
+        text: "Holt slams the door. You'll need to find the carrots and slip them under his door to resolve this quietly.",
+        choices: [
+          { id: "find_carrots_anyway", label: "🥕 Find the carrots anyway", next: "carrot_patch" },
+          { id: "abandon_quest", label: "🚪 Give up", next: "quest_abandoned" },
+        ]
+      },
+      "carrot_patch": {
+        text: "The kitchen garden is overgrown but the carrot row is easy to spot. Three fine orange specimens wait to be pulled.",
+        reward: { items: [{ id: "carrot", qty: 3 }], money: 0 },
+        choices: [
+          { id: "deliver_carrots", label: "🎁 Deliver to Mister Holt", next: "deliver_carrots" },
+          { id: "eat_one", label: "🥕 Eat one (take two)", next: "eat_carrot" },
+        ]
+      },
+      "eat_one": {
+        text: "Delicious. But now you only have two. Holt asked for three.",
+        choices: [
+          { id: "deliver_two", label: "🤞 Deliver two and hope", next: "holt_unhappy" },
+          { id: "find_third", label: "🔍 Look for a third carrot", next: "third_carrot" },
+        ]
+      },
+      "third_carrot": {
+        text: "Behind the compost heap you find a stunted but valid carrot. It'll do.",
+        reward: { items: [{ id: "carrot", qty: 1 }], money: 0 },
+        choices: [
+          { id: "deliver_three_now", label: "🎁 Deliver all three now", next: "deliver_carrots" },
+        ]
+      },
+      "holt_unhappy": {
+        text: "*'Two?! TWOOO?!'* He takes them but grumbles. The bunny is safe-ish. You get a smaller reward.",
+        reward: { items: [{ id: "tagihagen_pebble", qty: 1 }], money: 250 },
+        end: true,
+        win: true
+      },
+      "deliver_carrots": {
+        text: "Holt counts the three carrots with a grunt. *'Right then. Tell that rabbit we're square. And here — I found this in the ground last week, no use to me.'* He hands you a **Garden Shard** and a few coins.",
+        reward: { items: [{ id: "garden_shard", qty: 2 }, { id: "carrot", qty: 1 }], money: 700 },
+        end: true,
+        win: true
+      },
+      "quest_abandoned": {
+        text: "You walk away. The rabbit is somewhere out there, worried. You find a **Mossy Coin** on the path as a small consolation.",
+        reward: { items: [{ id: "mossy_coin", qty: 1 }], money: 100 },
+        end: true,
+        win: false
       }
     }
   },
-  "swamp_witch": {
-    title: "🧙‍♀️ The Swamp Witch's Brew",
-    chapters: {
-      1: {
-        text: "Deep in the misty swamp, you find a bubbling cauldron. The Swamp Witch cackles: 'What do you seek, little tadpole?'",
+  "the_missing_bee": {
+    title: "🐝 The Missing Bee",
+    intro: "Lady Tagihagen's prized **Golden Bee** has escaped its hive and is loose somewhere in the garden. She's posted a reward: whoever returns it safely gets a share of the season's honey harvest.",
+    nodes: {
+      "start": {
+        text: "The bee was last seen near the lavender beds. You can search the lavender, check the clover patch to the west, or ask the garden gnome statue (it has glassy eyes that sometimes seem to move).",
         choices: [
-          { text: "Ask for a potion of strength", consequence: "strength_potion", reward: "strength_elixir" },
-          { text: "Ask for eternal youth", consequence: "youth_potion", reward: "youth_serum", death_chance: 0.2 },
-          { text: "Try to steal her ingredients", consequence: "steal_ingredients", reward: "witch_herbs", death_chance: 0.5 }
+          { id: "search_lavender", label: "🌸 Search the lavender", next: "lavender_search" },
+          { id: "check_clover", label: "🍀 Check the clover patch", next: "clover_search" },
+          { id: "ask_gnome", label: "🗿 Ask the garden gnome", next: "gnome_ask" },
         ]
-      }
-    }
-  },
-  "dragon_lair": {
-    title: "🐉 The Dragon's Treasure",
-    chapters: {
-      1: {
-        text: "You discover a cave entrance guarded by a sleeping dragon. Treasure glitters inside!",
+      },
+      "gnome_ask": {
+        text: "The gnome doesn't speak. Obviously. But you notice its ceramic eyes are pointing north toward the oak tree.",
         choices: [
-          { text: "Sneak past the dragon", consequence: "sneak_past", reward: "dragon_gold", death_chance: 0.4 },
-          { text: "Fight the dragon", consequence: "fight_dragon", reward: "dragon_scales", death_chance: 0.8 },
-          { text: "Befriend the dragon", consequence: "befriend_dragon", reward: "dragon_friendship" }
+          { id: "go_oak", label: "🌳 Head to the oak tree", next: "oak_arrive" },
+          { id: "search_lavender_after", label: "🌸 Search the lavender instead", next: "lavender_search" },
         ]
+      },
+      "oak_arrive": {
+        text: "A buzzing from a knothole in the old oak. The Golden Bee has set up a temporary residence.",
+        choices: [
+          { id: "coax_bee_gently", label: "🫳 Coax it out gently", next: "bee_coaxed" },
+          { id: "use_smoke_bee", label: "🔥 Use campfire kit smoke", requires: "campfire_kit", next: "bee_smoked_out" },
+          { id: "reach_knothole", label: "🤚 Reach in and grab it", next: "bee_grabs_you" },
+        ]
+      },
+      "bee_coaxed": {
+        text: "Patience pays off. The bee lands on your extended finger and allows itself to be returned to the hive.",
+        reward: { items: [{ id: "wild_honeycomb", qty: 3 }, { id: "beeswax_chunk", qty: 2 }], money: 1800 },
+        end: true,
+        win: true
+      },
+      "bee_smoked_out": {
+        text: "A gentle puff of smoke and the bee drifts drowsily out. You cup it carefully and deliver it home.",
+        reward: { items: [{ id: "wild_honeycomb", qty: 4 }, { id: "pollen_sac", qty: 2 }], money: 2000 },
+        end: true,
+        win: true
+      },
+      "bee_grabs_you": {
+        text: "Stung six times. The bee escapes deeper into the oak. You retreat, swollen-fingered.",
+        choices: [
+          { id: "try_again_patience", label: "🫳 Try again with patience", next: "bee_coaxed" },
+          { id: "give_up_bee", label: "🚶 Give up", next: "bee_lost" },
+        ]
+      },
+      "lavender_search": {
+        text: "You comb through the lavender but find no Golden Bee — just a **Pollen Sac** and a pleasant smell.",
+        reward: { items: [{ id: "pollen_sac", qty: 1 }], money: 0 },
+        choices: [
+          { id: "try_clover", label: "🍀 Try the clover patch", next: "clover_search" },
+          { id: "try_oak", label: "🌳 Check the old oak", next: "oak_arrive" },
+        ]
+      },
+      "clover_search": {
+        text: "No bee, but you spot a cluster of **Tagihagen Mushrooms** and a **Garden Shard** tucked into a rabbit run.",
+        reward: { items: [{ id: "tagihagen_mushroom", qty: 2 }, { id: "garden_shard", qty: 1 }], money: 0 },
+        choices: [
+          { id: "search_lavender_after2", label: "🌸 Try the lavender beds", next: "lavender_search" },
+          { id: "go_oak_after", label: "🌳 Check the old oak", next: "oak_arrive" },
+        ]
+      },
+      "bee_lost": {
+        text: "You report back empty-handed. Lady Tagihagen sighs. *'Perhaps tomorrow.'* She gives you a small courtesy payment.",
+        reward: { items: [{ id: "tagihagen_pebble", qty: 1 }], money: 300 },
+        end: true,
+        win: false
       }
     }
   }
 };
 
-const SWAMP_EVENTS = [
-  {
-    id: "mosquito_swarm",
-    title: "🦟 Mosquito Swarm Attack!",
-    description: "A massive swarm of bloodthirsty mosquitoes descends upon you!",
-    choices: [
-      { text: "Swat them away", success: 0.6, reward: "mosquito_wings", consequence: "You fight them off but get bitten!" },
-      { text: "Run away", success: 1.0, reward: null, consequence: "You escape but lose your dignity!" },
-      { text: "Use bug spray", requires: "bug_spray", reward: "mosquito_slaughter", consequence: "The swarm is annihilated!" }
-    ]
-  },
-  {
-    id: "crocodile_ambush",
-    title: "🐊 Crocodile Ambush!",
-    description: "A massive crocodile bursts from the water, jaws snapping!",
-    choices: [
-      { text: "Fight back with your bare hands", success: 0.2, reward: "croc_teeth", consequence: "Miraculously, you survive!", death_chance: 0.8 },
-      { text: "Use a fishing rod as a weapon", requires: "fishing_rod", success: 0.7, reward: "croc_skin", consequence: "You hook the croc and win!" },
-      { text: "Jump on its back", success: 0.4, reward: "croc_ride", consequence: "You tame the beast!" }
-    ]
-  },
-  {
-    id: "treasure_chest",
-    title: "💰 Mysterious Treasure Chest",
-    description: "You find a chest half-buried in the mud. It might be trapped!",
-    choices: [
-      { text: "Open it carefully", success: 0.8, reward: "random_treasure", consequence: "You find valuable items!" },
-      { text: "Smash it open", success: 0.6, reward: "broken_treasure", consequence: "Some items break, but you get others!" },
-      { text: "Leave it alone", success: 1.0, reward: null, consequence: "Better safe than sorry." }
-    ]
-  }
-];
-
 const DEATH_SCENARIOS = [
-  "🐊 You were eaten by a crocodile!",
-  "🦟 You were drained dry by mosquitoes!",
-  "🐍 You stepped on a venomous snake!",
-  "🕷️ You were bitten by a giant spider!",
-  "🌿 You ate poisonous swamp berries!",
-  "💧 You drowned in quicksand!",
-  "🐺 You were mauled by swamp wolves!",
-  "🧟 You were possessed by swamp spirits!"
+  "🐊 You were eaten by a garden crocodile (escaped from the exotic pond)!",
+  "🍄 You ate the wrong mushroom and simply ceased to exist for a bit!",
+  "🐝 The Tagibees had had enough of you!",
+  "🕷️ An enormous garden spider had an opinion about trespassers!",
+  "💧 You drowned in the ornamental koi pond!",
+  "🌿 The yew hedge came alive and was not friendly!",
+  "🐺 Wild foxes are cuter than they are merciful!",
+  "🧟 The garden gnomes moved at night and you were there to witness it!"
 ];
 
 const REVIVAL_METHODS = [
   { item: "revival_potion", name: "🧪 Revival Potion", description: "Brings you back from the dead" },
   { item: "frog_amulet", name: "🐸 Frog Amulet", description: "Protects against one death" },
-  { item: "lizard_totem", name: "🦎 Lizard Totem", description: "Revives you with lizard magic" },
-  { item: "swamp_blessing", name: "🌿 Swamp Blessing", description: "Nature's protection" }
+  { item: "lizard_totem", name: "🦎 Lizard Totem", description: "Revives you with garden magic" },
+  { item: "swamp_blessing", name: "🌿 Garden Blessing", description: "Nature's protection" }
 ];
 
-// ==================== SWAMP ADVENTURE SYSTEM ====================
+// ==================== EXPLORE COMMAND ====================
+
+async function cmdExplore(message, args, util) {
+  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
+  const { all: allRows } = require("./db");
+
+  if (!economySettings?.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  const now = Date.now();
+  const cooldown = 600000; // 10 min
+  const lastExplore = await getCmd(
+    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='exploration' AND stat_name='last_explore'`,
+    [message.guild.id, message.author.id]
+  );
+  if (lastExplore?.last_played && (now - lastExplore.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - lastExplore.last_played);
+    const mins = Math.floor(timeLeft / 60000);
+    const secs = Math.floor((timeLeft % 60000) / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🌿 You're still recovering from your last wander. Back in **${mins}m ${secs}s**.` }] }).catch(() => {});
+    return;
+  }
+
+  // Pick a random event
+  const event = GARDEN_EXPLORE_EVENTS[Math.floor(Math.random() * GARDEN_EXPLORE_EVENTS.length)];
+
+  // Filter choices: if choice requires an item, check inventory
+  const availableChoices = [];
+  for (const choice of event.choices) {
+    if (choice.requires) {
+      const hasItem = await getCmd(
+        `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
+        [message.guild.id, message.author.id, choice.requires]
+      );
+      if (!hasItem) continue; // skip locked choice
+    }
+    availableChoices.push(choice);
+  }
+
+  // Build embed + buttons
+  const embed = new EmbedBuilder()
+    .setColor(0x4a7c59)
+    .setTitle(`🌿 𝕋𝕒𝕘𝕚𝕙𝕒𝕘𝕖𝕟 𝔾𝕒𝕣𝕕𝕖𝕟 — ${event.title}`)
+    .setDescription(event.description + "\n\n*Choose your action below:*")
+    .setFooter({ text: "Tagihagen Garden | Expires in 45s" });
+
+  const row = new ActionRowBuilder().addComponents(
+    availableChoices.map((c, i) =>
+      new ButtonBuilder()
+        .setCustomId(`explore_${i}`)
+        .setLabel(c.label)
+        .setStyle(ButtonStyle.Primary)
+    )
+  );
+
+  const msg = await message.reply({ embeds: [embed], components: [row] }).catch(() => null);
+  if (!msg) return;
+
+  const collector = msg.createMessageComponentCollector({
+    filter: i => i.user.id === message.author.id && i.customId.startsWith("explore_"),
+    time: 45000,
+    max: 1
+  });
+
+  collector.on("collect", async interaction => {
+    const idx = parseInt(interaction.customId.split("_")[1]);
+    const choice = availableChoices[idx];
+    if (!choice) return;
+
+    // Death chance
+    if (choice.death_chance && Math.random() < choice.death_chance) {
+      await interaction.update({ components: [] }).catch(() => {});
+      await handleDeath(message, util, `You died exploring Tagihagen Garden! ${DEATH_SCENARIOS[Math.floor(Math.random() * DEATH_SCENARIOS.length)]}`);
+      return;
+    }
+
+    const success = Math.random() < (choice.success ?? 1.0);
+    const outcome = success ? choice.win : choice.lose;
+
+    // Give items
+    const itemLines = [];
+    for (const it of (outcome.items || [])) {
+      await runCmd(
+        `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)
+         ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity=user_inventory.quantity+?`,
+        [message.guild.id, message.author.id, it.id, it.qty, it.qty]
+      );
+      const name = EXPLORE_ITEM_NAMES[it.id] || it.id;
+      itemLines.push(`${name} ×${it.qty}`);
+    }
+    // Give money
+    if (outcome.money && outcome.money > 0) {
+      await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+        [outcome.money, message.guild.id, message.author.id]);
+    } else if (outcome.money && outcome.money < 0) {
+      await runCmd(`UPDATE user_economy SET balance=MAX(0,balance+?) WHERE guild_id=? AND user_id=?`,
+        [outcome.money, message.guild.id, message.author.id]);
+    }
+
+    // Record cooldown
+    await runCmd(
+      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+       VALUES (?, ?, 'exploration', 'last_explore', 1, ?)
+       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=stat_value+1, last_played=?`,
+      [message.guild.id, message.author.id, now, now]
+    );
+
+    const rewardText = itemLines.length || outcome.money
+      ? `\n\n🎒 **Rewards:** ${[
+          ...itemLines,
+          outcome.money > 0 ? `${economySettings.currency_symbol || '🪙'}${outcome.money} ${economySettings.currency_name || 'coins'}` : '',
+          outcome.money < 0 ? `Lost ${Math.abs(outcome.money)} ${economySettings.currency_name || 'coins'}` : ''
+        ].filter(Boolean).join(", ")}`
+      : "";
+
+    const resultEmbed = new EmbedBuilder()
+      .setColor(success ? 0x2ecc71 : 0xe74c3c)
+      .setTitle(success ? `✅ 𝔼𝕩𝕡𝕝𝕠𝕣𝕒𝕥𝕚𝕠𝕟 𝕊𝕦𝕔𝕔𝕖𝕤𝕤` : `❌ 𝔼𝕩𝕡𝕝𝕠𝕣𝕒𝕥𝕚𝕠𝕟 𝔽𝕒𝕚𝕝𝕦𝕣𝕖`)
+      .setDescription(`**${choice.label}**\n\n${outcome.text}${rewardText}`);
+
+    await interaction.update({ embeds: [resultEmbed], components: [] }).catch(() => {});
+  });
+
+  collector.on("end", (collected, reason) => {
+    if (reason === "time") {
+      msg.edit({ embeds: [embed.setFooter({ text: "Tagihagen Garden | Expired" })], components: [] }).catch(() => {});
+    }
+  });
+}
+
+// ==================== ADVENTURE COMMAND ====================
 
 async function cmdAdventure(message, args, util) {
   const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
@@ -631,193 +1229,200 @@ async function cmdAdventure(message, args, util) {
     return;
   }
 
-  // Cooldown: 15 minutes
+  // Cooldown: 20 minutes
   const now = Date.now();
-  const adventureCooldown = 900000;
-  const lastAdventure = await getCmd(
+  const cooldown = 1200000;
+  const lastAdv = await getCmd(
     `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='adventure' AND stat_name='last_adventure'`,
     [message.guild.id, message.author.id]
   );
-  if (lastAdventure?.last_played && (now - lastAdventure.last_played) < adventureCooldown) {
-    const timeLeft = adventureCooldown - (now - lastAdventure.last_played);
-    const minutes = Math.floor(timeLeft / 60000);
-    const seconds = Math.floor((timeLeft % 60000) / 1000);
-    await message.reply({ embeds: [{ color: 0xf39c12, description: `🗺️ You need to rest! Come back in **${minutes}m ${seconds}s**.` }] }).catch(() => {});
+  if (lastAdv?.last_played && (now - lastAdv.last_played) < cooldown) {
+    const timeLeft = cooldown - (now - lastAdv.last_played);
+    const mins = Math.floor(timeLeft / 60000);
+    const secs = Math.floor((timeLeft % 60000) / 1000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `🗺️ You need to rest! Come back in **${mins}m ${secs}s**.` }] }).catch(() => {});
     return;
   }
 
   const storyId = args[0]?.toLowerCase();
-  if (!storyId || !SWAMP_STORIES[storyId]) {
-    const availableStories = Object.entries(SWAMP_STORIES).map(([id, story]) =>
-      `**${id}** — ${story.title}`
-    ).join('\n');
 
+  if (!storyId || !GARDEN_ADVENTURES[storyId]) {
+    const list = Object.entries(GARDEN_ADVENTURES)
+      .map(([id, s]) => `• \`${ecoPrefix}adventure ${id}\` — **${s.title}**`)
+      .join("\n");
     await message.reply({ embeds: [new EmbedBuilder()
-      .setColor(0x2d6a4f)
-      .setTitle("🗺️ 𝕊𝕨𝕒𝕞𝕡 𝔸𝕕𝕧𝕖𝕟𝕥𝕦𝕣𝕖𝕤")
-      .setDescription(`Choose an adventure to begin:\n\n${availableStories}\n\n**Usage:** \`${ecoPrefix}adventure <story_id>\``)
+      .setColor(0x4a7c59)
+      .setTitle("🗺️ 𝕋𝕒𝕘𝕚𝕙𝕒𝕘𝕖𝕟 𝔾𝕒𝕣𝕕𝕖𝕟 𝔸𝕕𝕧𝕖𝕟𝕥𝕦𝕣𝕖𝕤")
+      .setDescription(`Choose an adventure and embark:\n\n${list}`)
+      .setFooter({ text: "Tagihagen Garden | Adventures branch based on your choices" })
     ] }).catch(() => {});
     return;
   }
 
-  const story = SWAMP_STORIES[storyId];
-  const progress = await getCmd(
-    `SELECT * FROM story_progress WHERE guild_id=? AND user_id=? AND story_id=?`,
-    [message.guild.id, message.author.id, storyId]
-  );
+  const story = GARDEN_ADVENTURES[storyId];
 
-  const currentChapter = progress?.chapter || 1;
-  const chapter = story.chapters[currentChapter];
+  // Run the adventure as a continuous session
+  await _runAdventureNode(message, util, story, "start", storyId, [], now);
+}
 
-  if (!chapter) {
-    await message.reply({ embeds: [{ color: 0xf1c40f, title: `✅ ${story.title}`, description: "You have **completed** this adventure! Well done, Murk Adept." }] }).catch(() => {});
+async function _runAdventureNode(message, util, story, nodeId, storyId, accumulatedRewards, sessionStart) {
+  const { economySettings, run: runCmd, get: getCmd } = util;
+  const node = story.nodes[nodeId];
+  if (!node) return;
+
+  // Handle end node
+  if (node.end) {
+    // Give rewards from this node
+    const allRewards = [...accumulatedRewards];
+    if (node.reward) allRewards.push(node.reward);
+
+    const totalMoney = allRewards.reduce((s, r) => s + (r.money || 0), 0);
+    const allItems = allRewards.flatMap(r => r.items || []);
+
+    // Consolidate items
+    const itemMap = {};
+    for (const it of allItems) {
+      itemMap[it.id] = (itemMap[it.id] || 0) + it.qty;
+    }
+
+    for (const [id, qty] of Object.entries(itemMap)) {
+      await runCmd(
+        `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)
+         ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity=user_inventory.quantity+?`,
+        [message.guild.id, message.author.id, id, qty, qty]
+      );
+    }
+    if (totalMoney > 0) {
+      await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+        [totalMoney, message.guild.id, message.author.id]);
+    }
+
+    // Record cooldown
+    const now = Date.now();
+    await runCmd(
+      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+       VALUES (?, ?, 'adventure', 'last_adventure', 1, ?)
+       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=stat_value+1, last_played=?`,
+      [message.guild.id, message.author.id, now, now]
+    );
+
+    const itemLines = Object.entries(itemMap)
+      .map(([id, qty]) => `${EXPLORE_ITEM_NAMES[id] || id} ×${qty}`);
+    const rewardText = itemLines.length || totalMoney
+      ? `\n\n🎒 **Total Rewards:**\n${[
+          ...itemLines,
+          totalMoney > 0 ? `${economySettings.currency_symbol || '🪙'}${totalMoney} ${economySettings.currency_name || 'coins'}` : ''
+        ].filter(Boolean).join("\n")}`
+      : "";
+
+    await message.reply({ embeds: [new EmbedBuilder()
+      .setColor(node.win ? 0xf1c40f : 0x95a5a6)
+      .setTitle(node.win ? "🏆 𝔸𝕕𝕧𝕖𝕟𝕥𝕦𝕣𝕖 ℂ𝕠𝕞𝕡𝕝𝕖𝕥𝕖!" : "📖 𝔸𝕕𝕧𝕖𝕟𝕥𝕦𝕣𝕖 𝔼𝕟𝕕𝕖𝕕")
+      .setDescription(`${node.text}${rewardText}`)
+      .setFooter({ text: `Tagihagen Garden — ${story.title}` })
+    ] }).catch(() => {});
     return;
   }
 
-  const choicesText = chapter.choices.map((choice, i) => `**${i + 1}.** ${choice.text}`).join('\n');
+  // Give rewards from this node (non-end nodes can also have rewards)
+  const newRewards = [...accumulatedRewards];
+  if (node.reward) newRewards.push(node.reward);
 
-  await message.reply({ embeds: [new EmbedBuilder()
-    .setColor(0x2d6a4f)
-    .setTitle(`📖 ${story.title} — Chapter ${currentChapter}`)
-    .setDescription(`${chapter.text}\n\n**Choices:**\n${choicesText}\n\n*Reply with the number of your choice within 30 seconds!*`)
-  ] }).catch(() => {});
+  const desc = (node === story.nodes["start"]
+    ? `*${story.intro}*\n\n${node.text}`
+    : node.text) + "\n\n*Make your choice:*";
 
-  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
-  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
+  const embed = new EmbedBuilder()
+    .setColor(0x4a7c59)
+    .setTitle(`🗺️ ${story.title}`)
+    .setDescription(desc)
+    .setFooter({ text: "Tagihagen Garden | Responds in 60s" });
 
-  collector.on('collect', async (choiceMsg) => {
-    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
-    const choice = chapter.choices[choiceIndex];
+  const row = new ActionRowBuilder().addComponents(
+    node.choices.map((c, i) =>
+      new ButtonBuilder()
+        .setCustomId(`adv_${i}`)
+        .setLabel(c.label)
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(!!(c.requires)) // could grey out if item not available
+    )
+  );
 
-    if (!choice) {
-      await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid choice number!" }] }).catch(() => {});
+  // Also add an abandon button
+  const abandonRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("adv_abandon")
+      .setLabel("🚪 Abandon Adventure")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  const msg = await message.reply({ embeds: [embed], components: [row, abandonRow] }).catch(() => null);
+  if (!msg) return;
+
+  const collector = msg.createMessageComponentCollector({
+    filter: i => i.user.id === message.author.id && (i.customId.startsWith("adv_")),
+    time: 60000,
+    max: 1
+  });
+
+  collector.on("collect", async interaction => {
+    if (interaction.customId === "adv_abandon") {
+      await interaction.update({ components: [] }).catch(() => {});
+      // Give any accumulated rewards so far
+      const totalMoney = newRewards.reduce((s, r) => s + (r.money || 0), 0);
+      const allItems = newRewards.flatMap(r => r.items || []);
+      const itemMap = {};
+      for (const it of allItems) itemMap[it.id] = (itemMap[it.id] || 0) + it.qty;
+
+      for (const [id, qty] of Object.entries(itemMap)) {
+        await runCmd(
+          `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)
+           ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity=user_inventory.quantity+?`,
+          [message.guild.id, message.author.id, id, qty, qty]
+        );
+      }
+      if (totalMoney > 0) {
+        await runCmd(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`,
+          [totalMoney, message.guild.id, message.author.id]);
+      }
+
+      const now = Date.now();
+      await runCmd(
+        `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
+         VALUES (?, ?, 'adventure', 'last_adventure', 1, ?)
+         ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=stat_value+1, last_played=?`,
+        [message.guild.id, message.author.id, now, now]
+      );
+
+      const itemLines = Object.entries(itemMap).map(([id, qty]) => `${EXPLORE_ITEM_NAMES[id] || id} ×${qty}`);
+      const kept = itemLines.length || totalMoney
+        ? `\n\n🎒 **Kept:** ${[...itemLines, totalMoney > 0 ? `${economySettings.currency_symbol || '🪙'}${totalMoney}` : ''].filter(Boolean).join(", ")}`
+        : "";
+
+      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🚪 𝔸𝕕𝕧𝕖𝕟𝕥𝕦𝕣𝕖 𝔸𝕓𝕒𝕟𝕕𝕠𝕟𝕖𝕕", description: `You slip back through the gate. The garden whispers after you.${kept}` }] }).catch(() => {});
       return;
     }
 
+    const idx = parseInt(interaction.customId.split("_")[1]);
+    const choice = node.choices[idx];
+    if (!choice) return;
+
+    // Death chance check
     if (choice.death_chance && Math.random() < choice.death_chance) {
+      await interaction.update({ components: [] }).catch(() => {});
       await handleDeath(message, util, `You died during **${story.title}**! ${DEATH_SCENARIOS[Math.floor(Math.random() * DEATH_SCENARIOS.length)]}`);
       return;
     }
 
-    let rewardText = "";
-    if (choice.reward) {
-      await giveReward(message, choice.reward, util);
-      rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ')}!`;
-    }
+    await interaction.update({ components: [] }).catch(() => {});
 
-    const nextChapter = currentChapter + 1;
-    const isCompleted = !story.chapters[nextChapter];
-
-    await runCmd(
-      `INSERT INTO story_progress (guild_id, user_id, story_id, chapter, completed, last_updated)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT (guild_id, user_id, story_id) DO UPDATE SET chapter=?, completed=?, last_updated=?`,
-      [message.guild.id, message.author.id, storyId, nextChapter, isCompleted ? 1 : 0, Date.now(), nextChapter, isCompleted ? 1 : 0, Date.now()]
-    );
-
-    // Record cooldown
-    await runCmd(
-      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
-       VALUES (?, ?, 'adventure', 'last_adventure', 1, ?)
-       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=minigames_stats.stat_value+1, last_played=?`,
-      [message.guild.id, message.author.id, now, now]
-    );
-
-    const completionText = isCompleted ? "\n\n🏆 **Adventure Completed!**" : `\n\n📖 Continue to Chapter ${nextChapter} next time...`;
-    await choiceMsg.reply({ embeds: [new EmbedBuilder()
-      .setColor(isCompleted ? 0xf1c40f : 0x2ecc71)
-      .setTitle("✅ ℂ𝕙𝕠𝕚𝕔𝕖 𝕄𝕒𝕕𝕖")
-      .setDescription(`**${choice.text}**${rewardText}${completionText}`)
-    ] }).catch(() => {});
+    // Continue to next node
+    await _runAdventureNode(message, util, story, choice.next, storyId, newRewards, sessionStart);
   });
 
-  collector.on('end', (collected, reason) => {
-    if (reason === 'time') {
-      message.reply({ embeds: [{ color: 0x95a5a6, description: "⏰ Time's up! Adventure paused — use the command again to continue." }] }).catch(() => {});
-    }
-  });
-}
-
-// ==================== RANDOM SWAMP EVENTS ====================
-
-async function cmdExplore(message, args, util) {
-  const { economySettings, ecoPrefix, run: runCmd, get: getCmd } = util;
-
-  if (!economySettings?.enabled) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
-    return;
-  }
-
-  const lastExplore = await getCmd(
-    `SELECT * FROM minigames_stats WHERE guild_id=? AND user_id=? AND minigame='exploration' AND stat_name='last_explore'`,
-    [message.guild.id, message.author.id]
-  );
-
-  const now = Date.now();
-  const cooldown = 600000;
-  if (lastExplore?.last_played && (now - lastExplore.last_played) < cooldown) {
-    const timeLeft = cooldown - (now - lastExplore.last_played);
-    const minutes = Math.floor(timeLeft / 60000);
-    const seconds = Math.floor((timeLeft % 60000) / 1000);
-    await message.reply({ embeds: [{ color: 0xf39c12, description: `🌿 You're still recovering! Come back in **${minutes}m ${seconds}s**.` }] }).catch(() => {});
-    return;
-  }
-
-  const event = SWAMP_EVENTS[Math.floor(Math.random() * SWAMP_EVENTS.length)];
-  const choicesText = event.choices.map((choice, i) => `**${i + 1}.** ${choice.text}`).join('\n');
-
-  await message.reply({ embeds: [new EmbedBuilder()
-    .setColor(0x27ae60)
-    .setTitle(`🗺️ ${event.title}`)
-    .setDescription(`${event.description}\n\n**Choices:**\n${choicesText}\n\n*Reply with the number of your choice within 30 seconds!*`)
-  ] }).catch(() => {});
-
-  const filter = (m) => m.author.id === message.author.id && /^\d+$/.test(m.content.trim());
-  const collector = message.channel.createMessageCollector({ filter, time: 30000, max: 1 });
-
-  collector.on('collect', async (choiceMsg) => {
-    const choiceIndex = parseInt(choiceMsg.content.trim()) - 1;
-    const choice = event.choices[choiceIndex];
-
-    if (!choice) {
-      await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid choice number!" }] }).catch(() => {});
-      return;
-    }
-
-    if (choice.requires) {
-      const hasItem = await getCmd(
-        `SELECT * FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity > 0`,
-        [message.guild.id, message.author.id, choice.requires]
-      );
-      if (!hasItem) {
-        await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You need a **${choice.requires.replace(/_/g, ' ')}** for this!` }] }).catch(() => {});
-        return;
-      }
-    }
-
-    const success = Math.random() < choice.success;
-    if (!success) {
-      await choiceMsg.reply({ embeds: [{ color: 0xe74c3c, title: "❌ Failed", description: choice.consequence }] }).catch(() => {});
-    } else {
-      let rewardText = "";
-      if (choice.reward) {
-        await giveReward(message, choice.reward, util);
-        rewardText = `\n\n🎁 **Reward:** ${choice.reward.replace(/_/g, ' ')}!`;
-      }
-      await choiceMsg.reply({ embeds: [{ color: 0x2ecc71, title: "✅ Success!", description: `${choice.consequence}${rewardText}` }] }).catch(() => {});
-    }
-
-    await runCmd(
-      `INSERT INTO minigames_stats (guild_id, user_id, minigame, stat_name, stat_value, last_played)
-       VALUES (?, ?, 'exploration', 'last_explore', 1, ?)
-       ON CONFLICT (guild_id, user_id, minigame, stat_name) DO UPDATE SET stat_value=minigames_stats.stat_value+1, last_played=?`,
-      [message.guild.id, message.author.id, now, now]
-    );
-  });
-
-  collector.on('end', (collected, reason) => {
-    if (reason === 'time') {
-      message.reply({ embeds: [{ color: 0x95a5a6, description: "⏰ Time's up! Exploration cancelled." }] }).catch(() => {});
+  collector.on("end", (collected, reason) => {
+    if (reason === "time" && collected.size === 0) {
+      msg.edit({ embeds: [embed.setFooter({ text: "Tagihagen Garden | Timed out — adventure paused" })], components: [] }).catch(() => {});
     }
   });
 }

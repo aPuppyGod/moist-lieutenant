@@ -115,7 +115,8 @@ function canModerate(executor, target) {
 // ─────────────────────────────────────────────────────
 
 function parseCommand(content, prefixes) {
-  const matchedPrefix = prefixes.find((p) => content.startsWith(p));
+  const lower = content.toLowerCase();
+  const matchedPrefix = prefixes.find((p) => lower.startsWith(p.toLowerCase()));
   if (!matchedPrefix) return null;
 
   const without = content.slice(matchedPrefix.length).trim();
@@ -3942,7 +3943,7 @@ async function handleCommands(message) {
     "stats", "mystats", "ecostats",
     "invest", "investment", "stock",
     "duel",
-    "ecoadmin", "leaderboard", "lb", "economy", "eco", "ecohelp",
+    "ecoadmin", "leaderboard", "lb",
     "weapons", "weapon", "arms",
     "grow-weed", "weed", "growweed",
     "cook", "meth", "cookmeth",

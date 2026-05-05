@@ -1275,16 +1275,27 @@ async function cmdBuy(message, args) {
     return;
   }
 
+  const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [message.guild.id]);
+
+  // Match by number, item_id (underscores), or name (spaces → underscores)
+  let item;
+  const query = args.join(" ").toLowerCase().trim();
+  const queryUnderscored = query.replace(/\s+/g, "_");
   const itemIndex = parseInt(args[0]) - 1;
-  if (isNaN(itemIndex)) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify an item number from the shop." }] }).catch(() => {});
-    return;
+
+  if (!isNaN(itemIndex) && Number.isInteger(Number(args[0]))) {
+    item = items[itemIndex];
+  } else {
+    item = items.find(i =>
+      i.item_id.toLowerCase() === query ||
+      i.item_id.toLowerCase() === queryUnderscored ||
+      i.name.toLowerCase().replace(/[^a-z0-9_]/g, "").replace(/\s+/g, "_") === queryUnderscored ||
+      i.name.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim() === query
+    );
   }
 
-  const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=? ORDER BY price ASC`, [message.guild.id]);
-  const item = items[itemIndex];
   if (!item) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid item number!" }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ Item not found. Use \`${economySettings.economy_prefix || "$"}shop\` to see available items, then buy by name or number.\n*Example:* \`${economySettings.economy_prefix || "$"}buy fishing rod\` or \`${economySettings.economy_prefix || "$"}buy fishing_rod\`` }] }).catch(() => {});
     return;
   }
 

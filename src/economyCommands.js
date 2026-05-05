@@ -1361,20 +1361,80 @@ async function cmdInventory(message) {
     return;
   }
 
-  const previewItem = items.find((i) => i.item_image_url) || items[0];
-  const embed = new EmbedBuilder()
-    .setColor(0x2e4053)
-    .setTitle("🎒 Your Inventory")
-    .setDescription(items.map(item => {
-      const useHint = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
-        ? `\nUse: \`use ${item.item_id}\``
-        : "";
-      return `**${item.name}** x${item.quantity} (${item.item_type || "misc"})\n${item.description}${useHint}`;
-    }).join("\n\n"))
-    .setThumbnail(previewItem?.item_image_url || null)
-    .setFooter({ text: "Tip: use item <name> for lore + stats" });
+  const PAGE_SIZE_FULL = 5;
+  const PAGE_SIZE_COMPACT = 8;
+  let compact = false;
+  let page = 0;
 
-  await message.reply({ embeds: [embed] }).catch(() => {});
+  const getPageCount = () => Math.ceil(items.length / (compact ? PAGE_SIZE_COMPACT : PAGE_SIZE_FULL));
+
+  const buildEmbed = () => {
+    const pageSize = compact ? PAGE_SIZE_COMPACT : PAGE_SIZE_FULL;
+    const total = Math.ceil(items.length / pageSize);
+    const slice = items.slice(page * pageSize, (page + 1) * pageSize);
+    const previewItem = items.find(i => i.item_image_url);
+
+    const lines = slice.map(item => {
+      const useHint = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
+        ? (compact ? ` • \`use ${item.item_id}\`` : `\nUse: \`use ${item.item_id}\``)
+        : "";
+      if (compact) {
+        return `**${item.name}** x${item.quantity} (${item.item_type || "misc"})${useHint}`;
+      }
+      return `**${item.name}** x${item.quantity} (${item.item_type || "misc"})\n${item.description}${useHint}`;
+    });
+
+    return new EmbedBuilder()
+      .setColor(0x2e4053)
+      .setTitle(`🎒 Your Inventory${compact ? " — Compact" : ""}`)
+      .setDescription(lines.join(compact ? "\n" : "\n\n"))
+      .setThumbnail(previewItem?.item_image_url || null)
+      .setFooter({ text: `Page ${page + 1}/${total} • ${items.length} items total` });
+  };
+
+  const buildRow = () => {
+    const total = getPageCount();
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("inv_prev")
+        .setLabel("◀")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page === 0),
+      new ButtonBuilder()
+        .setCustomId("inv_next")
+        .setLabel("▶")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(page >= total - 1),
+      new ButtonBuilder()
+        .setCustomId("inv_compact")
+        .setLabel(compact ? "Expand" : "Compact")
+        .setStyle(compact ? ButtonStyle.Primary : ButtonStyle.Secondary)
+    );
+  };
+
+  const msg = await message.reply({ embeds: [buildEmbed()], components: [buildRow()] }).catch(() => null);
+  if (!msg) return;
+
+  const collector = msg.createMessageComponentCollector({
+    filter: i => i.user.id === message.author.id,
+    time: 120_000,
+  });
+
+  collector.on("collect", async i => {
+    if (i.customId === "inv_prev") {
+      page = Math.max(0, page - 1);
+    } else if (i.customId === "inv_next") {
+      page = Math.min(getPageCount() - 1, page + 1);
+    } else if (i.customId === "inv_compact") {
+      compact = !compact;
+      page = Math.min(page, getPageCount() - 1);
+    }
+    await i.update({ embeds: [buildEmbed()], components: [buildRow()] }).catch(() => {});
+  });
+
+  collector.on("end", () => {
+    msg.edit({ components: [] }).catch(() => {});
+  });
 }
 
 // ─────────────────────────────────────────────────────

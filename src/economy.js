@@ -2427,7 +2427,7 @@ async function cmdRobBank(message, args, util) {
   }
 
   const recruitWindowMs = 60_000; // 60s to join
-  const robberyDurationMs = 5 * 60_000; // 5 minutes
+  const robberyDurationMs = 3 * 60_000; // 3 minutes
   const recruitUntil = now + recruitWindowMs;
   const finishAt = now + robberyDurationMs;
 
@@ -2450,14 +2450,14 @@ async function cmdRobBank(message, args, util) {
   for (const v of wealthyVictims.slice(0, 3)) {
     const victimUser = await message.client.users.fetch(v.user_id).catch(() => null);
     if (victimUser) {
-      victimUser.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Bank Robbery Alert!", description: `Someone is robbing the bank in **${message.guild.name}**!\n\nThe robbery will complete in **5 minutes**.\n\n📱 If you have a **Phone**, quickly use \`${ecoPrefix}phone police\` in the server to call the police and reduce their success chances!\n\n*This is a targeted alert because you have significant wealth deposited.*` }] }).catch(() => {});
+      victimUser.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Bank Robbery Alert!", description: `Someone is robbing the bank in **${message.guild.name}**!\n\nThe robbery will complete in **3 minutes**.\n\n📱 If you have a **Phone**, quickly use \`${ecoPrefix}phone police\` in the server to call the police and **immediately stop** the robbery!\n\n*This is a targeted alert because you have significant wealth deposited.*` }] }).catch(() => {});
     }
   }
 
   await message.reply({ embeds: [new EmbedBuilder()
     .setColor(0xf39c12)
     .setTitle("🏦 𝔹𝕒𝕟𝕜 ℝ𝕠𝕓𝕓𝕖𝕣𝕪 𝕊𝕥𝕒𝕣𝕥𝕚𝕟𝕘!")
-    .setDescription(`**${message.author.username}** is planning a bank heist! 🔫\n\n⏰ **60 seconds** to join the crew!\n⏳ Robbery executes in **5 minutes**\n\n📞 **Potential victims have been alerted** — they can call police to interfere!\n💀 More crew = slightly higher success + bigger payout split equally`)
+    .setDescription(`**${message.author.username}** is planning a bank heist! 🔫\n\n⏰ **60 seconds** to join the crew!\n⏳ Robbery executes in **3 minutes**\n\n📞 **Potential victims have been alerted** — calling police will immediately bust the robbery!\n💀 More crew = slightly higher success + bigger payout split equally`)
     .addFields(
       { name: "👥 Current Crew", value: `<@${message.author.id}> (leader)`, inline: false },
       { name: "📋 To Join", value: `\`${ecoPrefix}bankrob join\``, inline: true },
@@ -2473,7 +2473,7 @@ async function cmdRobBank(message, args, util) {
       if (!rob) return;
       await runCmd(`UPDATE active_bankrobs SET status='active' WHERE guild_id=?`, [message.guild.id]);
       const crewList = JSON.parse(rob.crew).map(id => `<@${id}>`).join(", ");
-      await message.channel.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Recruiting Closed!", description: `The crew is locked in! 👥 **${JSON.parse(rob.crew).length}** robbers: ${crewList}\n\n⏰ Result in **~4 minutes**. Stay tuned!` }] }).catch(() => {});
+      await message.channel.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Recruiting Closed!", description: `The crew is locked in! 👥 **${JSON.parse(rob.crew).length}** robbers: ${crewList}\n\n⏰ Result in **~2 minutes**. Stay tuned!` }] }).catch(() => {});
     } catch (e) { /* ignore */ }
   }, recruitWindowMs);
 }
@@ -2565,7 +2565,7 @@ async function cmdHeist(message, args, util) {
   const scenario = HEIST_SCENARIOS[Math.floor(Math.random() * HEIST_SCENARIOS.length)];
   const recruitWindowMs = 60_000;
   const recruitUntil = now + recruitWindowMs;
-  const executeAt = now + 2 * 60_000; // 2 minutes until execution
+  const executeAt = now + 3 * 60_000; // 3 minutes until execution
 
   await runCmd(
     `INSERT INTO active_heists (guild_id, leader_id, channel_id, crew, scenario, recruit_until, execute_at, status)
@@ -2584,7 +2584,7 @@ async function cmdHeist(message, args, util) {
   await message.reply({ embeds: [new EmbedBuilder()
     .setColor(0x9b59b6)
     .setTitle(`🕵️ ℍ𝕖𝕚𝕤𝕥 ℙ𝕝𝕒𝕟𝕟𝕚𝕟𝕘: ${scenario.name}`)
-    .setDescription(`${scenario.intro}\n\n⏰ **60s** to gather your crew — heist executes in **2 minutes**!${classNote}`)
+    .setDescription(`${scenario.intro}\n\n⏰ **60s** to gather your crew — heist executes in **3 minutes**!${classNote}`)
     .addFields(
       { name: "👥 Current Crew", value: `<@${message.author.id}> (leader)`, inline: false },
       { name: "📋 Join", value: `\`${ecoPrefix}heist join\``, inline: true },
@@ -2621,8 +2621,22 @@ async function cmdPhone(message, args, util) {
     // Check for active bank robbery in this guild
     const activeRob = await getCmd(`SELECT * FROM active_bankrobs WHERE guild_id=? AND status != 'done'`, [message.guild.id]);
     if (activeRob && !activeRob.police_called) {
-      await runCmd(`UPDATE active_bankrobs SET police_called=1, police_caller_id=? WHERE guild_id=?`, [message.author.id, message.guild.id]);
-      await message.reply({ embeds: [{ color: 0x3498db, title: "🚔 Police Called!", description: `📞 You called the police on the active bank robbery!\n\n🚨 Officers en route — robbers' success chance reduced by **20%**!` }] }).catch(() => {});
+      // Immediately bust the robbery
+      const crew = JSON.parse(activeRob.crew || '[]');
+      const channel = await message.client.channels.fetch(activeRob.channel_id).catch(() => null);
+      for (const uid of crew) {
+        const member = await getCmd(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [activeRob.guild_id, uid]);
+        if (member) {
+          const fine = Math.floor(member.balance * 0.40);
+          await runCmd(`UPDATE user_economy SET balance=MAX(0, balance-?) WHERE guild_id=? AND user_id=?`, [fine, activeRob.guild_id, uid]);
+        }
+      }
+      await runCmd(`DELETE FROM active_bankrobs WHERE guild_id=?`, [message.guild.id]);
+      const crewMentions = crew.map(id => `<@${id}>`).join(", ");
+      if (channel && channel.id !== message.channel.id) {
+        await channel.send({ embeds: [{ color: 0xe74c3c, title: "🚔 Bank Robbery — POLICE RAID!", description: `🚨 **The police stormed the bank!**\n\n<@${message.author.id}> called the police and shut it down immediately!\n\n👥 Crew: ${crewMentions}\n💸 Each crew member fined **40% of their wallet**.` }] }).catch(() => {});
+      }
+      await message.reply({ embeds: [{ color: 0x3498db, title: "🚔 Police Called!", description: `📞 You called the police and immediately stopped the bank robbery!\n\n🚨 Crew arrested — each fined **40% of their wallet**.\n\n👥 Crew: ${crewMentions}` }] }).catch(() => {});
       return;
     }
     // General 1h protection

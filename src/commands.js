@@ -1,5 +1,5 @@
 // src/commands.js
-const { PermissionsBitField, ChannelType, AttachmentBuilder, EmbedBuilder } = require("discord.js");
+const { PermissionsBitField, ChannelType, AttachmentBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 const { get, all, run } = require("./db");
 const { levelFromXp, xpToNextLevel, totalXpForLevel } = require("./xp");
 const { createCanvas, loadImage, registerFont } = require("canvas");
@@ -384,105 +384,178 @@ async function cmdEconomy(message, args) {
   }
   const ecoPrefix = economySettings.economy_prefix || "$";
   const name = economySettings.currency_name || "coins";
-  const page = Math.max(1, Math.min(2, parseInt(args?.[0]) || 1));
 
-  if (page === 1) {
-    const embed = new EmbedBuilder()
-      .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 1/2")
+  const buildPage = (page) => {
+    if (page === 1) {
+      return new EmbedBuilder()
+        .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 1/3")
+        .setColor(0x1f8b4c)
+        .addFields(
+          {
+            name: "💵 𝕎𝕒𝕝𝕝𝕖𝕥 & 𝔹𝕒𝕟𝕜",
+            value: [
+              `\`${ecoPrefix}balance\` — Check your balance`,
+              `\`${ecoPrefix}deposit <amount|all>\` — Deposit to bank`,
+              `\`${ecoPrefix}withdraw <amount|all>\` — Withdraw from bank`,
+              `\`${ecoPrefix}pay <user> <amount>\` — Send ${name}`,
+              `\`${ecoPrefix}baltop\` — Richest members`,
+            ].join("\n"),
+            inline: false
+          },
+          {
+            name: "🎁 𝔻𝕒𝕚𝕝𝕪 & 𝕁𝕠𝕓𝕤",
+            value: [
+              `\`${ecoPrefix}daily\` — Claim daily reward`,
+              `\`${ecoPrefix}weekly\` — Claim weekly reward`,
+              `\`${ecoPrefix}job\` — View/pick a job`,
+              `\`${ecoPrefix}work\` — Complete a work shift`,
+            ].join("\n"),
+            inline: false
+          },
+          {
+            name: "🎰 𝔾𝕒𝕞𝕓𝕝𝕚𝕟𝕘",
+            value: [
+              `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
+              `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
+              `\`${ecoPrefix}slots <bet>\` — Spin the slots`,
+              `\`${ecoPrefix}roulette <bet> <red|black|0-36|split:n,m|...>\` — Wheel`,
+              `\`${ecoPrefix}blackjack <bet>\` — Beat the dealer`,
+              `\`${ecoPrefix}highlow <bet> <higher|lower>\` — Guess the next number`,
+            ].join("\n"),
+            inline: false
+          },
+          {
+            name: "🦹 ℂ𝕣𝕚𝕞𝕖",
+            value: [
+              `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
+              `\`${ecoPrefix}bankrob\` — Async group bank robbery`,
+              `\`${ecoPrefix}heist\` — Joinable heist (2hr CD)`,
+              `\`${ecoPrefix}duel <@user> <amount>\` — 1v1 coin wager duel`,
+            ].join("\n"),
+            inline: false
+          }
+        )
+        .setFooter({ text: `Currency: ${name} | Page 1/3` });
+    }
+    if (page === 2) {
+      return new EmbedBuilder()
+        .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 2/3")
+        .setColor(0x1f8b4c)
+        .addFields(
+          {
+            name: "🎣 𝕄𝕚𝕟𝕚𝕘𝕒𝕞𝕖𝕤",
+            value: [
+              `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
+              `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
+              `\`${ecoPrefix}mine\` — Mine in the caverns (needs ⛏️ Pickaxe)`,
+              `\`${ecoPrefix}hunt\` — Hunt creatures (needs 🕸️ Hunting Net)`,
+              `\`${ecoPrefix}phone <police|taxi|takeout>\` — Make a call (needs 📱 Phone)`,
+              `\`${ecoPrefix}adventure <story_id>\` — Story adventure`,
+              `\`${ecoPrefix}explore\` — Explore the swamp`,
+            ].join("\n"),
+            inline: false
+          },
+          {
+            name: "🛒 𝕊𝕙𝕠𝕡 & 𝕀𝕟𝕧𝕖𝕟𝕥𝕠𝕣𝕪",
+            value: [
+              `\`${ecoPrefix}shop\` — Browse the Murk Grand Bazaar`,
+              `\`${ecoPrefix}buy <number>\` — Buy an item from the shop`,
+              `\`${ecoPrefix}inventory\` — View your items`,
+              `\`${ecoPrefix}use <item_id>\` — Use a consumable item`,
+              `\`${ecoPrefix}item <name>\` — Inspect an item`,
+              `\`${ecoPrefix}gift <user> <item_id>\` — Gift an item`,
+            ].join("\n"),
+            inline: false
+          },
+          {
+            name: "⭐ ℙ𝕣𝕠𝕘𝕣𝕖𝕤𝕤𝕚𝕠𝕟",
+            value: [
+              `\`${ecoPrefix}class\` — View/set your class`,
+              `\`${ecoPrefix}prestige\` — Prestige (requires Prestige Token)`,
+              `\`${ecoPrefix}bounty <user> <amount>\` — Place a bounty`,
+              `\`${ecoPrefix}craft\` — Craft items`,
+              `\`${ecoPrefix}lottery\` — Enter the lottery`,
+            ].join("\n"),
+            inline: false
+          }
+        )
+        .setFooter({ text: `Currency: ${name} | Page 2/3` });
+    }
+    // page 3
+    return new EmbedBuilder()
+      .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 3/3")
       .setColor(0x1f8b4c)
       .addFields(
         {
-          name: "💵 𝕎𝕒𝕝𝕝𝕖𝕥 & 𝔹𝕒𝕟𝕜",
+          name: "🔫 𝕎𝕖𝕒𝕡𝕠𝕟𝕤",
           value: [
-            `\`${ecoPrefix}balance\` — Check your balance`,
-            `\`${ecoPrefix}deposit <amount|all>\` — Deposit to bank`,
-            `\`${ecoPrefix}withdraw <amount|all>\` — Withdraw from bank`,
-            `\`${ecoPrefix}pay <user> <amount>\` — Send ${name}`,
-            `\`${ecoPrefix}baltop\` — Richest members`,
+            `\`${ecoPrefix}weapons\` — Browse underground dealer`,
+            `\`${ecoPrefix}weapons buy <name>\` — Buy a weapon`,
+            `\`${ecoPrefix}weapons craft <name>\` — Craft from materials`,
+            `\`${ecoPrefix}weapons sell <name>\` — Sell on black market`,
           ].join("\n"),
           inline: false
         },
         {
-          name: "🎁 𝔻𝕒𝕚𝕝𝕪 & 𝕁𝕠𝕓𝕤",
+          name: "🌿 𝔻𝕣𝕦𝕘𝕤",
           value: [
-            `\`${ecoPrefix}daily\` — Claim daily reward`,
-            `\`${ecoPrefix}weekly\` — Claim weekly reward`,
-            `\`${ecoPrefix}job\` — View/pick a job`,
-            `\`${ecoPrefix}work\` — Complete a work shift`,
+            `\`${ecoPrefix}grow-weed start [outdoor|basement|underground]\` — Start grow op`,
+            `\`${ecoPrefix}grow-weed harvest\` — Harvest crop`,
+            `\`${ecoPrefix}cook start [warehouse|mobile|underground]\` — Set up meth lab`,
+            `\`${ecoPrefix}cook supply [steal]\` — Get chemicals`,
+            `\`${ecoPrefix}cook sell [lowkey|street|wholesale]\` — Move product`,
           ].join("\n"),
           inline: false
         },
         {
-          name: "🎰 𝔾𝕒𝕞𝕓𝕝𝕚𝕟𝕘",
+          name: "🍺 𝔹𝕣𝕖𝕨𝕚𝕟𝕘",
           value: [
-            `\`${ecoPrefix}coinflip <bet> <heads|tails>\` — 2x win`,
-            `\`${ecoPrefix}dice <bet> <1-6>\` — Guess the roll for 6x`,
-            `\`${ecoPrefix}slots <bet>\` — Spin the slots`,
-            `\`${ecoPrefix}roulette <bet> <red|black|even|odd|low|high|0-36>\` — Wheel spin`,
-            `\`${ecoPrefix}blackjack <bet>\` — Beat the dealer`,
-            `\`${ecoPrefix}highlow <bet> <higher|lower>\` — Guess the next number`,
-          ].join("\n"),
-          inline: false
-        },
-        {
-          name: "🦹 ℂ𝕣𝕚𝕞𝕖",
-          value: [
-            `\`${ecoPrefix}rob <user>\` — Rob someone's wallet`,
-            `\`${ecoPrefix}bankrob\` — Rob the bank (high risk)`,
-            `\`${ecoPrefix}heist\` — Pull off a heist (2hr CD, high reward)`,
-            `\`${ecoPrefix}duel <@user> <amount>\` — 1v1 coin wager duel`,
+            `\`${ecoPrefix}brew list\` — See all recipes`,
+            `\`${ecoPrefix}brew start <recipe>\` — Start fermenting`,
+            `\`${ecoPrefix}brew harvest\` — Bottle the brew`,
+            `\`${ecoPrefix}brew sell\` — Sell bottles (30% raid risk)`,
+            `\`${ecoPrefix}beehive setup\` — Set up hive for honeycomb`,
+            `\`${ecoPrefix}beehive calm [heater|campfire]\` — Calm bees`,
+            `\`${ecoPrefix}grapes plant\` — Plant grape vine (6h cycle)`,
           ].join("\n"),
           inline: false
         }
       )
-      .setFooter({ text: `Currency: ${name} | Page 1/2 — use \`${ecoPrefix}economy 2\` for more` });
-    await message.reply({ embeds: [embed] }).catch(() => {});
-  } else {
-    const embed = new EmbedBuilder()
-      .setTitle("💰 𝔼𝕔𝕠𝕟𝕠𝕞𝕪 ℂ𝕠𝕞𝕞𝕒𝕟𝕕𝕤 — Page 2/2")
-      .setColor(0x1f8b4c)
-      .addFields(
-        {
-          name: "🎣 𝕄𝕚𝕟𝕚𝕘𝕒𝕞𝕖𝕤",
-          value: [
-            `\`${ecoPrefix}fish\` — Go fishing (needs 🎣 Fishing Rod)`,
-            `\`${ecoPrefix}dig\` — Dig for treasure (needs ⛏️ Shovel)`,
-            `\`${ecoPrefix}mine\` — Mine in the caverns (needs ⛏️ Pickaxe)`,
-            `\`${ecoPrefix}hunt\` — Hunt creatures (needs 🕸️ Hunting Net)`,
-            `\`${ecoPrefix}phone <police|taxi|takeout>\` — Make a call (needs 📱 Phone)`,
-            `\`${ecoPrefix}adventure <story_id>\` — Story adventure`,
-            `\`${ecoPrefix}explore\` — Explore the swamp`,
-          ].join("\n"),
-          inline: false
-        },
-        {
-          name: "🛒 𝕊𝕙𝕠𝕡 & 𝕀𝕟𝕧𝕖𝕟𝕥𝕠𝕣𝕪",
-          value: [
-            `\`${ecoPrefix}shop\` — Browse the Murk Grand Bazaar`,
-            `\`${ecoPrefix}buy <number>\` — Buy an item from the shop`,
-            `\`${ecoPrefix}inventory\` — View your items`,
-            `\`${ecoPrefix}use <item_id>\` — Use a consumable item`,
-            `\`${ecoPrefix}item <name>\` — Inspect an item`,
-            `\`${ecoPrefix}gift <user> <item_id>\` — Gift an item`,
-          ].join("\n"),
-          inline: false
-        },
-        {
-          name: "⭐ ℙ𝕣𝕠𝕘𝕣𝕖𝕤𝕤𝕚𝕠𝕟",
-          value: [
-            `\`${ecoPrefix}class\` — View/set your class (Brigand/Artificer/Scholar/Merchant)`,
-            `\`${ecoPrefix}prestige\` — Prestige (requires Prestige Token)`,
-            `\`${ecoPrefix}bounty <user> <amount>\` — Place a bounty`,
-            `\`${ecoPrefix}craft\` — Craft items`,
-            `\`${ecoPrefix}trade <user>\` — Trade with a player`,
-            `\`${ecoPrefix}lottery\` — Enter the lottery`,
-          ].join("\n"),
-          inline: false
-        }
-      )
-      .setFooter({ text: `Currency: ${name} | Page 2/2 — use \`${ecoPrefix}economy 1\` to go back` });
-    await message.reply({ embeds: [embed] }).catch(() => {});
-  }
+      .setFooter({ text: `Currency: ${name} | Page 3/3` });
+  };
+
+  const buildRow = (page, totalPages) => new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("eco_prev")
+      .setLabel("◀ Previous")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page <= 1),
+    new ButtonBuilder()
+      .setCustomId("eco_next")
+      .setLabel("Next ▶")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(page >= totalPages)
+  );
+
+  const TOTAL_PAGES = 3;
+  let currentPage = 1;
+  const reply = await message.reply({ embeds: [buildPage(currentPage)], components: [buildRow(currentPage, TOTAL_PAGES)] }).catch(() => null);
+  if (!reply) return;
+
+  const collector = reply.createMessageComponentCollector({
+    filter: i => i.user.id === message.author.id && (i.customId === "eco_prev" || i.customId === "eco_next"),
+    time: 120_000,
+  });
+
+  collector.on("collect", async i => {
+    if (i.customId === "eco_next") currentPage = Math.min(TOTAL_PAGES, currentPage + 1);
+    else currentPage = Math.max(1, currentPage - 1);
+    await i.update({ embeds: [buildPage(currentPage)], components: [buildRow(currentPage, TOTAL_PAGES)] }).catch(() => {});
+  });
+
+  collector.on("end", () => {
+    reply.edit({ components: [] }).catch(() => {});
+  });
 }
 
 async function cmdModCommands(message) {

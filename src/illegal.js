@@ -36,6 +36,61 @@ async function addItem(run, guildId, userId, itemId, qty = 1) {
   );
 }
 
+// Buy an item by name or item_id from the guild shop DB.
+// Returns { ok, item, finalPrice, error }
+async function purchaseItem(get, run, guildId, userId, query, currency) {
+  const { all } = require("./db");
+  const norm = q => q.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  const normQ = norm(query);
+  const items = await all(`SELECT * FROM economy_shop_items WHERE guild_id=?`, [guildId]);
+  const item = items.find(i =>
+    norm(i.item_id) === normQ ||
+    norm(i.name) === normQ
+  );
+  if (!item) return { ok: false, error: `❌ Item **${query}** not found in the shop.` };
+
+  // Artificer discount check
+  const buyerClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+  const finalPrice = buyerClass?.class_id === "artificer" ? Math.floor(item.price * 0.8) : item.price;
+
+  const economy = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+  if (!economy || economy.balance < finalPrice) {
+    return { ok: false, error: `❌ You need **${finalPrice} ${currency}** but only have **${economy?.balance ?? 0}**.` };
+  }
+
+  await run(`UPDATE user_economy SET balance=balance-? WHERE guild_id=? AND user_id=?`, [finalPrice, guildId, userId]);
+  await run(
+    `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, 1)
+     ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity=user_inventory.quantity+1`,
+    [guildId, userId, item.item_id]
+  );
+  return { ok: true, item, finalPrice };
+}
+
+// Show a mini-shop embed for a list of item_ids relevant to an activity
+async function showActivityShop(message, util, itemIds, title, ecoPrefix, buyCmd) {
+  const { get: getCmd } = util;
+  const { all } = require("./db");
+  const guildId = message.guild.id;
+  const currency = util.economySettings.currency_name || "coins";
+  const allItems = await all(`SELECT * FROM economy_shop_items WHERE guild_id=?`, [guildId]);
+  const relevant = itemIds
+    .map(id => allItems.find(i => i.item_id === id))
+    .filter(Boolean);
+
+  if (relevant.length === 0) {
+    await message.reply({ embeds: [{ color: 0x95a5a6, description: "No items found in the shop. Make sure the guild shop is set up." }] }).catch(() => {});
+    return;
+  }
+
+  const lines = relevant.map(i => `**${i.name}** — ${i.price} ${currency}\n*${i.description}*`).join("\n\n");
+  await message.reply({ embeds: [new EmbedBuilder()
+    .setColor(0x2c2f33)
+    .setTitle(title)
+    .setDescription(`${lines}\n\n🛒 Buy: \`${ecoPrefix}${buyCmd} buy <item name or id>\`\n*e.g. \`${ecoPrefix}${buyCmd} buy ${itemIds[0]}\`*`)
+  ] }).catch(() => {});
+}
+
 // ─────────────────────────────────────────────────────────────────
 // WEAPONS
 // ─────────────────────────────────────────────────────────────────
@@ -75,6 +130,27 @@ async function cmdWeapons(message, args, util) {
       .setDescription(`*Pssst... looking for something special?*\n\n${lines.join("\n")}\n\n🛒 \`${ecoPrefix}weapons buy <name>\`\n🔧 \`${ecoPrefix}weapons craft <name>\`\n💰 \`${ecoPrefix}weapons sell <name>\``)
       .setFooter({ text: "Warning: 15% chance of police sting on purchases. You didn't hear this from me." })
     ] }).catch(() => {});
+    return;
+  }
+
+  // ── SHOP (materials) ──────────────────────────────────────────────────────────
+  if (sub === "buy" && !args[1]) {
+    await showActivityShop(message, util,
+      ["iron_scrap", "gunpowder", "ghost_gun_parts"],
+      "🔫 Underground Arms — Crafting Materials",
+      ecoPrefix, "weapons"
+    );
+    return;
+  }
+
+  if (sub === "buy" && args[1]) {
+    const query = args.slice(1).join(" ");
+    const result = await purchaseItem(get, run, guildId, userId, query, currency);
+    if (!result.ok) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: result.error }] }).catch(() => {});
+    } else {
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Bought **${result.item.name}** for **${result.finalPrice} ${currency}**.` }] }).catch(() => {});
+    }
     return;
   }
 
@@ -209,13 +285,32 @@ async function cmdGrowWeed(message, args, util) {
 
   if (!sub || sub === "status" || sub === "check") {
     if (!existingOp) {
-      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🌿 Weed Growing", description: `No active grow operation.\n\n\`${ecoPrefix}grow-weed start [outdoor|basement|underground]\`\n\n**Locations:**\n• **outdoor** — 2h, 40% bust, 500–1500 ${currency}\n• **basement** — 4h, 20% bust, 1500–4000 ${currency} *(needs basement item)*\n• **underground** — 6h, 10% bust, 4000–12000 ${currency} *(needs bunker item)*` }] }).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🌿 Weed Growing", description: `No active grow operation.\n\n\`${ecoPrefix}grow-weed start [outdoor|basement|underground]\`\n\n**Locations:**\n• **outdoor** — 2h, 40% bust, 500–1500 ${currency}\n• **basement** — 4h, 20% bust, 1500–4000 ${currency} *(needs basement item)*\n• **underground** — 6h, 10% bust, 4000–12000 ${currency} *(needs bunker item)*\n\nShop: \`${ecoPrefix}grow-weed buy\`` }] }).catch(() => {});
       return;
     }
     const data = JSON.parse(existingOp.data);
     const timeLeft = Math.max(0, existingOp.finish_at - now);
     const ready = timeLeft === 0;
     await message.reply({ embeds: [{ color: 0x27ae60, title: "🌿 Grow Operation Status", description: `Location: **${data.location}**\n${ready ? "✅ **Ready to harvest!**" : `⏰ Ready in **${Math.ceil(timeLeft / 60000)}m**`}\n\n${ready ? `\`${ecoPrefix}grow-weed harvest\`` : ""}` }] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "buy") {
+    if (!args[1]) {
+      await showActivityShop(message, util,
+        ["basement", "bunker"],
+        "🌿 Grow Op — Location Items",
+        ecoPrefix, "grow-weed"
+      );
+      return;
+    }
+    const query = args.slice(1).join(" ");
+    const result = await purchaseItem(get, run, guildId, userId, query, currency);
+    if (!result.ok) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: result.error }] }).catch(() => {});
+    } else {
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Bought **${result.item.name}** for **${result.finalPrice} ${currency}**.` }] }).catch(() => {});
+    }
     return;
   }
 
@@ -323,7 +418,7 @@ async function cmdCook(message, args, util) {
 
   if (!sub || sub === "check") {
     if (!existingOp) {
-      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🧪 Meth Operation", description: `No active operation.\n\n\`${ecoPrefix}cook start <location>\`\n\n**Locations:** warehouse (800), mobile (1500), underground (3000)\n\nSteps: start → supply → cook → sell` }] }).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🧪 Meth Operation", description: `No active operation.\n\n\`${ecoPrefix}cook start <location>\`\n\n**Locations:** warehouse (800), mobile (1500), underground (3000)\n\nSteps: start → supply → cook → sell\nShop: \`${ecoPrefix}cook buy\`` }] }).catch(() => {});
       return;
     }
     const data = JSON.parse(existingOp.data);
@@ -332,6 +427,25 @@ async function cmdCook(message, args, util) {
     const timeLeft = existingOp.finish_at ? Math.max(0, existingOp.finish_at - now) : 0;
     const ready = !existingOp.finish_at || timeLeft === 0;
     await message.reply({ embeds: [{ color: 0x3498db, title: "🧪 Cook Operation Status", description: `Location: **${data.location}**\nStage: **${stages[stage] || "Unknown"}**\n${stage === 2 && !ready ? `⏰ Ready in **${Math.ceil(timeLeft / 60000)}m**` : ""}${ready ? "✅ Ready for next step!" : ""}` }] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "buy") {
+    if (!args[1]) {
+      await showActivityShop(message, util,
+        ["electric_heater", "campfire_kit"],
+        "🧪 Cook Lab Supplies",
+        ecoPrefix, "cook"
+      );
+      return;
+    }
+    const query = args.slice(1).join(" ");
+    const result = await purchaseItem(get, run, guildId, userId, query, currency);
+    if (!result.ok) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: result.error }] }).catch(() => {});
+    } else {
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Bought **${result.item.name}** for **${result.finalPrice} ${currency}**.` }] }).catch(() => {});
+    }
     return;
   }
 
@@ -468,13 +582,32 @@ async function cmdBeehive(message, args, util) {
 
   if (!sub || sub === "check") {
     if (!hive) {
-      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🐝 Beehive", description: `No beehive set up!\n\nBuy a **beehive** and **bees** from the shop, then:\n\`${ecoPrefix}beehive setup\`` }] }).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🐝 Beehive", description: `No beehive set up!\n\nBuy a **beehive** and **bees** from the shop:\n\`${ecoPrefix}beehive buy\`\n\nThen set up:\n\`${ecoPrefix}beehive setup\`` }] }).catch(() => {});
       return;
     }
     const readyCombs = hive.honeycomb_ready || 0;
     const nextBatch = hive.last_harvest_at ? Math.max(0, Math.ceil((hive.last_harvest_at + HONEYCOMB_INTERVAL - now) / 60000)) : 0;
     const calmExpired = !hive.calm_expires_at || now > hive.calm_expires_at;
     await message.reply({ embeds: [{ color: 0xf39c12, title: "🐝 Beehive Status", description: `🐝 Bees: **${hive.bee_count}**\n🍯 Honeycomb ready: **${readyCombs}**\n${nextBatch > 0 ? `⏰ Next batch in **${nextBatch}m**` : "🟢 Ready to produce!"}\n\nBees calm: **${calmExpired ? "No — calm before harvesting!" : "Yes ✅"}**\n\n${!calmExpired ? "" : `Calm with \`${ecoPrefix}beehive calm [heater|campfire]\``}\n\`${ecoPrefix}beehive harvest\`` }] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "buy") {
+    if (!args[1]) {
+      await showActivityShop(message, util,
+        ["beehive", "bees", "electric_heater", "campfire_kit"],
+        "🐝 Beehive Shop",
+        ecoPrefix, "beehive"
+      );
+      return;
+    }
+    const query = args.slice(1).join(" ");
+    const result = await purchaseItem(get, run, message.guild.id, message.author.id, query, util.economySettings.currency_name || "coins");
+    if (!result.ok) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: result.error }] }).catch(() => {});
+    } else {
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Bought **${result.item.name}** for **${result.finalPrice} ${util.economySettings.currency_name || "coins"}**.` }] }).catch(() => {});
+    }
     return;
   }
 
@@ -598,12 +731,32 @@ async function cmdGrapes(message, args, util) {
 
   if (!sub || sub === "check") {
     if (!vineOp) {
-      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🍇 Grape Vine", description: `No grape vine planted.\n\nBuy a **grape_vine_trellise** from the shop, then:\n\`${ecoPrefix}grapes plant\`` }] }).catch(() => {});
+      await message.reply({ embeds: [{ color: 0x95a5a6, title: "🍇 Grape Vine", description: `No grape vine planted.\n\nBuy a **grape_vine_trellise** from the shop:\n\`${ecoPrefix}grapes buy\`\n\nThen plant:\n\`${ecoPrefix}grapes plant\`` }] }).catch(() => {});
       return;
     }
     const timeLeft = Math.max(0, vineOp.finish_at - now);
     const ready = timeLeft === 0;
     await message.reply({ embeds: [{ color: 0x8e44ad, title: "🍇 Grape Vine Status", description: `${ready ? "✅ **Grapes are ready to harvest!**" : `⏰ Ready in **${Math.ceil(timeLeft / 60000)}m**`}\n\n\`${ecoPrefix}grapes harvest\`` }] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "buy") {
+    const currency = util.economySettings.currency_name || "coins";
+    if (!args[1]) {
+      await showActivityShop(message, util,
+        ["grape_vine_trellise"],
+        "🍇 Vineyard Shop",
+        ecoPrefix, "grapes"
+      );
+      return;
+    }
+    const query = args.slice(1).join(" ");
+    const result = await purchaseItem(get, run, guildId, userId, query, currency);
+    if (!result.ok) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: result.error }] }).catch(() => {});
+    } else {
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Bought **${result.item.name}** for **${result.finalPrice} ${currency}**.` }] }).catch(() => {});
+    }
     return;
   }
 
@@ -712,9 +865,28 @@ async function cmdBrew(message, args, util) {
     await message.reply({ embeds: [new EmbedBuilder()
       .setColor(0xe67e22)
       .setTitle("🍺 Illegal Brewing Recipes")
-      .setDescription(`All recipes require a **brewing_barrel** in inventory.\n\n${recipeLines.join("\n")}\n\nStart: \`${ecoPrefix}brew start <recipe>\``)
+      .setDescription(`All recipes require a **brewing_barrel** in inventory.\n\n${recipeLines.join("\n")}\n\nStart: \`${ecoPrefix}brew start <recipe>\`\nShop: \`${ecoPrefix}brew buy\``)
       .setFooter({ text: "Selling carries a 30% raid risk — all bottles confiscated + 30% fine" })
     ] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "buy") {
+    if (!args[1]) {
+      await showActivityShop(message, util,
+        ["brewing_barrel", "empty_bottle", "water_jug", "bread_yeast", "sugar", "apple", "berry"],
+        "🍺 Brew Supplies Shop",
+        ecoPrefix, "brew"
+      );
+      return;
+    }
+    const query = args.slice(1).join(" ");
+    const result = await purchaseItem(get, run, guildId, userId, query, currency);
+    if (!result.ok) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: result.error }] }).catch(() => {});
+    } else {
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Bought **${result.item.name}** for **${result.finalPrice} ${currency}**.` }] }).catch(() => {});
+    }
     return;
   }
 

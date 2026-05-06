@@ -104,10 +104,19 @@ async function cmdBalance(message, args) {
 
   const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, userId]);
 
+  const totalWealth = (economy.balance || 0) + (economy.bank || 0);
+  const wealthTier =
+    totalWealth >= 500_000 ? "💎 Murk Baron" :
+    totalWealth >= 100_000 ? "💰 Murk Elite" :
+    totalWealth >= 50_000  ? "💵 Murk Wealthy" :
+    totalWealth >= 10_000  ? "🪙 Murk Earner" :
+    totalWealth >= 1_000   ? "🥉 Murk Hustler" :
+                             "🪨 Murk Broke";
+
   const embed = {
     color: 0xf1c40f,
     title: `${economySettings.currency_symbol} 𝔹𝕒𝕝𝕒𝕟𝕔𝕖`,
-    description: `💰 **Wallet:** ${economy.balance} ${economySettings.currency_name}\n🏦 **Bank:** ${economy.bank} ${economySettings.currency_name}\n💎 **Total:** ${economy.balance + economy.bank} ${economySettings.currency_name}`,
+    description: `💰 **Wallet:** ${economy.balance.toLocaleString()} ${economySettings.currency_name}\n🏦 **Bank:** ${economy.bank.toLocaleString()} ${economySettings.currency_name}\n💎 **Total:** ${totalWealth.toLocaleString()} ${economySettings.currency_name}\n\n${wealthTier}`,
     footer: { text: userId === message.author.id ? "Your balance" : `Balance of ${targetUser.member.user.tag}` }
   };
 
@@ -164,8 +173,8 @@ async function cmdDaily(message) {
   // Combined streak reward (cap at 3x base to prevent runaway)
   const streakBonus = Math.min(streakBonusCurve + streakBonusLinear, baseAmount * 3);
 
-  // ── Prestige multiplier: +8% per prestige level ──────────────────────────
-  const prestigeMult = 1 + prestige * 0.08;
+  // ── Prestige multiplier: +12% per prestige level (up from 8%) ────────────
+  const prestigeMult = 1 + prestige * 0.12;
 
   // ── Milestone bonuses (scale with prestige) ──────────────────────────────
   let milestoneBonus = 0;
@@ -223,7 +232,14 @@ async function cmdDaily(message) {
     bankInterest = Math.floor(economy.bank * 0.10);
     interestText = `\n💼 **Merchant Interest:** +${bankInterest.toLocaleString()} *(10% of bank)*`;
   }
-  const grandTotal = totalAmount + bankInterest;
+  // ── Farmer class: 5% passive crop income (based on wallet balance) ────────
+  let farmerIncome = 0;
+  let farmerText = "";
+  if (userDailyClass?.class_id === 'farmer' && economy.balance > 100) {
+    farmerIncome = Math.floor(economy.balance * 0.05);
+    farmerText = `\n🌾 **Farmer Harvest:** +${farmerIncome.toLocaleString()} *(5% passive crop income)*`;
+  }
+  const grandTotal = totalAmount + bankInterest + farmerIncome;
 
   const newBalance = economy.balance + grandTotal;
   await run(`UPDATE user_economy SET balance=?, last_daily=?, daily_streak=?, daily_streak_date=? WHERE guild_id=? AND user_id=?`,
@@ -250,7 +266,7 @@ async function cmdDaily(message) {
       `**Base:** ${baseAmount.toLocaleString()} ${economySettings.currency_name}` +
       (streakBonus > 0 ? `\n**Streak Bonus:** +${streakBonus.toLocaleString()}` : "") +
       (milestoneBonus > 0 ? `\n**Milestone:** +${milestoneBonus.toLocaleString()}` : "") +
-      `${fortuneText}${prestigeLine}${buffLine}${milestoneText}${interestText}`,
+      `${fortuneText}${prestigeLine}${buffLine}${milestoneText}${interestText}${farmerText}`,
     fields: [
       { name: "🔥 Streak",       value: `${newStreak} day${newStreak !== 1 ? "s" : ""}`, inline: true },
       { name: "💰 Earned",        value: `+${grandTotal.toLocaleString()} ${economySettings.currency_name}`, inline: true },
@@ -1102,6 +1118,22 @@ async function cmdWork(message) {
 
   const basePay = Math.floor(job.pay_min + Math.random() * (job.pay_max - job.pay_min));
 
+  // ── Wealth-tier multiplier — rewards progression ──────────────────────
+  // The more you've accumulated, the harder you push at work.
+  const totalWealth = (economy.balance || 0) + (economy.bank || 0);
+  let wealthMult = 1.0;
+  let wealthNote = "";
+  if      (totalWealth >= 500_000) { wealthMult = 1.30; wealthNote = " 💎×1.3"; }
+  else if (totalWealth >= 100_000) { wealthMult = 1.20; wealthNote = " 💰×1.2"; }
+  else if (totalWealth >=  50_000) { wealthMult = 1.15; wealthNote = " 💵×1.15"; }
+  else if (totalWealth >=  10_000) { wealthMult = 1.10; wealthNote = " 🪙×1.1"; }
+  else if (totalWealth >=   1_000) { wealthMult = 1.05; wealthNote = " 🪙×1.05"; }
+
+  // ── Prestige scaling on work: +3% per prestige level ─────────────────
+  const prestige = economy.prestige_level || 0;
+  const prestigeWorkMult = 1 + prestige * 0.03;
+  wealthMult *= prestigeWorkMult;
+
   // Apply work buffs
   const bonusBuff = await get(`SELECT * FROM user_buffs WHERE guild_id=? AND user_id=? AND buff_id='work_bonus_25' AND expires_at>?`,
     [message.guild.id, message.author.id, now]);
@@ -1114,6 +1146,11 @@ async function cmdWork(message) {
   if (bonusBuff)  payMult += 0.25;
   if (boostBuff)  payMult += 0.30;
   if (globalBoost) payMult += 0.15;
+
+  // Class bonuses on work pay
+  const workClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  if (workClass?.class_id === 'merchant') payMult += 0.05; // Merchant: +5% work pay
+  if (workClass?.class_id === 'brigand')  payMult += 0.10; // Brigand: +10% work pay (crime doesn't pay... or does it)
 
   // ── Random work event ──
   const eventRoll = Math.random();
@@ -1166,16 +1203,18 @@ async function cmdWork(message) {
   else if (newWorkStreak >= 14) { streakBonus = Math.floor(job.pay_max * 0.15); streakNote = ` 🔥×14 streak (+${streakBonus})`; }
   else if (newWorkStreak >= 7)  { streakBonus = Math.floor(job.pay_max * 0.07); streakNote = ` 🔥×7 streak (+${streakBonus})`; }
 
-  const pay = Math.floor((basePay * payMult * eventPayMult) + eventFlat + streakBonus);
+  const pay = Math.floor(((basePay * payMult * eventPayMult) + eventFlat + streakBonus) * wealthMult);
   const buffNote = payMult > 1 ? ` *(×${payMult.toFixed(2)} buff)*` : "";
   const eventNote = eventName ? `\n\n**${eventName}** — ${eventDesc}` : "";
+  const wealthNote2 = wealthNote ? `${wealthNote}` : "";
+  const prestigeNote = prestige > 0 ? ` ⭐P${prestige}` : "";
 
   await run(`UPDATE user_economy SET balance=?, job_last_shift=?, job_shifts_completed=?, job_weekly_shifts=?, work_streak=?, last_work_day=? WHERE guild_id=? AND user_id=?`,
     [economy.balance + pay, now, economy.job_shifts_completed + 1, economy.job_weekly_shifts + 1, newWorkStreak, todayStr, message.guild.id, message.author.id]);
   await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
     [message.guild.id, message.author.id, "work", pay, `Worked as ${job.name}`]);
 
-  await message.reply({ embeds: [{ color: 0x2ecc71, title: "💼 𝕊𝕙𝕚𝕗𝕥 ℂ𝕠𝕞𝕡𝕝𝕖𝕥𝕖!", description: `You earned **${pay}** ${economySettings.currency_name}${buffNote}${streakNote}${eventNote}`, fields: [{ name: "📅 Weekly Progress", value: `${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} shifts`, inline: true }, { name: "🔥 Work Streak", value: `${newWorkStreak} day${newWorkStreak !== 1 ? "s" : ""}`, inline: true }] }] }).catch(() => {});
+  await message.reply({ embeds: [{ color: 0x2ecc71, title: "💼 𝕊𝕙𝕚𝕗𝕥 ℂ𝕠𝕞𝕡𝕝𝕖𝕥𝕖!", description: `You earned **${pay}** ${economySettings.currency_name}${buffNote}${streakNote}${wealthNote2}${prestigeNote}${eventNote}`, fields: [{ name: "📅 Weekly Progress", value: `${economy.job_weekly_shifts + 1}/${job.weekly_shifts_required} shifts`, inline: true }, { name: "🔥 Work Streak", value: `${newWorkStreak} day${newWorkStreak !== 1 ? "s" : ""}`, inline: true }] }] }).catch(() => {}); 
 }
 
 // ─────────────────────────────────────────────────────
@@ -2550,7 +2589,7 @@ async function cmdStats(message, args, economySettings) {
   ]);
 
   const classDisplay = classRow?.class_id
-    ? { brigand: "🗡️ Brigand", artificer: "⚙️ Artificer", scholar: "📖 Scholar", merchant: "💼 Merchant" }[classRow.class_id] || classRow.class_id
+    ? { brigand: "🗡️ Brigand", artificer: "⚙️ Artificer", scholar: "📖 Scholar", merchant: "💼 Merchant", farmer: "🌾 Farmer" }[classRow.class_id] || classRow.class_id
     : "*(none)*";
 
   const streak = economy?.daily_streak || 0;
@@ -2737,6 +2776,226 @@ async function cmdDuel(message, args) {
   ] }).catch(() => {});
 }
 
+// ─────────────────────────────────────────────────────
+// DEAL OR NO DEAL
+// ─────────────────────────────────────────────────────
+const DOND_VALUES = [
+  1, 5, 10, 25, 50, 75, 100, 200, 300, 400, 500, 750,
+  1000, 2000, 3500, 5000, 7500, 10000, 15000, 20000, 30000, 50000, 75000, 100000,
+];
+
+async function cmdDealOrNoDeal(message) {
+  const economySettings = await getEconomySettings(message.guild.id);
+  if (!economySettings || !economySettings.enabled) {
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Economy system is disabled." }] }).catch(() => {});
+    return;
+  }
+
+  await run(`INSERT INTO user_economy (guild_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING`, [message.guild.id, message.author.id]);
+  const economy = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [message.guild.id, message.author.id]);
+  const currency = economySettings.currency_name || "coins";
+
+  // Cooldown: 20 minutes
+  const now = Date.now();
+  const DOND_COOLDOWN = 20 * 60_000;
+  if (economy.last_dond && (now - economy.last_dond) < DOND_COOLDOWN) {
+    const mins = Math.ceil((DOND_COOLDOWN - (now - economy.last_dond)) / 60000);
+    await message.reply({ embeds: [{ color: 0xf39c12, description: `⏰ The banker is reviewing cases. Try again in **${mins}m**.` }] }).catch(() => {});
+    return;
+  }
+
+  // Shuffle values and assign to cases 1–24
+  const shuffled = [...DOND_VALUES].sort(() => Math.random() - 0.5);
+  const cases = shuffled.map((val, i) => ({ id: i + 1, value: val, open: false }));
+  // Player picks their case
+  const playerCaseId = Math.floor(Math.random() * 24) + 1;
+  const playerCaseValue = cases[playerCaseId - 1].value;
+  cases[playerCaseId - 1].open = true; // mark as "held"
+
+  // Rounds: open N cases per round, then get a bank offer
+  const ROUND_SIZES = [6, 5, 4, 3, 2, 1, 1, 1, 1]; // 9 rounds max
+
+  let roundIndex = 0;
+  let casesToOpenThisRound = ROUND_SIZES[0];
+  let openedThisRound = 0;
+  const eliminatedValues = [];
+
+  const formatCases = () => {
+    const rows = [];
+    const COLS = 6;
+    const remaining = cases.filter(c => !c.open);
+    const opened = cases.filter(c => c.open && c.id !== playerCaseId);
+    let line = "";
+    for (let i = 0; i < cases.length; i++) {
+      const c = cases[i];
+      if (c.id === playerCaseId) {
+        line += `**[📦${c.id}]** `;
+      } else if (c.open) {
+        line += `~~${c.id}~~ `;
+      } else {
+        line += `\`${c.id}\` `;
+      }
+      if ((i + 1) % COLS === 0) { rows.push(line.trim()); line = ""; }
+    }
+    if (line.trim()) rows.push(line.trim());
+    return rows.join("\n");
+  };
+
+  const formatValues = () => {
+    const sorted = [...DOND_VALUES].sort((a, b) => a - b);
+    return sorted.map(v => {
+      const isGone = eliminatedValues.includes(v);
+      return isGone ? `~~${v.toLocaleString()}~~` : `**${v.toLocaleString()}**`;
+    }).join("  •  ");
+  };
+
+  const bankOffer = () => {
+    const remaining = cases.filter(c => !c.open || c.id === playerCaseId).map(c => c.value);
+    const avg = remaining.reduce((a, b) => a + b, 0) / remaining.length;
+    // Banker starts low and climbs — scales with round
+    const factor = 0.15 + (roundIndex * 0.08); // 15% → 87% by final round
+    return Math.floor(avg * Math.min(factor, 0.95));
+  };
+
+  const buildEmbed = (status, offer = null) => {
+    const toOpen = casesToOpenThisRound - openedThisRound;
+    const desc = offer !== null
+      ? `📞 **THE BANKER CALLS...**\n\n💼 Offer: **${offer.toLocaleString()} ${currency}**\n\n*Deal or No Deal?*`
+      : `Round ${roundIndex + 1} — Open **${toOpen}** more case${toOpen !== 1 ? "s" : ""}\n\n${formatCases()}`;
+    return new EmbedBuilder()
+      .setColor(offer !== null ? 0xf1c40f : 0x2980b9)
+      .setTitle("💼 𝔻𝕖𝕒𝕝 𝕠𝕣 ℕ𝕠 𝔻𝕖𝕒𝕝")
+      .setDescription(desc)
+      .addFields({ name: "💰 Remaining Values", value: formatValues() })
+      .setFooter({ text: `Your case: #${playerCaseId}` });
+  };
+
+  const buildCaseButtons = () => {
+    const available = cases.filter(c => !c.open && c.id !== playerCaseId);
+    const rows = [];
+    for (let r = 0; r < Math.min(4, Math.ceil(available.length / 5)); r++) {
+      const row = new ActionRowBuilder();
+      for (let i = r * 5; i < Math.min(r * 5 + 5, available.length); i++) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`dond_case_${available[i].id}`)
+            .setLabel(`Case ${available[i].id}`)
+            .setStyle(ButtonStyle.Secondary)
+        );
+      }
+      if (row.components.length > 0) rows.push(row);
+    }
+    return rows;
+  };
+
+  const buildOfferButtons = () => new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("dond_deal").setLabel("✅ DEAL").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("dond_nodeal").setLabel("❌ NO DEAL").setStyle(ButtonStyle.Danger),
+  );
+
+  const msg = await message.reply({ embeds: [buildEmbed("open")], components: buildCaseButtons() }).catch(() => null);
+  if (!msg) return;
+
+  const collector = msg.createMessageComponentCollector({
+    filter: i => i.user.id === message.author.id,
+    time: 5 * 60_000,
+  });
+
+  let gameOver = false;
+  let finalPayout = 0;
+
+  collector.on("collect", async interaction => {
+    if (gameOver) return;
+    await interaction.deferUpdate().catch(() => {});
+
+    if (interaction.customId === "dond_deal") {
+      // Player takes deal
+      const offer = bankOffer();
+      gameOver = true;
+      collector.stop("deal");
+      finalPayout = offer;
+      await run(`UPDATE user_economy SET balance=balance+?, last_dond=? WHERE guild_id=? AND user_id=?`, [offer, now, message.guild.id, message.author.id]);
+      await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+        [message.guild.id, message.author.id, "dond", offer, "Deal or No Deal – took deal"]);
+      await msg.edit({
+        embeds: [new EmbedBuilder()
+          .setColor(0x2ecc71)
+          .setTitle("💼 𝔻𝔼𝔸𝕃! 🎉")
+          .setDescription(`You took the deal!\n\n💵 **Earned: ${offer.toLocaleString()} ${currency}**\n\nYour case (#${playerCaseId}) contained: **${playerCaseValue.toLocaleString()} ${currency}**\n\n${offer >= playerCaseValue ? "✅ Smart move!" : "😬 You would've done better with No Deal..."}`)
+          .addFields({ name: "💰 Values", value: formatValues() })
+        ],
+        components: [],
+      }).catch(() => {});
+      return;
+    }
+
+    if (interaction.customId === "dond_nodeal") {
+      // Skip the banker offer, keep playing
+      roundIndex++;
+      casesToOpenThisRound = ROUND_SIZES[Math.min(roundIndex, ROUND_SIZES.length - 1)];
+      openedThisRound = 0;
+      await msg.edit({ embeds: [buildEmbed("open")], components: buildCaseButtons() }).catch(() => {});
+      return;
+    }
+
+    if (interaction.customId.startsWith("dond_case_")) {
+      const caseId = parseInt(interaction.customId.split("_")[2]);
+      const c = cases.find(c => c.id === caseId);
+      if (!c || c.open) return;
+      c.open = true;
+      eliminatedValues.push(c.value);
+      openedThisRound++;
+
+      if (openedThisRound >= casesToOpenThisRound) {
+        // Round over — check if only 1 case left (endgame)
+        const remaining = cases.filter(c => !c.open || c.id === playerCaseId);
+        if (remaining.length === 1) {
+          // Final swap offer
+          gameOver = true;
+          collector.stop("end");
+          const offer = playerCaseValue; // They get their case
+          finalPayout = offer;
+          await run(`UPDATE user_economy SET balance=balance+?, last_dond=? WHERE guild_id=? AND user_id=?`, [offer, now, message.guild.id, message.author.id]);
+          await run(`INSERT INTO economy_transactions (guild_id, user_id, type, amount, description) VALUES (?, ?, ?, ?, ?)`,
+            [message.guild.id, message.author.id, "dond", offer, "Deal or No Deal – kept case"]);
+          await msg.edit({
+            embeds: [new EmbedBuilder()
+              .setColor(0x9b59b6)
+              .setTitle("💼 𝔾𝕒𝕞𝕖 𝕆𝕧𝕖𝕣!")
+              .setDescription(`You kept your case all the way!\n\n📦 **Case #${playerCaseId} contained: ${offer.toLocaleString()} ${currency}**\n\n💵 **Earned: ${offer.toLocaleString()} ${currency}**`)
+              .addFields({ name: "💰 Values", value: formatValues() })
+            ],
+            components: [],
+          }).catch(() => {});
+          return;
+        }
+
+        // Show banker offer
+        const offer = bankOffer();
+        await msg.edit({ embeds: [buildEmbed("offer", offer)], components: [buildOfferButtons()] }).catch(() => {});
+      } else {
+        // More cases to open this round
+        await msg.edit({ embeds: [buildEmbed("open")], components: buildCaseButtons() }).catch(() => {});
+      }
+    }
+  });
+
+  collector.on("end", (_, reason) => {
+    if (!gameOver) {
+      // Timeout — give them whatever their case is worth
+      run(`UPDATE user_economy SET balance=balance+?, last_dond=? WHERE guild_id=? AND user_id=?`, [playerCaseValue, now, message.guild.id, message.author.id]).catch(() => {});
+      msg.edit({
+        embeds: [new EmbedBuilder()
+          .setColor(0x95a5a6)
+          .setTitle("💼 𝕋𝕚𝕞𝕖𝕕 𝕆𝕦𝕥")
+          .setDescription(`Session expired! Your case (#${playerCaseId}) contained **${playerCaseValue.toLocaleString()} ${currency}** — awarded automatically.`)
+        ],
+        components: [],
+      }).catch(() => {});
+    }
+  });
+}
+
 module.exports = {
   cmdBalance,
   cmdDaily,
@@ -2764,5 +3023,6 @@ module.exports = {
   cmdNetWorth,
   cmdStats,
   cmdDuel,
+  cmdDealOrNoDeal,
 };
 

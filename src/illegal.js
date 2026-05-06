@@ -51,7 +51,10 @@ async function purchaseItem(get, run, guildId, userId, query, currency) {
 
   // Artificer discount check
   const buyerClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]);
-  const finalPrice = buyerClass?.class_id === "artificer" ? Math.floor(item.price * 0.8) : item.price;
+  const FARMER_ITEMS = ["beehive", "bees", "electric_heater", "campfire_kit", "grape_vine_trellise", "basement", "bunker"];
+  let finalPrice = item.price;
+  if (buyerClass?.class_id === "artificer") finalPrice = Math.floor(item.price * 0.8);
+  else if (buyerClass?.class_id === "farmer" && FARMER_ITEMS.includes(item.item_id)) finalPrice = Math.floor(item.price * 0.85);
 
   const economy = await get(`SELECT balance FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
   if (!economy || economy.balance < finalPrice) {
@@ -373,8 +376,13 @@ async function cmdGrowWeed(message, args, util) {
     }
 
     const payout = Math.floor(loc.payoutMin + Math.random() * (loc.payoutMax - loc.payoutMin));
-    await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [payout, guildId, userId]);
-    await message.reply({ embeds: [{ color: 0x2ecc71, title: "🌿 Harvest Successful!", description: `You harvested your **${data.location}** crop!\n\n💰 Earned: **${payout} ${currency}**` }] }).catch(() => {});
+    // Farmer class: 30% more harvest yield
+    const harvestClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+    const farmerMult = harvestClass?.class_id === 'farmer' ? 1.30 : 1;
+    const finalPayout = Math.floor(payout * farmerMult);
+    const farmerNote = farmerMult > 1 ? `\n🌾 **Farmer Bonus: +30% yield!**` : "";
+    await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [finalPayout, guildId, userId]);
+    await message.reply({ embeds: [{ color: 0x2ecc71, title: "🌿 Harvest Successful!", description: `You harvested your **${data.location}** crop!\n\n💰 Earned: **${finalPayout} ${currency}**${farmerNote}` }] }).catch(() => {});
     return;
   }
 
@@ -700,8 +708,13 @@ async function cmdBeehive(message, args, util) {
     }
 
     await run(`UPDATE beehives SET last_harvest_at=?, honeycomb_ready=0 WHERE guild_id=? AND user_id=?`, [now, guildId, userId]);
-    await addItem(run, guildId, userId, "honeycomb", readyCombs);
-    await message.reply({ embeds: [{ color: 0xf39c12, title: "🍯 Honeycomb Harvested!", description: `You collected **${readyCombs}x honeycomb**!\n\nUse it in brewing recipes with \`${ecoPrefix}brew start mead\`.` }] }).catch(() => {});
+    // Farmer class: 30% more honeycomb
+    const hiveClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+    const hiveFarmerBonus = hiveClass?.class_id === 'farmer' ? Math.max(1, Math.floor(readyCombs * 0.30)) : 0;
+    const totalCombs = readyCombs + hiveFarmerBonus;
+    const hiveFarmerNote = hiveFarmerBonus > 0 ? `\n🌾 **Farmer Bonus: +${hiveFarmerBonus} extra honeycomb!**` : "";
+    await addItem(run, guildId, userId, "honeycomb", totalCombs);
+    await message.reply({ embeds: [{ color: 0xf39c12, title: "🍯 Honeycomb Harvested!", description: `You collected **${totalCombs}x honeycomb**!${hiveFarmerNote}\n\nUse it in brewing recipes with \`${ecoPrefix}brew start mead\`.` }] }).catch(() => {});
     return;
   }
 
@@ -793,6 +806,11 @@ async function cmdGrapes(message, args, util) {
     }
     const grapes = 4 + Math.floor(Math.random() * 5); // 4-8
     await run(`DELETE FROM illegal_ops WHERE guild_id=? AND user_id=? AND op_type='grape_vine'`, [guildId, userId]);
+    // Farmer class: 30% more grapes (at least 1 extra)
+    const grapeClass = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+    const grapeFarmerBonus = grapeClass?.class_id === 'farmer' ? Math.max(1, Math.floor(grapes * 0.30)) : 0;
+    const totalGrapes = grapes + grapeFarmerBonus;
+    const grapeFarmerNote = grapeFarmerBonus > 0 ? `\n🌾 **Farmer Bonus: +${grapeFarmerBonus} extra grapes!**` : "";
     // Replant automatically
     const finishAt = now + GRAPE_INTERVAL;
     await run(
@@ -800,8 +818,8 @@ async function cmdGrapes(message, args, util) {
        VALUES (?, ?, 'grape_vine', 1, '{}', ?, ?)`,
       [guildId, userId, now, finishAt]
     );
-    await addItem(run, guildId, userId, "grape", grapes);
-    await message.reply({ embeds: [{ color: 0x8e44ad, title: "🍇 Grapes Harvested!", description: `You harvested **${grapes}x grape**! 🍷\n\nVine replanted automatically — next harvest in **6h**.` }] }).catch(() => {});
+    await addItem(run, guildId, userId, "grape", totalGrapes);
+    await message.reply({ embeds: [{ color: 0x8e44ad, title: "🍇 Grapes Harvested!", description: `You harvested **${totalGrapes}x grape**!${grapeFarmerNote} 🍷\n\nVine replanted automatically — next harvest in **6h**.` }] }).catch(() => {});
     return;
   }
 

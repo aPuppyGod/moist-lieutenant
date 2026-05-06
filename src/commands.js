@@ -422,6 +422,7 @@ async function cmdEconomy(message, args) {
               `\`${ecoPrefix}roulette <bet> <red|black|0-36|split:n,m|...>\` — Wheel`,
               `\`${ecoPrefix}blackjack <bet>\` — Beat the dealer`,
               `\`${ecoPrefix}highlow <bet> <higher|lower>\` — Guess the next number`,
+              `\`${ecoPrefix}deal\` — 💼 Deal or No Deal (24 briefcases)`,
             ].join("\n"),
             inline: false
           },
@@ -3696,7 +3697,7 @@ const {
   cmdDeposit, cmdWithdraw, cmdRob, cmdSlots, cmdCoinflip, cmdDice,
   cmdJob, cmdWork, cmdShop, cmdBuy, cmdInventory,
   cmdRoulette, cmdBlackjack, cmdHighLow,
-  cmdInvest, cmdNetWorth, cmdStats, cmdDuel,
+  cmdInvest, cmdNetWorth, cmdStats, cmdDuel, cmdDealOrNoDeal,
 } = require("./economyCommands");
 
 // ─────────────────────────────────────────────────────
@@ -3934,6 +3935,7 @@ async function handleCommands(message) {
   const economyCommands = ["balance", "bal", "daily", "weekly", "pay", "baltop", "richest",
     "deposit", "dep", "withdraw", "with", "rob", "bankrob", "bank-rob", "bankrobbery", "slots", "slot", "coinflip", "cf", 
     "dice", "roll", "roulette", "blackjack", "bj", "highlow", "hl",
+    "deal", "dond", "dealornodeal", "briefcase",
     "job", "jobs", "work", "shift", "shop", "store", "buy", "purchase", 
     "inventory", "inv", "fish", "fishing", "dig", "digging", "phone", "call",
     "adventure", "story", "explore", "swamp", "bounty", "bounties", "craft", "crafting",
@@ -4365,6 +4367,11 @@ async function executeCommand(message, cmd, args, prefix) {
 
   if (cmd === "highlow" || cmd === "hl") {
     await cmdHighLow(message, args);
+    return true;
+  }
+
+  if (cmd === "deal" || cmd === "dond" || cmd === "dealornodeal" || cmd === "briefcase") {
+    await cmdDealOrNoDeal(message);
     return true;
   }
 

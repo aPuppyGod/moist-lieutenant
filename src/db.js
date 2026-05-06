@@ -1290,6 +1290,7 @@ async function initDb() {
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_passive_regen_at BIGINT DEFAULT 0`);
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS work_streak INTEGER DEFAULT 0`);
     await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_work_day TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE user_economy ADD COLUMN IF NOT EXISTS last_dond BIGINT DEFAULT NULL`);
 
     // Active timed buffs (from crafted items like swamp_tonic)
     await run(`

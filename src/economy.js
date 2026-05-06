@@ -31,30 +31,37 @@ const MURK_CLASSES = {
   brigand: {
     name: "🗡️ Brigand",
     icon: "🗡️",
-    description: "Master of stealth and high-risk crimes. 25% faster robbery cooldowns & +15% heist success odds.",
+    description: "Master of stealth and high-risk crimes. 25% faster robbery & heist cooldowns, +15% heist success odds, and 10% more loot from work events.",
     passive: "robbery_speedup",
     passive_value: 0.75  // multiply cooldown by 0.75
   },
   artificer: {
     name: "⚙️ Artificer",
     icon: "⚙️",
-    description: "Craftsperson of the Murk. 20% discount at Dark Bazaar.",
+    description: "Craftsperson of the Murk. 20% discount on ALL shop purchases and 15% bonus to crafting XP.",
     passive: "bazaar_discount",
     passive_value: 0.8
   },
   scholar: {
     name: "📖 Scholar",
     icon: "📖",
-    description: "Collector of forbidden knowledge. 25% more loot from expeditions.",
+    description: "Collector of forbidden knowledge. 25% more loot from ALL gather activities (fish, dig, mine, hunt, explore) and +10% XP from every action.",
     passive: "expedition_bonus",
     passive_value: 1.25
   },
   merchant: {
     name: "💼 Merchant",
     icon: "💼",
-    description: "Trader extraordinaire. 10% daily bank interest.",
+    description: "Trader extraordinaire. 10% daily bank interest, 8% better sell prices, and 5% bonus work pay.",
     passive: "daily_interest",
     passive_value: 0.1
+  },
+  farmer: {
+    name: "🌾 Farmer",
+    icon: "🌾",
+    description: "Tiller of Murk soil. 30% more harvest yield from weed, beehive, and grapes. 15% discount on all grow/brew/farm shop items. Passive 5% income from crops each day.",
+    passive: "harvest_boost",
+    passive_value: 1.30
   }
 };
 
@@ -494,7 +501,7 @@ async function cmdClass(message, args, util) {
       color: 0x00d4ff,
       title: "⚔️ 𝕄𝕦𝕣𝕜 𝔸𝕣𝕔𝕙𝕖𝕥𝕪𝕡𝕖𝕤",
       description: classList,
-      footer: { text: `Choose: class select <brigand|artificer|scholar|merchant>` }
+      footer: { text: `Choose: class select <brigand|artificer|scholar|merchant|farmer>` }
     }] }).catch(() => {});
     return;
   }
@@ -505,7 +512,7 @@ async function cmdClass(message, args, util) {
   const murk_class = classKey ? MURK_CLASSES[classKey] : null;
 
   if (!murk_class) {
-    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid class! Choose: `brigand`, `artificer`, `scholar`, or `merchant`." }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Invalid class! Choose: `brigand`, `artificer`, `scholar`, `merchant`, or `farmer`." }] }).catch(() => {});
     return;
   }
 

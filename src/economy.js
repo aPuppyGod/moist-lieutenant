@@ -2442,22 +2442,22 @@ async function cmdRobBank(message, args, util) {
   );
   await runCmd(`UPDATE user_economy SET last_bank_rob=? WHERE guild_id=? AND user_id=?`, [now, message.guild.id, message.author.id]);
 
-  // DM 3 random wealthy members (potential victims) to call police
-  const wealthyVictims = await allCmd(
-    `SELECT user_id FROM user_economy WHERE guild_id=? AND user_id != ? AND balance > 500 ORDER BY balance DESC LIMIT 5`,
+  // DM only the wealthiest member (the person whose bank is being robbed)
+  const topVictim = await allCmd(
+    `SELECT user_id FROM user_economy WHERE guild_id=? AND user_id != ? AND balance > 500 ORDER BY balance DESC LIMIT 1`,
     [message.guild.id, message.author.id]
   );
-  for (const v of wealthyVictims.slice(0, 3)) {
-    const victimUser = await message.client.users.fetch(v.user_id).catch(() => null);
+  if (topVictim.length > 0) {
+    const victimUser = await message.client.users.fetch(topVictim[0].user_id).catch(() => null);
     if (victimUser) {
-      victimUser.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Bank Robbery Alert!", description: `Someone is robbing the bank in **${message.guild.name}**!\n\nThe robbery will complete in **3 minutes**.\n\n📱 If you have a **Phone**, quickly use \`${ecoPrefix}phone police\` in the server to call the police and **immediately stop** the robbery!\n\n*This is a targeted alert because you have significant wealth deposited.*` }] }).catch(() => {});
+      victimUser.send({ embeds: [{ color: 0xe74c3c, title: "🚨 Bank Robbery Alert!", description: `Someone is robbing the bank in **${message.guild.name}**!\n\nThe robbery will complete in **3 minutes**.\n\n📱 If you have a **Phone**, quickly use \`${ecoPrefix}phone police\` in the server to call the police and **immediately stop** the robbery!\n\n*This is a targeted alert because you have the most wealth deposited.*` }] }).catch(() => {});
     }
   }
 
   await message.reply({ embeds: [new EmbedBuilder()
     .setColor(0xf39c12)
     .setTitle("🏦 𝔹𝕒𝕟𝕜 ℝ𝕠𝕓𝕓𝕖𝕣𝕪 𝕊𝕥𝕒𝕣𝕥𝕚𝕟𝕘!")
-    .setDescription(`**${message.author.username}** is planning a bank heist! 🔫\n\n⏰ **60 seconds** to join the crew!\n⏳ Robbery executes in **3 minutes**\n\n📞 **Potential victims have been alerted** — calling police will immediately bust the robbery!\n💀 More crew = slightly higher success + bigger payout split equally`)
+    .setDescription(`**${message.author.username}** is planning a bank heist! 🔫\n\n⏰ **60 seconds** to join the crew!\n⏳ Robbery executes in **3 minutes**\n\n📞 **The wealthiest member has been alerted** — if they call police, the robbery is immediately busted!\n💀 More crew = slightly higher success + bigger payout split equally`)
     .addFields(
       { name: "👥 Current Crew", value: `<@${message.author.id}> (leader)`, inline: false },
       { name: "📋 To Join", value: `\`${ecoPrefix}bankrob join\``, inline: true },

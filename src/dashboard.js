@@ -5788,6 +5788,7 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         <button class="eco-tab" onclick="showEcoPanel('shop',this)">🛒 Shop Items</button>
         <button class="eco-tab" onclick="showEcoPanel('jobs',this)">💼 Jobs</button>
         <button class="eco-tab" onclick="showEcoPanel('transactions',this)">📋 Transactions</button>
+        <button class="eco-tab" onclick="showEcoPanel('admin',this)">🛡️ Admin Tools</button>
       </div>
       <script>
         function showEcoPanel(id,btn){
@@ -5995,6 +5996,101 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
           </tbody>
         </table>
         ` : `<p style="opacity:0.6;margin-top:16px;">No transactions recorded yet.</p>`}
+      </div>
+
+      <!-- ── ADMIN TOOLS ── -->
+      <div id="eco-admin" class="eco-panel">
+        <style>
+          .eco-admin-section { background:var(--card-bg,#f9f9f9); border:1px solid var(--border,#ddd); border-radius:10px; padding:18px; margin-bottom:18px; }
+          .eco-admin-section h4 { margin:0 0 12px 0; font-size:15px; }
+          .eco-admin-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+          @media(max-width:600px){.eco-admin-grid{grid-template-columns:1fr;}}
+        </style>
+
+        <p style="opacity:0.7;margin-bottom:16px;">Directly manage player economy — wallet, bank, and inventory items.</p>
+
+        <!-- Give / Take / Set Money -->
+        <div class="eco-admin-section">
+          <h4>💵 Modify Wallet</h4>
+          <form method="post" action="/guild/${guildId}/economy-admin/money" style="display:grid;gap:10px;max-width:480px;">
+            <label>
+              <span>Player (User ID or @mention username)</span>
+              <input type="text" name="user_id" placeholder="User ID (18-digit number)" required style="font-family:monospace;" />
+            </label>
+            <div class="eco-admin-grid">
+              <label>
+                <span>Amount</span>
+                <input type="number" name="amount" min="0" max="999999999" placeholder="0" required />
+              </label>
+              <label>
+                <span>Action</span>
+                <select name="action">
+                  <option value="give">Give (add to wallet)</option>
+                  <option value="take">Take (remove from wallet)</option>
+                  <option value="set">Set wallet exactly</option>
+                  <option value="givebank">Give to bank</option>
+                  <option value="setbank">Set bank exactly</option>
+                </select>
+              </label>
+            </div>
+            <button type="submit">Apply</button>
+          </form>
+        </div>
+
+        <!-- Give / Remove Items -->
+        <div class="eco-admin-section">
+          <h4>🎒 Modify Inventory</h4>
+          <form method="post" action="/guild/${guildId}/economy-admin/item" style="display:grid;gap:10px;max-width:480px;">
+            <label>
+              <span>Player (User ID)</span>
+              <input type="text" name="user_id" placeholder="User ID (18-digit number)" required style="font-family:monospace;" />
+            </label>
+            <div class="eco-admin-grid">
+              <label>
+                <span>Item ID</span>
+                <input type="text" name="item_id" placeholder="e.g. fishing_rod" required style="font-family:monospace;" />
+              </label>
+              <label>
+                <span>Quantity</span>
+                <input type="number" name="quantity" min="1" max="9999" value="1" required />
+              </label>
+            </div>
+            <label>
+              <span>Action</span>
+              <select name="action">
+                <option value="give">Give item</option>
+                <option value="remove">Remove item</option>
+              </select>
+            </label>
+            <button type="submit">Apply</button>
+          </form>
+        </div>
+
+        <!-- Check Player -->
+        <div class="eco-admin-section">
+          <h4>🔍 Look Up Player</h4>
+          <form method="get" action="/guild/${guildId}/economy-admin/lookup" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+            <label style="flex:1;min-width:200px;">
+              <span>User ID</span>
+              <input type="text" name="user_id" placeholder="18-digit User ID" required style="font-family:monospace;" />
+            </label>
+            <button type="submit">Look Up</button>
+          </form>
+          ${req && req.query && req.query._lookup_result ? `<div style="margin-top:12px;padding:12px;background:var(--bg,#fff);border-radius:8px;border:1px solid var(--border,#ddd);">${escapeHtml(req.query._lookup_result)}</div>` : ""}
+        </div>
+
+        <!-- Reset Player -->
+        <div class="eco-admin-section" style="border-color:#e74c3c44;">
+          <h4 style="color:#e74c3c;">🗑️ Reset Player Economy</h4>
+          <p style="font-size:13px;opacity:0.7;">Wipes wallet, bank, and inventory for a player. This cannot be undone.</p>
+          <form method="post" action="/guild/${guildId}/economy-admin/reset" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;" onsubmit="return confirm('Reset ALL economy data for this player? This cannot be undone.');">
+            <label style="flex:1;min-width:200px;">
+              <span>User ID</span>
+              <input type="text" name="user_id" placeholder="18-digit User ID" required style="font-family:monospace;" />
+            </label>
+            <button type="submit" style="background:#e74c3c;border-color:#e74c3c;">Reset Player</button>
+          </form>
+        </div>
       </div>
       ` : ""}
 
@@ -7967,6 +8063,121 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       return res.redirect(getModuleRedirect(guildId, 'economy'));
     } catch (e) {
       console.error("economy-settings save error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Economy Admin: Modify Money
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/economy-admin/money", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const userId = String(req.body.user_id || "").trim().replace(/[^0-9]/g, "");
+      const amount = Math.max(0, parseInt(req.body.amount || "0", 10));
+      const action = String(req.body.action || "give");
+      if (!userId || !amount) return res.redirect(getModuleRedirect(guildId, "economy") + "#eco-admin");
+      // Ensure row exists
+      await run(`INSERT INTO user_economy (guild_id, user_id, balance, bank) VALUES (?, ?, 0, 0) ON CONFLICT (guild_id, user_id) DO NOTHING`, [guildId, userId]);
+      if (action === "give") {
+        await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, guildId, userId]);
+      } else if (action === "take") {
+        await run(`UPDATE user_economy SET balance=GREATEST(0,balance-?) WHERE guild_id=? AND user_id=?`, [amount, guildId, userId]);
+      } else if (action === "set") {
+        await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [amount, guildId, userId]);
+      } else if (action === "givebank") {
+        await run(`UPDATE user_economy SET bank=bank+? WHERE guild_id=? AND user_id=?`, [amount, guildId, userId]);
+      } else if (action === "setbank") {
+        await run(`UPDATE user_economy SET bank=? WHERE guild_id=? AND user_id=?`, [amount, guildId, userId]);
+      }
+      return res.redirect(getModuleRedirect(guildId, "economy"));
+    } catch (e) {
+      console.error("economy-admin money error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Economy Admin: Modify Item Inventory
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/economy-admin/item", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const userId = String(req.body.user_id || "").trim().replace(/[^0-9]/g, "");
+      const itemId = String(req.body.item_id || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "");
+      const qty = Math.max(1, parseInt(req.body.quantity || "1", 10));
+      const action = String(req.body.action || "give");
+      if (!userId || !itemId) return res.redirect(getModuleRedirect(guildId, "economy"));
+      await run(`INSERT INTO user_economy (guild_id, user_id, balance, bank) VALUES (?, ?, 0, 0) ON CONFLICT (guild_id, user_id) DO NOTHING`, [guildId, userId]);
+      if (action === "give") {
+        await run(
+          `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + ?`,
+          [guildId, userId, itemId, qty, qty]
+        );
+      } else if (action === "remove") {
+        await run(`UPDATE user_inventory SET quantity=GREATEST(0,quantity-?) WHERE guild_id=? AND user_id=? AND item_id=?`, [qty, guildId, userId, itemId]);
+        await run(`DELETE FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity<=0`, [guildId, userId, itemId]);
+      }
+      return res.redirect(getModuleRedirect(guildId, "economy"));
+    } catch (e) {
+      console.error("economy-admin item error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Economy Admin: Reset Player
+  // ─────────────────────────────────────────────
+  app.post("/guild/:guildId/economy-admin/reset", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const userId = String(req.body.user_id || "").trim().replace(/[^0-9]/g, "");
+      if (!userId) return res.redirect(getModuleRedirect(guildId, "economy"));
+      await run(`UPDATE user_economy SET balance=0, bank=0 WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+      await run(`DELETE FROM user_inventory WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+      return res.redirect(getModuleRedirect(guildId, "economy"));
+    } catch (e) {
+      console.error("economy-admin reset error:", e);
+      return res.status(500).send("Internal Server Error");
+    }
+  });
+
+  // ─────────────────────────────────────────────
+  // Economy Admin: Look Up Player
+  // ─────────────────────────────────────────────
+  app.get("/guild/:guildId/economy-admin/lookup", requireGuildAdmin, async (req, res) => {
+    try {
+      const guildId = req.params.guildId;
+      const userId = String(req.query.user_id || "").trim().replace(/[^0-9]/g, "");
+      if (!userId) return res.redirect(getModuleRedirect(guildId, "economy"));
+      const eco = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, userId]);
+      const inv = await all(
+        `SELECT ui.item_id, ui.quantity, COALESCE(si.name, ui.item_id) as name
+         FROM user_inventory ui
+         LEFT JOIN economy_shop_items si ON si.item_id = ui.item_id AND si.guild_id = ui.guild_id
+         WHERE ui.guild_id=? AND ui.user_id=? AND ui.quantity > 0 ORDER BY ui.item_id`,
+        [guildId, userId]
+      );
+      const ecoSettings = await get(`SELECT * FROM economy_settings WHERE guild_id=?`, [guildId]);
+      const sym = ecoSettings?.currency_symbol || "🪙";
+      const balance = eco?.balance || 0;
+      const bank = eco?.bank || 0;
+      const invLines = inv.map(i => `${i.name} ×${i.quantity}`).join(", ") || "Empty";
+      // Render a simple info page (redirect back to economy with flash-style query)
+      res.send(`<!DOCTYPE html><html><head><title>Player Lookup</title><style>body{font-family:sans-serif;padding:40px;background:#1a1a2e;color:#e0e0e0;}a{color:#2ecc71;}table{border-collapse:collapse;}td,th{padding:8px 16px;border:1px solid #333;}th{background:#111;}</style></head><body>
+        <h2>Player Lookup — <code>${escapeHtml(userId)}</code></h2>
+        ${eco ? `<table>
+          <tr><th>Wallet</th><td>${sym}${balance.toLocaleString()}</td></tr>
+          <tr><th>Bank</th><td>${sym}${bank.toLocaleString()}</td></tr>
+          <tr><th>Total</th><td>${sym}${(balance+bank).toLocaleString()}</td></tr>
+          <tr><th>Inventory</th><td>${escapeHtml(invLines)}</td></tr>
+        </table>` : "<p>No economy data found for this user.</p>"}
+        <br><a href="/guild/${guildId}?module=economy">&larr; Back to Dashboard</a>
+      </body></html>`);
+    } catch (e) {
+      console.error("economy-admin lookup error:", e);
       return res.status(500).send("Internal Server Error");
     }
   });

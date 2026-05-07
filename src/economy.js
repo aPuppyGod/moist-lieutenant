@@ -379,11 +379,11 @@ async function cmdCraft(message, args, util) {
     }
   }
 
-  // Consume inputs
+  // Consume inputs (with quantity guard to prevent negative values)
   for (const input of recipe.inputs) {
     await runCmd(
-      `UPDATE user_inventory SET quantity=quantity-? WHERE guild_id=? AND user_id=? AND item_id=?`,
-      [input.qty, message.guild.id, message.author.id, input.item]
+      `UPDATE user_inventory SET quantity=quantity-? WHERE guild_id=? AND user_id=? AND item_id=? AND quantity >= ?`,
+      [input.qty, message.guild.id, message.author.id, input.item, input.qty]
     );
   }
 
@@ -1447,7 +1447,7 @@ async function handleDeath(message, util, deathMessage) {
 
     if (item) {
       await runCmd(
-        `UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=?`,
+        `UPDATE user_inventory SET quantity=quantity-1 WHERE guild_id=? AND user_id=? AND item_id=? AND quantity >= 1`,
         [message.guild.id, message.author.id, revival.item]
       );
       await message.reply({ embeds: [{ color: 0x9b59b6, title: "💀 Near Death...", description: `${deathMessage}\n\nBut... **${revival.name}** saves you!\n${revival.description}` }] }).catch(() => {});
@@ -3075,7 +3075,7 @@ async function cmdUse(message, args, util) {
   }
 
   if (consumed) {
-    await runCmd(`UPDATE user_inventory SET quantity = quantity - 1 WHERE guild_id=? AND user_id=? AND item_id=?`,
+    await runCmd(`UPDATE user_inventory SET quantity = quantity - 1 WHERE guild_id=? AND user_id=? AND item_id=? AND quantity >= 1`,
       [guildId, userId, inventoryItem.item_id]);
     await runCmd(`DELETE FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity <= 0`,
       [guildId, userId, inventoryItem.item_id]);
@@ -3167,11 +3167,11 @@ async function cmdGift(message, args, util) {
   const itemName = args.slice(1).filter(a => !a.startsWith("<@")).join(" ").toLowerCase();
 
   const inventoryItem = await getCmd(`
-    SELECT ui.quantity, si.name, si.item_type, si.item_image_url, si.item_id
+    SELECT ui.quantity, COALESCE(si.name, ui.item_id) as name, si.item_type, si.item_image_url, ui.item_id
     FROM user_inventory ui
-    JOIN economy_shop_items si ON si.item_id = ui.item_id AND si.guild_id = ui.guild_id
+    LEFT JOIN economy_shop_items si ON si.item_id = ui.item_id AND si.guild_id = ui.guild_id
     WHERE ui.guild_id=? AND ui.user_id=?
-      AND (LOWER(si.name) LIKE ? OR si.item_id LIKE ?)
+      AND (LOWER(COALESCE(si.name, ui.item_id)) LIKE ? OR ui.item_id LIKE ?)
       AND ui.quantity > 0
   `, [message.guild.id, message.author.id, `%${itemName}%`, `%${itemName}%`]);
 

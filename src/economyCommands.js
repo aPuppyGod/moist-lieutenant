@@ -6,6 +6,39 @@ const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("
 const { get, all, run } = require("./db");
 const { cmdRobBank } = require("./economy");
 
+// ─── Static item name/description fallback for items not in economy_shop_items ───
+// Used in inventory display so explore/illegal items are never invisible.
+const ITEM_FALLBACK_META = {
+  // Garden explore loot
+  "tagihagen_pebble":     { name: "🪨 Tagihagen Pebble",    description: "A smooth pebble from the Tagihagen Garden.",              item_type: "collectible" },
+  "mossy_coin":           { name: "🪙 Mossy Coin",           description: "An old coin encrusted with garden moss.",                  item_type: "collectible" },
+  "garden_shard":         { name: "💠 Garden Shard",         description: "A crystalline fragment found in the garden soil.",         item_type: "material"    },
+  "rabbit_fur":           { name: "🐇 Rabbit Fur",           description: "Soft fur shed by a garden rabbit.",                        item_type: "material"    },
+  "bioluminite":          { name: "🔮 Bioluminite",          description: "A glowing mineral from deep beneath the garden.",          item_type: "material"    },
+  "glowfish":             { name: "🐟 Glowfish",             description: "A luminescent fish from the garden pond.",                 item_type: "collectible" },
+  "wild_honeycomb":       { name: "🍯 Wild Honeycomb",       description: "Honeycomb harvested from a wild garden hive.",            item_type: "material"    },
+  "beeswax_chunk":        { name: "🕯️ Beeswax Chunk",        description: "A solid chunk of beeswax from the garden.",              item_type: "material"    },
+  "pollen_sac":           { name: "🌼 Pollen Sac",           description: "A sac of flower pollen collected from the garden.",       item_type: "material"    },
+  "seed_packet":          { name: "🌱 Seed Packet",          description: "A small packet of garden seeds.",                         item_type: "material"    },
+  "herb_cutting":         { name: "🌿 Herb Cutting",         description: "A fresh cutting of an aromatic garden herb.",             item_type: "material"    },
+  "tagihagen_turnip":     { name: "🌱 Tagihagen Turnip",     description: "A stout turnip grown in Tagihagen Garden soil.",          item_type: "material"    },
+  "old_map_fragment":     { name: "🗺️ Map Fragment",         description: "A torn piece of an old treasure map.",                   item_type: "collectible" },
+  "fairy_dust":           { name: "✨ Fairy Dust",           description: "Shimmering dust left by garden fairies.",                 item_type: "material"    },
+  "tagihagen_mushroom":   { name: "🍄 Tagihagen Mushroom",   description: "A rare mushroom that only grows in Tagihagen Garden.",   item_type: "material"    },
+  "well_water":           { name: "💧 Well Water",           description: "Fresh water drawn from the old garden well.",             item_type: "material"    },
+  "carrot":               { name: "🥕 Carrot",               description: "A bright orange carrot pulled from the garden patch.",   item_type: "material"    },
+  // Illegal beehive output
+  "honeycomb":            { name: "🍯 Honeycomb",            description: "Rich honeycomb harvested from your beehive. Used in mead brewing.", item_type: "material" },
+  // Illegal grape vine output
+  "grape":                { name: "🍇 Grape",                description: "Fresh grapes harvested from your grape vine. Used in wine brewing.", item_type: "material" },
+  // Illegal brew outputs
+  "ale_bottle":           { name: "🍺 Ale Bottle",           description: "A bottle of home-brewed ale. Sell for profit.",           item_type: "collectible" },
+  "apple_cider_bottle":   { name: "🍏 Apple Cider Bottle",   description: "A bottle of fermented apple cider. Sell for profit.",    item_type: "collectible" },
+  "berry_wine_bottle":    { name: "🍷 Berry Wine Bottle",    description: "A bottle of berry wine. Sell for profit.",               item_type: "collectible" },
+  "wine_bottle":          { name: "🍾 Wine Bottle",          description: "A bottle of grape wine. Sell for profit.",               item_type: "collectible" },
+  "mead_bottle":          { name: "🍯 Mead Bottle",          description: "A bottle of honeymead. The finest illegal brew.",        item_type: "collectible" },
+};
+
 // ─────────────────────────────────────────────────────
 // Helpers (duplicated from commands.js for module isolation)
 // ─────────────────────────────────────────────────────
@@ -1391,11 +1424,27 @@ async function cmdInventory(message) {
   const items = await all(`
     SELECT ui.item_id, ui.quantity, si.name, si.description, si.item_type, si.use_effect, si.item_image_url
     FROM user_inventory ui
-    JOIN economy_shop_items si ON ui.item_id = si.item_id AND ui.guild_id = si.guild_id
+    LEFT JOIN economy_shop_items si ON ui.item_id = si.item_id AND ui.guild_id = si.guild_id
     WHERE ui.guild_id=? AND ui.user_id=? AND ui.quantity > 0
   `, [message.guild.id, message.author.id]);
 
-  if (items.length === 0) {
+  // Apply fallback metadata for items not in the shop table
+  const resolvedItems = items.map(item => {
+    if (!item.name) {
+      const fallback = ITEM_FALLBACK_META[item.item_id];
+      return {
+        ...item,
+        name: fallback?.name || item.item_id.replace(/_/g, " "),
+        description: fallback?.description || "An item in your inventory.",
+        item_type: fallback?.item_type || "misc",
+        use_effect: null,
+        item_image_url: null,
+      };
+    }
+    return item;
+  });
+
+  if (resolvedItems.length === 0) {
     await message.reply({ embeds: [{ color: 0x3498db, description: "🎒 Your inventory is empty!" }] }).catch(() => {});
     return;
   }
@@ -1405,13 +1454,13 @@ async function cmdInventory(message) {
   let compact = false;
   let page = 0;
 
-  const getPageCount = () => Math.ceil(items.length / (compact ? PAGE_SIZE_COMPACT : PAGE_SIZE_FULL));
+  const getPageCount = () => Math.ceil(resolvedItems.length / (compact ? PAGE_SIZE_COMPACT : PAGE_SIZE_FULL));
 
   const buildEmbed = () => {
     const pageSize = compact ? PAGE_SIZE_COMPACT : PAGE_SIZE_FULL;
-    const total = Math.ceil(items.length / pageSize);
-    const slice = items.slice(page * pageSize, (page + 1) * pageSize);
-    const previewItem = items.find(i => i.item_image_url);
+    const total = Math.ceil(resolvedItems.length / pageSize);
+    const slice = resolvedItems.slice(page * pageSize, (page + 1) * pageSize);
+    const previewItem = resolvedItems.find(i => i.item_image_url);
 
     const lines = slice.map(item => {
       const useHint = item.use_effect && !["fishing_rod", "shovel", "prestige_use", "revival_potion"].includes(item.use_effect)
@@ -1428,7 +1477,7 @@ async function cmdInventory(message) {
       .setTitle(`🎒 Your Inventory${compact ? " — Compact" : ""}`)
       .setDescription(lines.join(compact ? "\n" : "\n\n"))
       .setThumbnail(previewItem?.item_image_url || null)
-      .setFooter({ text: `Page ${page + 1}/${total} • ${items.length} items total` });
+      .setFooter({ text: `Page ${page + 1}/${total} • ${resolvedItems.length} items total` });
   };
 
   const buildRow = () => {
@@ -1498,9 +1547,105 @@ async function cmdEcoAdmin(message, args) {
 
   const ecoSettings = await getEconomySettings(guildId);
   const sym = ecoSettings?.currency_symbol || "🪙";
+  const curName = ecoSettings?.currency_name || "coins";
 
-  if (!["give", "take", "set", "reset"].includes(sub)) {
-    await message.reply({ embeds: [{ color: 0x95a5a6, description: "Usage: `!ecoadmin give|take|set|reset <@user> [amount]`" }] }).catch(() => {});
+  const VALID_SUBS = ["give", "take", "set", "reset", "giveitem", "removeitem", "check", "setbank", "givebank"];
+  if (!VALID_SUBS.includes(sub)) {
+    const usage = [
+      "**Wallet:**",
+      "`!ecoadmin give <@user> <amount>` — add to wallet",
+      "`!ecoadmin take <@user> <amount>` — remove from wallet",
+      "`!ecoadmin set <@user> <amount>` — set wallet",
+      "`!ecoadmin givebank <@user> <amount>` — add to bank",
+      "`!ecoadmin setbank <@user> <amount>` — set bank balance",
+      "",
+      "**Items:**",
+      "`!ecoadmin giveitem <@user> <item_id> [qty]` — give item(s)",
+      "`!ecoadmin removeitem <@user> <item_id> [qty]` — remove item(s)",
+      "",
+      "**Info:**",
+      "`!ecoadmin check <@user>` — view player economy + inventory",
+      "`!ecoadmin reset <@user>` — wipe wallet, bank, inventory",
+    ].join("\n");
+    await message.reply({ embeds: [{ color: 0x95a5a6, title: "⚙️ Economy Admin", description: usage }] }).catch(() => {});
+    return;
+  }
+
+  // --- check: show full economy info ---
+  if (sub === "check") {
+    const found = await pickUserSmart(message, args[1]);
+    if (!found?.member) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "User not found." }] }).catch(() => {});
+      return;
+    }
+    const target = found.member;
+    const targetId = target.user.id;
+    const eco = await get(`SELECT * FROM user_economy WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
+    const invItems = await all(
+      `SELECT ui.item_id, ui.quantity, COALESCE(si.name, ui.item_id) as name
+       FROM user_inventory ui
+       LEFT JOIN economy_shop_items si ON si.item_id = ui.item_id AND si.guild_id = ui.guild_id
+       WHERE ui.guild_id=? AND ui.user_id=? AND ui.quantity > 0
+       ORDER BY ui.item_id`,
+      [guildId, targetId]
+    );
+    const cls = await get(`SELECT class_id FROM user_class WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
+    const invLines = invItems.length
+      ? invItems.map(i => `• **${i.name}** ×${i.quantity}`).join("\n")
+      : "*empty*";
+    await message.reply({ embeds: [new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(`🔍 Economy Check — ${target.user.tag}`)
+      .addFields(
+        { name: "💵 Wallet", value: `${sym}${(eco?.balance || 0).toLocaleString()}`, inline: true },
+        { name: "🏦 Bank", value: `${sym}${(eco?.bank || 0).toLocaleString()}`, inline: true },
+        { name: "🏅 Class", value: cls?.class_id || "none", inline: true },
+        { name: "🎒 Inventory", value: invLines.length > 1024 ? invLines.slice(0, 1020) + "…" : invLines },
+      )
+    ] }).catch(() => {});
+    return;
+  }
+
+  // --- giveitem / removeitem ---
+  if (sub === "giveitem" || sub === "removeitem") {
+    const found = await pickUserSmart(message, args[1]);
+    if (!found?.member) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: "User not found." }] }).catch(() => {});
+      return;
+    }
+    const target = found.member;
+    const targetId = target.user.id;
+    const itemId = String(args[2] || "").toLowerCase().trim();
+    if (!itemId) {
+      await message.reply({ embeds: [{ color: 0xe74c3c, description: `Usage: \`!ecoadmin ${sub} <@user> <item_id> [qty]\`` }] }).catch(() => {});
+      return;
+    }
+    const qty = Math.max(1, parseInt(args[3], 10) || 1);
+
+    await run(
+      `INSERT INTO user_economy (guild_id, user_id, balance, bank) VALUES (?, ?, 0, 0) ON CONFLICT (guild_id, user_id) DO NOTHING`,
+      [guildId, targetId]
+    );
+
+    if (sub === "giveitem") {
+      await run(
+        `INSERT INTO user_inventory (guild_id, user_id, item_id, quantity)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (guild_id, user_id, item_id) DO UPDATE SET quantity = user_inventory.quantity + ?`,
+        [guildId, targetId, itemId, qty, qty]
+      );
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Gave **${qty}x ${itemId}** to **${target.user.tag}**.` }] }).catch(() => {});
+    } else {
+      await run(
+        `UPDATE user_inventory SET quantity = MAX(0, quantity - ?) WHERE guild_id=? AND user_id=? AND item_id=?`,
+        [qty, guildId, targetId, itemId]
+      );
+      await run(
+        `DELETE FROM user_inventory WHERE guild_id=? AND user_id=? AND item_id=? AND quantity <= 0`,
+        [guildId, targetId, itemId]
+      );
+      await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Removed **${qty}x ${itemId}** from **${target.user.tag}**.` }] }).catch(() => {});
+    }
     return;
   }
 
@@ -1521,7 +1666,8 @@ async function cmdEcoAdmin(message, args) {
 
   if (sub === "reset") {
     await run(`UPDATE user_economy SET balance=0, bank=0 WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
-    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Reset economy for ${target.user.tag}.` }] }).catch(() => {});
+    await run(`DELETE FROM user_inventory WHERE guild_id=? AND user_id=?`, [guildId, targetId]);
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Reset wallet, bank, and inventory for **${target.user.tag}**.` }] }).catch(() => {});
     return;
   }
 
@@ -1533,19 +1679,31 @@ async function cmdEcoAdmin(message, args) {
 
   if (sub === "give") {
     await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
-    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Gave ${sym}${amount.toLocaleString()} to ${target.user.tag}.` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Gave ${sym}${amount.toLocaleString()} ${curName} to **${target.user.tag}**'s wallet.` }] }).catch(() => {});
     return;
   }
 
   if (sub === "take") {
     await run(`UPDATE user_economy SET balance=GREATEST(0, balance-?) WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
-    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Removed ${sym}${amount.toLocaleString()} from ${target.user.tag}.` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Removed ${sym}${amount.toLocaleString()} ${curName} from **${target.user.tag}**'s wallet.` }] }).catch(() => {});
     return;
   }
 
   if (sub === "set") {
     await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
-    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Set ${target.user.tag}'s wallet to ${sym}${amount.toLocaleString()}.` }] }).catch(() => {});
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Set **${target.user.tag}**'s wallet to ${sym}${amount.toLocaleString()} ${curName}.` }] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "givebank") {
+    await run(`UPDATE user_economy SET bank=bank+? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Deposited ${sym}${amount.toLocaleString()} ${curName} into **${target.user.tag}**'s bank.` }] }).catch(() => {});
+    return;
+  }
+
+  if (sub === "setbank") {
+    await run(`UPDATE user_economy SET bank=? WHERE guild_id=? AND user_id=?`, [amount, guildId, targetId]);
+    await message.reply({ embeds: [{ color: 0x2ecc71, description: `✅ Set **${target.user.tag}**'s bank to ${sym}${amount.toLocaleString()} ${curName}.` }] }).catch(() => {});
     return;
   }
 }

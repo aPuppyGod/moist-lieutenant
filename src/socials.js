@@ -2,6 +2,12 @@ const crypto = require("crypto");
 const express = require("express");
 const { all, get, run } = require("./db");
 
+const LOW_COST_MODE = process.env.LOW_COST_MODE === "true";
+const parsedPollInterval = Number.parseInt(String(process.env.SOCIAL_POLL_INTERVAL_MS || ""), 10);
+const SOCIAL_POLL_INTERVAL_MS = Number.isFinite(parsedPollInterval) && parsedPollInterval > 0
+  ? parsedPollInterval
+  : (LOW_COST_MODE ? 600_000 : 120_000);
+
 const SOCIAL_PLATFORM_OPTIONS = [
   { key: "youtube", label: "YouTube" },
   { key: "twitch", label: "Twitch" },
@@ -949,7 +955,7 @@ function startSocialFeedNotifier(client, app = null) {
     runSocialNotifierTick(client).catch((err) => {
       console.error("[socials] Poll interval failed:", err);
     });
-  }, 120_000);
+  }, SOCIAL_POLL_INTERVAL_MS);
 }
 
 module.exports = {

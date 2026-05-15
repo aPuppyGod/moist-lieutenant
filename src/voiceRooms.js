@@ -2,8 +2,125 @@
 const { ChannelType, PermissionsBitField } = require("discord.js");
 const { get, run, all } = require("./db");
 
+// In-memory tracking for voice-chat cleanup sessions.
+// Key format: `${guildId}:${channelId}`
+const vcSessionStartedAt = new Map();
+const vcEmptyCleanupTimers = new Map();
+
 function minutesToMs(m) {
   return m * 60 * 1000;
+}
+
+function vcKey(guildId, channelId) {
+  return `${guildId}:${channelId}`;
+}
+
+function isVoiceLikeChannel(channel) {
+  if (!channel) return false;
+  return channel.type === ChannelType.GuildVoice || channel.type === ChannelType.GuildStageVoice;
+}
+
+async function purgeVcSessionChat(channel, sessionStartedAt) {
+  // Text-in-voice exists only when the channel is text-based with a messages manager.
+  if (!channel || typeof channel.isTextBased !== "function" || !channel.isTextBased() || !channel.messages) {
+    return;
+  }
+
+  const cutoff = Number(sessionStartedAt || 0);
+  if (!cutoff) return;
+
+  let before;
+  let scanned = 0;
+
+  // Walk message history in chunks and delete only the current session's chat.
+  while (true) {
+    const batch = await channel.messages
+      .fetch({ limit: 100, ...(before ? { before } : {}) })
+      .catch(() => null);
+    if (!batch || batch.size === 0) break;
+
+    const messages = [...batch.values()];
+    scanned += messages.length;
+    before = messages[messages.length - 1]?.id;
+
+    const toDelete = messages.filter((msg) => Number(msg.createdTimestamp || 0) >= cutoff);
+
+    if (toDelete.length) {
+      // Bulk delete recent messages when possible; fallback to per-message delete.
+      const youngerThan14Days = toDelete.every((msg) => Date.now() - Number(msg.createdTimestamp || 0) < 14 * 24 * 60 * 60 * 1000);
+      if (youngerThan14Days && typeof channel.bulkDelete === "function") {
+        await channel.bulkDelete(toDelete.map((m) => m.id), true).catch(() => {});
+      } else {
+        for (const msg of toDelete) {
+          await msg.delete().catch(() => {});
+        }
+      }
+    }
+
+    // Once we've reached messages older than the session start, stop scanning.
+    const oldestInBatchTs = Number(messages[messages.length - 1]?.createdTimestamp || 0);
+    if (!oldestInBatchTs || oldestInBatchTs < cutoff) break;
+
+    // Safety guard to avoid scanning excessive history if timestamps are odd.
+    if (scanned >= 1000) break;
+  }
+}
+
+function cancelVcEmptyCleanup(guildId, channelId) {
+  const key = vcKey(guildId, channelId);
+  const existing = vcEmptyCleanupTimers.get(key);
+  if (existing) {
+    clearTimeout(existing);
+    vcEmptyCleanupTimers.delete(key);
+  }
+}
+
+function scheduleVcEmptyCleanup(guild, channel, minutes) {
+  const key = vcKey(guild.id, channel.id);
+  cancelVcEmptyCleanup(guild.id, channel.id);
+
+  const timer = setTimeout(async () => {
+    vcEmptyCleanupTimers.delete(key);
+
+    const fresh = await guild.channels.fetch(channel.id).catch(() => null);
+    if (!fresh || !isVoiceLikeChannel(fresh)) {
+      vcSessionStartedAt.delete(key);
+      return;
+    }
+
+    // Abort cleanup if anyone joined back.
+    if ((fresh.members?.size || 0) > 0) return;
+
+    const sessionStartedAt = vcSessionStartedAt.get(key);
+    await purgeVcSessionChat(fresh, sessionStartedAt).catch(() => {});
+
+    // Session ended and cleaned.
+    vcSessionStartedAt.delete(key);
+  }, minutesToMs(minutes));
+
+  vcEmptyCleanupTimers.set(key, timer);
+}
+
+function updateVcSessionState(guild, channel) {
+  if (!isVoiceLikeChannel(channel)) return;
+
+  const key = vcKey(guild.id, channel.id);
+  const memberCount = channel.members?.size || 0;
+
+  if (memberCount > 0) {
+    // Session starts when first user is present and no active session exists.
+    if (!vcSessionStartedAt.has(key)) {
+      vcSessionStartedAt.set(key, Date.now());
+    }
+    cancelVcEmptyCleanup(guild.id, channel.id);
+    return;
+  }
+
+  // Channel is empty: schedule session chat cleanup if we had an active session.
+  if (vcSessionStartedAt.has(key)) {
+    const emptyMinutes = parseInt(process.env.VC_CHAT_EMPTY_CLEANUP_MINUTES || "5", 10);
+    scheduleVcEmptyCleanup(guild, channel, Math.max(1, emptyMinutes));
+  }
 }
 
 async function onVoiceStateUpdate(oldState, newState, client) {
@@ -16,6 +133,14 @@ async function onVoiceStateUpdate(oldState, newState, client) {
 
   const botId = client.user?.id;
   if (!botId) return;
+
+  // Keep generic voice-session state for VC chat cleanup.
+  if (oldState.channelId && oldState.channelId !== newState.channelId && oldState.channel) {
+    updateVcSessionState(guild, oldState.channel);
+  }
+  if (newState.channelId && newState.channel) {
+    updateVcSessionState(guild, newState.channel);
+  }
 
   // ─────────────────────────────────────────────
   // 1) If user joined the "create a private vc" channel, create VC + paired text channel

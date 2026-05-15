@@ -115,6 +115,11 @@ function fmtCd(ms) {
   return `${Math.floor(ms / 60000)}m ${Math.ceil((ms % 60000) / 1000)}s`;
 }
 
+function toSafeInt(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
 // ─────────────────────────────────────────────────────
 // ECONOMY: BALANCE & REWARDS
 // ─────────────────────────────────────────────────────
@@ -754,13 +759,14 @@ async function cmdSlots(message, args) {
     return;
   }
 
-  const bet = parseInt(args[0]);
+  const bet = parseInt(args[0], 10);
+  const wallet = toSafeInt(economy.balance);
   if (isNaN(bet) || bet <= 0) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid bet amount." }] }).catch(() => {});
     return;
   }
 
-  if (economy.balance < bet) {
+  if (wallet < bet) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
@@ -792,7 +798,7 @@ async function cmdSlots(message, args) {
   }
 
   const winnings = Math.floor(bet * multiplier) - bet;
-  const newBalance = economy.balance + winnings;
+  const newBalance = wallet + winnings;
 
   setCd('slots', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
@@ -829,8 +835,9 @@ async function cmdCoinflip(message, args) {
     return;
   }
 
-  const bet = parseInt(args[0]);
+  const bet = parseInt(args[0], 10);
   const choice = args[1]?.toLowerCase();
+  const wallet = toSafeInt(economy.balance);
 
   if (isNaN(bet) || bet <= 0) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid bet amount." }] }).catch(() => {});
@@ -842,7 +849,7 @@ async function cmdCoinflip(message, args) {
     return;
   }
 
-  if (economy.balance < bet) {
+  if (wallet < bet) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
@@ -857,7 +864,7 @@ async function cmdCoinflip(message, args) {
   const userChoice = choice === "h" ? "heads" : choice === "t" ? "tails" : choice;
   const won = flip === userChoice;
   const winnings = won ? bet : -bet;
-  const newBalance = economy.balance + winnings;
+  const newBalance = wallet + winnings;
 
   setCd('coinflip', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);
@@ -894,8 +901,9 @@ async function cmdDice(message, args) {
     return;
   }
 
-  const bet = parseInt(args[0]);
-  const guess = parseInt(args[1]);
+  const bet = parseInt(args[0], 10);
+  const guess = parseInt(args[1], 10);
+  const wallet = toSafeInt(economy.balance);
 
   if (isNaN(bet) || bet <= 0) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: "❌ Please specify a valid bet amount." }] }).catch(() => {});
@@ -907,7 +915,7 @@ async function cmdDice(message, args) {
     return;
   }
 
-  if (economy.balance < bet) {
+  if (wallet < bet) {
     await message.reply({ embeds: [{ color: 0xe74c3c, description: `❌ You don't have enough ${economySettings.currency_name}!` }] }).catch(() => {});
     return;
   }
@@ -921,7 +929,7 @@ async function cmdDice(message, args) {
   const roll = Math.floor(Math.random() * 6) + 1;
   const won = roll === guess;
   const winnings = won ? bet * 5 : -bet;
-  const newBalance = economy.balance + winnings;
+  const newBalance = wallet + winnings;
 
   setCd('dice', message.guild.id, message.author.id);
   await run(`UPDATE user_economy SET balance=? WHERE guild_id=? AND user_id=?`, [newBalance, message.guild.id, message.author.id]);

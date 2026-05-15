@@ -17,7 +17,6 @@ const {
   TextInputBuilder,
   TextInputStyle
 } = require("discord.js");
-const { createCanvas } = require("canvas");
 
 const { initDb, get, run, all } = require("./db");
 const { levelFromXp } = require("./xp");
@@ -40,6 +39,21 @@ const { handleTicketInteraction } = require("./tickets");
 const unidecode = require('unidecode');
 const fs = require("fs");
 const path = require("path");
+
+let createCanvasFn = null;
+function getCreateCanvas() {
+  if (!createCanvasFn) {
+    ({ createCanvas: createCanvasFn } = require("canvas"));
+  }
+  return createCanvasFn;
+}
+
+const LOW_COST_MODE = process.env.LOW_COST_MODE === "true";
+const ENABLE_DASHBOARD = process.env.ENABLE_DASHBOARD !== "false";
+const ENABLE_SOCIAL_NOTIFIER = process.env.ENABLE_SOCIAL_NOTIFIER
+  ? process.env.ENABLE_SOCIAL_NOTIFIER === "true"
+  : !LOW_COST_MODE;
+const schedulerInterval = (defaultMs, lowCostMs) => (LOW_COST_MODE ? lowCostMs : defaultMs);
 
 process.on("unhandledRejection", (reason) => {
   console.error("[process] Unhandled promise rejection:", reason);
@@ -923,7 +937,7 @@ async function buildLogSummaryImage(guild, payload, actorUserId) {
   if (!user) return null;
 
   const displayName = member?.displayName || user.globalName || user.username || "Unknown";
-  const canvas = createCanvas(980, 230);
+  const canvas = getCreateCanvas()(980, 230);
   const ctx = canvas.getContext("2d");
 
   ctx.fillStyle = "#111318";
@@ -1527,11 +1541,25 @@ async function handleLevelUp(guild, userId, oldLevel, newLevel, message = null) 
       // Ensure economy row exists
       await run(`INSERT INTO user_economy (guild_id, user_id, balance) VALUES (?, ?, 0) ON CONFLICT (guild_id, user_id) DO NOTHING`, [guild.id, userId]);
       await run(`UPDATE user_economy SET balance=balance+? WHERE guild_id=? AND user_id=?`, [reward, guild.id, userId]);
-      // Notify in level-up channel or message channel
+      // Notify in bonus channel if configured; otherwise level-up channel; otherwise message channel
       if (message) {
         const sym = ecoSettings.currency_symbol || "🪙";
         const name = ecoSettings.currency_name || "coins";
-        await message.channel.send({ embeds: [{ color: 0xf1c40f, description: `${sym} <@${userId}> reached **Level ${newLevel}** and earned **${reward} ${name}** as a level-up bonus!` }] }).catch(() => {});
+        let rewardChannel = message.channel;
+
+        if (settings.level_up_bonus_channel_id) {
+          const ch = await guild.channels.fetch(settings.level_up_bonus_channel_id).catch(() => null);
+          if (ch && typeof ch.isTextBased === "function" && ch.isTextBased()) {
+            rewardChannel = ch;
+          }
+        } else if (settings.level_up_channel_id) {
+          const ch = await guild.channels.fetch(settings.level_up_channel_id).catch(() => null);
+          if (ch && typeof ch.isTextBased === "function" && ch.isTextBased()) {
+            rewardChannel = ch;
+          }
+        }
+
+        await rewardChannel.send({ embeds: [{ color: 0xf1c40f, description: `${sym} <@${userId}> reached **Level ${newLevel}** and earned **${reward} ${name}** as a level-up bonus!` }] }).catch(() => {});
       }
     }
   } catch (e) {
@@ -1635,14 +1663,22 @@ client.once(Events.ClientReady, async () => {
       console.error("Slash command registration failed:", err);
     });
 
-    const dashboardApp = startDashboard(client);
-    startSocialFeedNotifier(client, dashboardApp);
+    const dashboardApp = ENABLE_DASHBOARD ? startDashboard(client) : null;
+    if (!ENABLE_DASHBOARD) {
+      console.log("[startup] Dashboard disabled via ENABLE_DASHBOARD=false");
+    }
+
+    if (ENABLE_SOCIAL_NOTIFIER) {
+      startSocialFeedNotifier(client, dashboardApp);
+    } else {
+      console.log("[startup] Social notifier disabled for low-cost mode");
+    }
 
     setInterval(() => {
       cleanupPrivateRooms(client).catch((err) => {
         console.error("cleanupPrivateRooms failed:", err);
       });
-    }, 30_000);
+    }, schedulerInterval(30_000, 180_000));
 
     // Check for ended giveaways every 30 seconds
     setInterval(async () => {
@@ -1656,7 +1692,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Giveaway check failed:", err);
       }
-    }, 30_000);
+    }, schedulerInterval(30_000, 120_000));
 
     // Check for due reminders every 15 seconds
     setInterval(async () => {
@@ -1705,7 +1741,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Reminder check failed:", err);
       }
-    }, 15_000);
+    }, schedulerInterval(15_000, 60_000));
 
     setInterval(async () => {
       try {
@@ -1735,7 +1771,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Temp role expiry check failed:", err);
       }
-    }, 30_000);
+    }, schedulerInterval(30_000, 120_000));
 
     setInterval(async () => {
       try {
@@ -1750,7 +1786,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Snipe cleanup failed:", err);
       }
-    }, 10 * 60_000);
+    }, schedulerInterval(10 * 60_000, 30 * 60_000));
 
     // Check for birthdays once a day at midnight (or on startup)
     const checkBirthdays = async () => {
@@ -1805,7 +1841,7 @@ client.once(Events.ClientReady, async () => {
     };
     
     checkBirthdays();
-    setInterval(checkBirthdays, 3600000);
+    setInterval(checkBirthdays, schedulerInterval(3_600_000, 21_600_000));
 
     // Auto-unban expired temporary bans
     setInterval(async () => {
@@ -1837,7 +1873,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Temp-ban scheduler failed:", err);
       }
-    }, 30_000);
+    }, schedulerInterval(30_000, 120_000));
 
     setInterval(async () => {
       try {
@@ -1887,7 +1923,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Member count update interval failed:", err);
       }
-    }, 300000); // 5 minutes
+    }, schedulerInterval(300_000, 1_800_000)); // 5 minutes (30 minutes in low-cost mode)
 
     // ─── Scheduled Messages ───
     setInterval(async () => {
@@ -1911,7 +1947,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Scheduled messages interval failed:", err);
       }
-    }, 60_000); // check every minute
+    }, schedulerInterval(60_000, 180_000)); // check every minute (3 minutes in low-cost mode)
 
     // ─── Passive income tick ───────────────────────────────────────────────────
     setInterval(async () => {
@@ -1955,7 +1991,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Passive income interval failed:", err);
       }
-    }, 300_000); // every 5 minutes
+    }, schedulerInterval(300_000, 600_000)); // every 5 minutes (10 minutes in low-cost mode)
 
     // ─── Lottery auto-draw (weekly) ────────────────────────────────────────────
     setInterval(async () => {
@@ -2006,7 +2042,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Lottery auto-draw failed:", err);
       }
-    }, 3_600_000); // every hour
+    }, schedulerInterval(3_600_000, 10_800_000)); // every hour (3 hours in low-cost mode)
 
     // ─── Bounty expiry ─────────────────────────────────────────────────────────
     setInterval(async () => {
@@ -2026,7 +2062,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Bounty expiry interval failed:", err);
       }
-    }, 1_800_000); // every 30 minutes
+    }, schedulerInterval(1_800_000, 3_600_000)); // every 30 minutes (60 minutes in low-cost mode)
 
     // ─── Active bankrob & heist resolution ─────────────────────────────────────
     setInterval(async () => {
@@ -2105,7 +2141,7 @@ client.once(Events.ClientReady, async () => {
       } catch (err) {
         console.error("Bankrob/heist resolution interval failed:", err);
       }
-    }, 30_000); // every 30 seconds
+    }, schedulerInterval(30_000, 120_000)); // every 30 seconds (2 minutes in low-cost mode)
 
   } catch (err) {
     console.error("ClientReady startup failed:", err);

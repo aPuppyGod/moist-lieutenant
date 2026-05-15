@@ -20,16 +20,27 @@ if (!DATABASE_URL) {
 
 console.log("[db] Initializing database connection pool...");
 
+function envPositiveInt(name, fallback) {
+  const parsed = Number.parseInt(String(process.env[name] || ""), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+const LOW_COST_MODE = process.env.LOW_COST_MODE === "true";
+const poolMax = envPositiveInt("PG_POOL_MAX", LOW_COST_MODE ? 3 : 10);
+const poolIdleTimeoutMs = envPositiveInt("PG_IDLE_TIMEOUT_MS", LOW_COST_MODE ? 10_000 : 30_000);
+const poolConnectTimeoutMs = envPositiveInt("PG_CONNECT_TIMEOUT_MS", 30_000);
+const statementTimeoutMs = envPositiveInt("PG_STATEMENT_TIMEOUT_MS", 30_000);
+
 // Recommended for Railway: use SSL if provided; Railway usually works without extra SSL config,
 // but leaving this as "auto" is safest.
 const pool = new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined,
   // Connection pool settings to handle timeouts better
-  connectionTimeoutMillis: 30000,  // 30 seconds to establish connection
-  idleTimeoutMillis: 30000,        // 30 seconds idle before closing
-  max: 20,                          // Max connections in pool
-  statement_timeout: 30000,         // Query timeout in milliseconds
+  connectionTimeoutMillis: poolConnectTimeoutMs,
+  idleTimeoutMillis: poolIdleTimeoutMs,
+  max: poolMax,
+  statement_timeout: statementTimeoutMs,
   keepAlive: true
 });
 
@@ -233,6 +244,7 @@ async function initDb() {
       social_default_channel_id TEXT DEFAULT NULL,
 
       level_up_channel_id TEXT DEFAULT NULL,
+      level_up_bonus_channel_id TEXT DEFAULT NULL,
       level_up_message TEXT DEFAULT NULL,
 
       member_count_channel_id TEXT DEFAULT NULL,
@@ -1071,6 +1083,7 @@ async function initDb() {
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_summary_cards_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS log_quick_mod_actions_enabled INTEGER DEFAULT 1`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS social_default_channel_id TEXT DEFAULT NULL`);
+    await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS level_up_bonus_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS member_count_channel_id TEXT DEFAULT NULL`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS modmail_enabled INTEGER DEFAULT 0`);
     await run(`ALTER TABLE guild_settings ADD COLUMN IF NOT EXISTS modmail_channel_id TEXT DEFAULT NULL`);

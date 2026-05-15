@@ -61,6 +61,7 @@ async function getGuildSettings(guildId) {
     afk_enabled: Number(row?.afk_enabled ?? 1) === 1,
 
     level_up_channel_id: row?.level_up_channel_id ?? null,
+    level_up_bonus_channel_id: row?.level_up_bonus_channel_id ?? null,
 
     // ✅ EXACT message, spelling preserved
     level_up_message: row?.level_up_message ?? DEFAULT_LEVEL_UP_MESSAGE
@@ -108,6 +109,7 @@ async function updateGuildSettings(guildId, patch) {
     "snipe_retention_minutes",
     "afk_enabled",
     "level_up_channel_id",
+    "level_up_bonus_channel_id",
     "level_up_message"
   ]);
 

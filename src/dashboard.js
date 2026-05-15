@@ -5575,6 +5575,18 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
         </label>
         <br/><br/>
 
+        <label>Level-up Bonus Channel (coins message)
+          <select name="level_up_bonus_channel_id">
+            <option value="" ${!settings.level_up_bonus_channel_id ? "selected" : ""}>Same as level-up channel (fallback: source channel)</option>
+            ${textChannels.map(ch => `
+              <option value="${ch.id}" ${settings.level_up_bonus_channel_id === ch.id ? "selected" : ""}>
+                #${escapeHtml(ch.name)}
+              </option>
+            `).join("")}
+          </select>
+        </label>
+        <br/><br/>
+
         <label>
           Level-up Message (supports {user}, {level}, {xp}, {role:ID}, {channel:ID})<br/>
           <input name="level_up_message"
@@ -9096,10 +9108,12 @@ app.post("/lop/customize", upload.single("bgimage"), async (req, res) => {
       const guildId = req.params.guildId;
 
       const level_up_channel_id = String(req.body.level_up_channel_id || "").trim();
+      const level_up_bonus_channel_id = String(req.body.level_up_bonus_channel_id || "").trim();
       const level_up_message = String(req.body.level_up_message || "").trim();
 
       await updateGuildSettings(guildId, {
         level_up_channel_id: level_up_channel_id || null,
+        level_up_bonus_channel_id: level_up_bonus_channel_id || null,
         level_up_message
       });
 

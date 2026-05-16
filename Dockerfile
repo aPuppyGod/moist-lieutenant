@@ -42,8 +42,9 @@ COPY --from=build /app/package*.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/src ./src
 COPY --from=build /app/assets ./assets
-COPY --from=build /app/uploads ./uploads
 COPY --from=build /app/guild_page_new.html ./guild_page_new.html
+
+RUN mkdir -p /app/uploads
 
 EXPOSE 3000
 

@@ -32,8 +32,6 @@ const { getAntiNukeExemptions } = require("./settings");
 const { getReactionRoleQuestion, getReactionRoleOptions } = require("./settings");
 const { touchTicketActivity } = require("./settings");
 const { findRecentModAction } = require("./modActionTracker");
-const { startDashboard } = require("./dashboard");
-const { startSocialFeedNotifier } = require("./socials");
 const { applyReactionRoleOnAdd, applyReactionRoleOnRemove } = require("./reactionRoles");
 const { handleTicketInteraction } = require("./tickets");
 const unidecode = require('unidecode');
@@ -1663,13 +1661,15 @@ client.once(Events.ClientReady, async () => {
       console.error("Slash command registration failed:", err);
     });
 
-    const dashboardApp = ENABLE_DASHBOARD ? startDashboard(client) : null;
+    const dashboardApp = ENABLE_DASHBOARD
+      ? require("./dashboard").startDashboard(client)
+      : null;
     if (!ENABLE_DASHBOARD) {
       console.log("[startup] Dashboard disabled via ENABLE_DASHBOARD=false");
     }
 
     if (ENABLE_SOCIAL_NOTIFIER) {
-      startSocialFeedNotifier(client, dashboardApp);
+      require("./socials").startSocialFeedNotifier(client, dashboardApp);
     } else {
       console.log("[startup] Social notifier disabled for low-cost mode");
     }

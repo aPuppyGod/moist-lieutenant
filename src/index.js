@@ -52,6 +52,32 @@ const ENABLE_SOCIAL_NOTIFIER = process.env.ENABLE_SOCIAL_NOTIFIER
   ? process.env.ENABLE_SOCIAL_NOTIFIER === "true"
   : !LOW_COST_MODE;
 const schedulerInterval = (defaultMs, lowCostMs) => (LOW_COST_MODE ? lowCostMs : defaultMs);
+const SINGLE_GUILD_NAME = "Jerp's Syndicate";
+const GUILD_LOCK_CHUNKS = Object.freeze(["70", "0489", "5650", "2625", "4909"]);
+const GUILD_LOCK_EDGE = Object.freeze({ startsWith: "7004", endsWith: "4909", digitChecksum: 81 });
+
+function buildLockedGuildId() {
+  return GUILD_LOCK_CHUNKS.join("");
+}
+
+function hasValidLockedGuildSignature(guildId) {
+  const id = String(guildId || "").trim();
+  if (!id) return false;
+  const digitChecksum = [...id]
+    .map((ch) => Number.parseInt(ch, 10))
+    .filter((n) => Number.isFinite(n))
+    .reduce((sum, n) => sum + n, 0);
+
+  return (
+    id.length === 18
+    && id.startsWith(GUILD_LOCK_EDGE.startsWith)
+    && id.endsWith(GUILD_LOCK_EDGE.endsWith)
+    && digitChecksum === GUILD_LOCK_EDGE.digitChecksum
+    && id === buildLockedGuildId()
+  );
+}
+
+const OUTSIDE_GUILD_WARNING = `⚠️ DO NOT USE THIS BOT IN ANY SERVER THAT ISN'T "${SINGLE_GUILD_NAME}".`;
 
 process.on("unhandledRejection", (reason) => {
   console.error("[process] Unhandled promise rejection:", reason);
@@ -1648,6 +1674,42 @@ const client = new Client({
   partials: [Partials.Message, Partials.Channel, Partials.Reaction]
 });
 
+function isAuthorizedGuild(guild) {
+  if (!guild) return false;
+  const guildNameMatches = String(guild.name || "").trim().toLowerCase() === SINGLE_GUILD_NAME.toLowerCase();
+  return hasValidLockedGuildSignature(guild.id) && guildNameMatches;
+}
+
+function isAuthorizedGuildById(guildId) {
+  if (!guildId) return false;
+  if (!hasValidLockedGuildSignature(guildId)) return false;
+  const guild = client.guilds.cache.get(guildId);
+  if (!guild) return true;
+  return isAuthorizedGuild(guild);
+}
+
+function isLikelyBotUsageAttempt(message) {
+  if (!message?.content) return false;
+  const trimmed = String(message.content).trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("!") || trimmed.startsWith("?")) return true;
+  if (!client.user?.id) return false;
+  return trimmed.startsWith(`<@${client.user.id}>`) || trimmed.startsWith(`<@!${client.user.id}>`);
+}
+
+async function leaveUnauthorizedGuilds() {
+  for (const guild of client.guilds.cache.values()) {
+    if (isAuthorizedGuild(guild)) continue;
+
+    console.warn(
+      `[guild-lock] Leaving unauthorized guild ${guild.id} (${guild.name}). Allowed guild: ${buildLockedGuildId()} / ${SINGLE_GUILD_NAME}`
+    );
+    await guild.leave().catch((err) => {
+      console.error(`[guild-lock] Failed to leave guild ${guild.id}:`, err?.message || err);
+    });
+  }
+}
+
 // ─────────────────────────────────────────────────────
 // Ready
 // ─────────────────────────────────────────────────────
@@ -1656,6 +1718,8 @@ client.once(Events.ClientReady, async () => {
   try {
     await initDb();
     console.log(`Logged in as ${client.user.tag}`);
+
+    await leaveUnauthorizedGuilds();
 
     await registerSlashCommands(client).catch((err) => {
       console.error("Slash command registration failed:", err);
@@ -2159,6 +2223,13 @@ client.on(Events.MessageCreate, async (message) => {
     await forwardUserDmToModmail(message).catch((err) => {
       console.error("Direct modmail handling failed:", err);
     });
+    return;
+  }
+
+  if (message.guild && !isAuthorizedGuild(message.guild)) {
+    if (!message.author?.bot && isLikelyBotUsageAttempt(message)) {
+      await message.reply({ content: OUTSIDE_GUILD_WARNING, allowedMentions: { parse: [] } }).catch(() => {});
+    }
     return;
   }
 
@@ -2913,6 +2984,18 @@ client.login(process.env.DISCORD_TOKEN).catch((err) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   try {
+    if (interaction.guildId && !isAuthorizedGuildById(interaction.guildId)) {
+      if (interaction.isRepliable()) {
+        const payload = { content: OUTSIDE_GUILD_WARNING, allowedMentions: { parse: [] }, ephemeral: true };
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp(payload).catch(() => {});
+        } else {
+          await interaction.reply(payload).catch(() => {});
+        }
+      }
+      return;
+    }
+
     if (interaction.isButton() && interaction.customId.startsWith("modact:")) {
       const parsed = parseModActionCustomId(interaction.customId);
       if (!parsed) {
@@ -3032,6 +3115,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.GuildCreate, async (guild) => {
+  if (!isAuthorizedGuild(guild)) {
+    console.warn(
+      `[guild-lock] Joined unauthorized guild ${guild.id} (${guild.name}). Leaving immediately. Allowed guild: ${buildLockedGuildId()} / ${SINGLE_GUILD_NAME}`
+    );
+    await guild.leave().catch((err) => {
+      console.error(`[guild-lock] Failed to leave joined guild ${guild.id}:`, err?.message || err);
+    });
+    return;
+  }
+
   try {
     await registerSlashCommands(client);
     console.log(`[slash] Synced commands after joining guild ${guild.id}`);
